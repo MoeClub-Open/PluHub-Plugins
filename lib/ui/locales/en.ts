@@ -913,6 +913,8 @@ export const en: Record<string, string> = {
   "到账额度（USD）": "Credit granted (USD)",
   保存商品: "Save product",
   下架商品: "Unpublish product",
+  下架: "Unpublish",
+  暂无商品: "No products",
   "下架「{0} 」后不可再购买，历史订单和已生效订阅保持原有快照。":
     "Unpublish “{0}”? New purchases will stop; existing orders and active subscriptions keep their original terms.",
   确认下架: "Confirm unpublish",

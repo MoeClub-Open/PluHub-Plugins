@@ -581,10 +581,7 @@ function Settings({ host }: { host: UIHost }) {
         ))}
       </div>
       {view === "products" ? (
-        <>
-          <PageHeading title={tr("商品与订阅")} />
-          <ProductSettings host={host} onSave={() => {}} />
-        </>
+        <ProductSettings host={host} onSave={() => {}} />
       ) : view === "adjustments" ? (
         <PaymentAdjustmentsAdmin host={host} />
       ) : (
