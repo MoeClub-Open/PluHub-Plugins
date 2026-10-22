@@ -15,9 +15,7 @@ export function AccountMenu({
   user,
   extensions,
   mode,
-  dark,
   change,
-  toggle,
   logout,
   path,
 }: {
@@ -25,9 +23,7 @@ export function AccountMenu({
   user: any;
   extensions: Extension[];
   mode: ThemeMode;
-  dark: boolean;
   change: (mode: ThemeMode) => void;
-  toggle: () => void;
   logout: () => Promise<void>;
   path: string;
 }) {
@@ -40,6 +36,13 @@ export function AccountMenu({
   const root = React.useRef<HTMLDivElement>(null);
   const trigger = React.useRef<HTMLButtonElement>(null);
   const id = React.useId();
+  const themeNames = {
+    system: tr("跟随系统"),
+    light: tr("浅色"),
+    dark: tr("深色"),
+  };
+  const nextTheme =
+    mode === "system" ? "light" : mode === "light" ? "dark" : "system";
   const has = (path: string) => extensions.some((e) => e.path === path);
   const billing = has("/billing"),
     commerce = has("/commerce");
@@ -138,15 +141,21 @@ export function AccountMenu({
         </button>
         <button
           className="ghost icon-button"
-          aria-label={dark ? tr("切换为浅色模式") : tr("切换为深色模式")}
-          title={
-            mode === "system"
-              ? tr("当前跟随系统，点击切换明暗")
-              : tr("点击切换明暗；账号菜单可选择跟随系统")
+          aria-label={
+            tr("颜色模式：") +
+            themeNames[mode] +
+            tr("，点击切换为") +
+            themeNames[nextTheme]
           }
-          onClick={toggle}
+          title={tr("颜色模式：") + themeNames[mode]}
+          onClick={() => change(nextTheme)}
         >
-          <Icon name={dark ? "sun" : "moon"} size={17} />
+          <Icon
+            name={
+              mode === "system" ? "monitor" : mode === "dark" ? "moon" : "sun"
+            }
+            size={17}
+          />
         </button>
       </div>
       {open && (
@@ -237,27 +246,6 @@ export function AccountMenu({
                 {tr("我的工单")}
               </a>
             )}
-          </div>
-          <div className="account-appearance">
-            <span>{tr("颜色模式")}</span>
-            <div role="group" aria-label={tr("颜色模式")}>
-              {(
-                [
-                  ["system", tr("跟随系统"), "monitor"],
-                  ["light", tr("浅色"), "sun"],
-                  ["dark", tr("深色"), "moon"],
-                ] as const
-              ).map(([value, label, icon]) => (
-                <button
-                  key={value}
-                  aria-pressed={mode === value}
-                  onClick={() => change(value)}
-                >
-                  <Icon name={icon} size={14} />
-                  {label}
-                </button>
-              ))}
-            </div>
           </div>
           <button
             className="account-signout"

@@ -983,9 +983,6 @@ export const en: Record<string, string> = {
   个人账号: "Personal account",
   切换为浅色模式: "Switch to light mode",
   切换为深色模式: "Switch to dark mode",
-  "当前跟随系统，点击切换明暗": "Following system; click to switch theme",
-  "点击切换明暗；账号菜单可选择跟随系统":
-    "Click to switch theme; choose System in the account menu",
   账号菜单: "Account menu",
   重试: "Retry",
   "可用余额 · USD": "Available balance · USD",

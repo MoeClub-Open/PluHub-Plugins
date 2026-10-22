@@ -724,9 +724,7 @@ function App() {
             user={user}
             extensions={extensions}
             mode={theme.mode}
-            dark={dark}
             change={theme.change}
-            toggle={theme.toggle}
             logout={logout}
             path={path!}
           />
