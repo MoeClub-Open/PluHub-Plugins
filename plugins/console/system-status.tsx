@@ -7,6 +7,8 @@ interface HostStatus {
   time: string;
   status: "running" | "degraded";
   runtime: {
+    name?: string;
+    version?: string;
     node: string;
     platform: string;
     arch: string;
@@ -179,7 +181,7 @@ export function SystemStatus({ client }: { client: UIHost }) {
         <Stat
           title={tr("连续运行")}
           value={duration(s?.runtime.uptimeSeconds)}
-          note={tr("当前 Node.js 进程")}
+          note=""
           icon="clock"
         />
       </div>
@@ -222,7 +224,10 @@ export function SystemStatus({ client }: { client: UIHost }) {
           <table>
             <tbody>
               {[
-                ["Node.js", s?.runtime.node],
+                [
+                  s?.runtime.name ?? "Node.js",
+                  s?.runtime.version ?? s?.runtime.node,
+                ],
                 [
                   tr("平台 / 架构"),
                   s ? s.runtime.platform + " / " + s.runtime.arch : undefined,

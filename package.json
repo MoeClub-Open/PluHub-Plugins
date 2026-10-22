@@ -7,7 +7,7 @@
   "scripts": {
     "build": "pnpm typecheck && node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "bun --bun node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
     "@huggingface/tokenizers": "0.2.0",
