@@ -376,10 +376,11 @@ export function createSubscription(kind: SubscriptionKind) {
                 "Empty subscription response",
                 502,
               );
+            const contentType = response.headers.get("content-type");
             if (
-              response.headers
-                .get("content-type")
-                ?.includes("text/event-stream")
+              contentType?.includes("text/event-stream") ||
+              // Codex CLI can omit Content-Type on an otherwise valid SSE response.
+              (kind === "codex" && prepared.body.stream && !contentType)
             )
               return managed(
                 upstreamEvents(
