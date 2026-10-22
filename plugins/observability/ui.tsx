@@ -235,11 +235,11 @@ function Page({ host }: { host: UIHost }) {
               ? number(stats.data.inputTokens + stats.data.outputTokens)
               : "—"
           }
-          note={tr("上游返回的输入 + 输出")}
+          note=""
           icon="models"
         />
         <Stat
-          title={tr("估算成本")}
+          title={tr("消耗成本")}
           value={money(stats.data?.estimatedCostUSD)}
           note={tr("按配置价格估算 · USD")}
           icon="money"

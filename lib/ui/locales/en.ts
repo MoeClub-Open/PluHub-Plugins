@@ -1087,6 +1087,7 @@ export const en: Record<string, string> = {
   "平均完成耗时 {0}": "Average completion time {0}",
   文本或工具首次输出: "First text or tool output",
   估算成本: "Estimated cost",
+  消耗成本: "Usage cost",
   "{0}/{1} 次请求具有价格与用量": "{0}/{1} requests have pricing and usage",
   "按配置价格估算 · USD": "Estimated from configured prices · USD",
   调用趋势: "Call trends",
