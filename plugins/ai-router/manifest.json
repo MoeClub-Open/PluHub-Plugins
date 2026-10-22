@@ -5,7 +5,7 @@
   "name": "渠道与模型路由",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.13",
+  "version": "0.1.0-alpha.14",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -96,6 +96,29 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 128
+                },
+                "layout": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      }
+                    }
+                  }
                 },
                 "nodes": {
                   "type": "array",

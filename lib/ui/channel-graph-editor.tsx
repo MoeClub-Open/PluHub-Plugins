@@ -12,44 +12,14 @@ import { useLoad, Notice } from "./mount.js";
 import { syncChannelSecrets } from "../ai/channel-list.js";
 import type { ChannelPanel } from "./channel-location.js";
 import {
+  ChannelFlowCanvas,
+  workflowNodeLabels as labels,
+  workflowNodePositions,
+} from "./channel-flow-canvas.js";
+import {
   defaultChannelFlow,
   migrateLegacyChannels,
 } from "../ai/channel-config.js";
-const labels: Record<WorkflowNode["type"], string> = {
-  get start() {
-    return tr("请求入口");
-  },
-  get provider() {
-    return tr("调用上游");
-  },
-  get routing() {
-    return tr("自动路由");
-  },
-  get condition() {
-    return tr("条件分支");
-  },
-  get protocol() {
-    return tr("协议准入");
-  },
-  get prompt() {
-    return tr("系统提示词");
-  },
-  get reasoning() {
-    return tr("思考强度");
-  },
-  get maxTokens() {
-    return tr("输出预算");
-  },
-  get tps() {
-    return tr("输出 TPS");
-  },
-  get rateLimit() {
-    return tr("请求限流");
-  },
-  get upstream() {
-    return tr("转到其他模型");
-  },
-};
 const ingressOptions: { value: Protocol; label: string }[] = [
   { value: "openai-chat", label: "OpenAI Chat Completions" },
   { value: "openai-responses", label: "OpenAI Responses" },
@@ -97,8 +67,6 @@ export function ChannelGraphEditor({
     () => (personal ? Promise.resolve([]) : listSubscriptionAccounts(host)),
     [personal],
   );
-  const [zoom, setZoom] = React.useState(1);
-  const canvas = React.useRef<HTMLElement>(null);
   const [toolTask, setToolTask] = React.useState(false);
   const [streamTask, setStreamTask] = React.useState(false);
   const [ingressProtocol, setIngressProtocol] =
@@ -233,8 +201,18 @@ export function ChannelGraphEditor({
                       : type === "tps"
                         ? { next, rate: 30, tokenizer: "o200k_base" }
                         : { target: targets[0] ?? "", mode: "implicit" };
+    const anchorPoint = workflowNodePositions(flow).get(selected);
     update({
       ...flow,
+      layout: anchorPoint
+        ? {
+            ...flow.layout,
+            [key]: {
+              x: anchorPoint.x + 210,
+              y: anchorPoint.y,
+            },
+          }
+        : flow.layout,
       nodes: [
         ...flow.nodes.map((n) =>
           type === "provider" || type === "routing" || type === "upstream"
@@ -346,67 +324,9 @@ export function ChannelGraphEditor({
       setBusy(false);
     }
   }
-  const edges = (n: WorkflowNode) =>
-    n.type === "upstream" || n.type === "provider" || n.type === "routing"
-      ? []
-      : n.type === "condition"
-        ? [n.yes, n.no]
-        : [n.next];
-  const columns = new Map<string, number>();
-  if (flow) {
-    const visit = (key: string, depth: number, seen: Set<string>) => {
-      if (seen.has(key) || depth > 64 || (columns.get(key) ?? -1) >= depth)
-        return;
-      columns.set(key, depth);
-      const n = flow.nodes.find((n) => n.id === key);
-      if (n)
-        for (const target of edges(n))
-          visit(target, depth + 1, new Set([...seen, key]));
-    };
-    visit(flow.entry, 0, new Set());
-  }
-  const rows = new Map<number, number>();
-  const points = new Map(
-    (flow?.nodes ?? []).map((n) => {
-      const col = columns.get(n.id) ?? 0;
-      const row = rows.get(col) ?? 0;
-      rows.set(col, row + 1);
-      return [n.id, { x: 20 + col * 205, y: 20 + row * 105 }];
-    }),
-  );
-  const width = Math.max(420, ...[...points.values()].map((p) => p.x + 190));
-  const height = Math.max(260, ...[...points.values()].map((p) => p.y + 95));
-  React.useLayoutEffect(() => {
-    if (flow && canvas.current)
-      setZoom(
-        Math.max(0.75, Math.min(1, (canvas.current.clientWidth - 32) / width)),
-      );
-  }, [channelId, !!flow]);
-  const connect = (field: string, value: string) => (
-    <label>
-      {field === "yes"
-        ? tr("满足条件")
-        : field === "no"
-          ? tr("不满足条件")
-          : tr("连接到")}
-      <Select
-        value={value}
-        onChange={(e) => change({ [field]: e.target.value })}
-      >
-        <option value="">{tr("选择节点")}</option>
-        {flow?.nodes
-          .filter((n) => n.id !== selected)
-          .map((n) => (
-            <option key={n.id} value={n.id}>
-              {n.id} · {labels[n.type]}
-            </option>
-          ))}
-      </Select>
-    </label>
-  );
   return (
     <section aria-label={tr("渠道流程编辑器")}>
-      <style>{`.workflow-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,290px);gap:16px;margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-canvas{overflow:auto;min-height:260px}.workflow-node{cursor:pointer}.workflow-node:focus{outline:2px solid currentColor}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-side label{display:block;margin:10px 0}.workflow-side input,.workflow-side select,.workflow-side textarea{width:100%}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}.workflow-panel{margin-top:14px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
+      <style>{`.workflow-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,290px);gap:16px;margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-side label{display:block;margin:10px 0}.workflow-side input,.workflow-side select,.workflow-side textarea{width:100%}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}.workflow-panel{margin-top:14px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
       <div className="page-heading">
         <div>
           {personal ? (
@@ -479,170 +399,14 @@ export function ChannelGraphEditor({
               ))}
           </div>
           <div className="workflow-grid">
-            <div>
-              <div className="workflow-tools">
-                <button
-                  className="secondary"
-                  aria-label={tr("缩小画布")}
-                  onClick={() => setZoom((z) => Math.max(0.3, z - 0.1))}
-                >
-                  －
-                </button>
-                <span>{Math.round(zoom * 100)}%</span>
-                <button
-                  className="secondary"
-                  aria-label={tr("放大画布")}
-                  onClick={() => setZoom((z) => Math.min(2, z + 0.1))}
-                >
-                  ＋
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() =>
-                    setZoom(
-                      Math.max(
-                        0.3,
-                        Math.min(
-                          1,
-                          ((canvas.current?.clientWidth ?? width) - 36) / width,
-                        ),
-                      ),
-                    )
-                  }
-                >
-                  {tr("适应画布")}
-                </button>
-              </div>
-              <section
-                ref={canvas}
-                className="panel workflow-canvas"
-                aria-label={tr("渠道流程画布")}
-              >
-                <svg
-                  width={width * zoom}
-                  height={height * zoom}
-                  viewBox={`0 0 ${width} ${height}`}
-                  role="img"
-                  aria-label={tr("渠道功能连接图")}
-                >
-                  <defs>
-                    <marker
-                      id="flow-arrow"
-                      markerWidth="8"
-                      markerHeight="8"
-                      refX="7"
-                      refY="3"
-                      orient="auto"
-                    >
-                      <path d="M0,0 L0,6 L7,3 z" fill="currentColor" />
-                    </marker>
-                  </defs>
-                  {flow.nodes.flatMap((n) =>
-                    edges(n).map((target, i) => {
-                      const a = points.get(n.id)!,
-                        b = points.get(target);
-                      return b ? (
-                        <g key={n.id + i}>
-                          <path
-                            d={`M${a.x + 170},${a.y + 35} C${a.x + 190},${a.y + 35} ${b.x - 20},${b.y + 35} ${b.x},${b.y + 35}`}
-                            fill="none"
-                            stroke="currentColor"
-                            opacity=".4"
-                            markerEnd="url(#flow-arrow)"
-                          />
-                          {n.type === "condition" && (
-                            <text
-                              x={b.x - 24}
-                              y={b.y + 26 + (n.yes === n.no ? i * 16 : 0)}
-                              fontSize="11"
-                              fill="currentColor"
-                            >
-                              {i ? tr("否") : tr("是")}
-                            </text>
-                          )}
-                        </g>
-                      ) : null;
-                    }),
-                  )}
-                  {flow.nodes.map((n) => {
-                    const p = points.get(n.id)!;
-                    return (
-                      <g
-                        key={n.id}
-                        className="workflow-node"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={n.id + " " + labels[n.type]}
-                        onClick={() => select(n.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            select(n.id);
-                          }
-                        }}
-                      >
-                        <rect
-                          x={p.x}
-                          y={p.y}
-                          width="170"
-                          height="70"
-                          rx="10"
-                          fill="currentColor"
-                          fillOpacity={n.id === selected ? ".14" : ".05"}
-                          stroke="currentColor"
-                          strokeOpacity={n.id === selected ? ".8" : ".2"}
-                        />
-                        <text
-                          x={p.x + 12}
-                          y={p.y + 27}
-                          fill="currentColor"
-                          fontSize="13"
-                        >
-                          {labels[n.type]}
-                        </text>
-                        <text
-                          x={p.x + 12}
-                          y={p.y + 48}
-                          fill="currentColor"
-                          opacity=".65"
-                          fontSize="11"
-                        >
-                          {n.type === "provider"
-                            ? (n.upstream?.protocol ??
-                              (personal
-                                ? (channel?.protocol ?? tr("渠道上游"))
-                                : tr("尚未配置上游")))
-                            : n.type === "protocol"
-                              ? n.allow.length +
-                                tr(" 种入口 · ") +
-                                (n.conversion === "auto"
-                                  ? tr("自动转换")
-                                  : tr("仅同协议"))
-                              : n.type === "routing"
-                                ? n.profile
-                                : n.type === "upstream"
-                                  ? n.target
-                                  : n.type === "reasoning"
-                                    ? n.effort
-                                    : n.type === "rateLimit"
-                                      ? Object.entries(n.rule)
-                                          .map(
-                                            ([key, value]) => value + " " + key,
-                                          )
-                                          .join(" · ")
-                                      : n.type === "tps"
-                                        ? (n.rate ?? n.aggregateRate) +
-                                          " token/s"
-                                        : n.type === "maxTokens"
-                                          ? n.limit + " tokens"
-                                          : n.id}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </section>
-            </div>
+            <ChannelFlowCanvas
+              flow={flow}
+              channel={channel}
+              selected={selected}
+              personal={personal}
+              select={select}
+              update={update}
+            />
             <section className="panel workflow-side">
               <h2>{tr("节点设置")}</h2>
               <label>
@@ -674,11 +438,6 @@ export function ChannelGraphEditor({
                       {tr("全局限制")}
                     </button>
                   )}
-                  {node.type !== "upstream" &&
-                    node.type !== "provider" &&
-                    node.type !== "routing" &&
-                    node.type !== "condition" &&
-                    connect("next", node.next)}
                   {node.type === "condition" && (
                     <>
                       <label>
@@ -727,8 +486,6 @@ export function ChannelGraphEditor({
                           }
                         />
                       )}
-                      {connect("yes", node.yes)}
-                      {connect("no", node.no)}
                     </>
                   )}
                   {node.type === "protocol" && (
@@ -1232,6 +989,11 @@ export function ChannelGraphEditor({
                         }
                         update({
                           ...flow,
+                          layout: Object.fromEntries(
+                            Object.entries(flow.layout ?? {}).filter(
+                              ([id]) => id !== selected,
+                            ),
+                          ),
                           nodes: flow.nodes
                             .filter((n) => n.id !== selected)
                             .map((n) =>
