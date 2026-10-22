@@ -3,7 +3,7 @@ import { t as tr } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { Extension, UIHost, UIExtensionModule } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
-import { Empty, Icon } from "../../lib/ui/components.js";
+import { Empty } from "../../lib/ui/components.js";
 import { MailTemplateTools } from "../../lib/ui/mail-preview.js";
 import { Select } from "../../lib/ui/select.js";
 import { verificationPath, verificationTab } from "./navigation.js";
@@ -503,12 +503,6 @@ export function VerificationSettings({
                       />
                     </label>
                   </div>
-                  <h3>{tr("验证器动态码（TOTP）")}</h3>
-
-                  <a className="text-link" href="#/account">
-                    {tr("管理我自己的邮箱、TOTP 与安全密钥")}{" "}
-                    <Icon name="arrow" size={14} />
-                  </a>
                 </>
               )}
             </section>

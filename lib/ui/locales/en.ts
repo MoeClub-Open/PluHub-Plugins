@@ -1412,9 +1412,6 @@ export const en: Record<string, string> = {
   公开邮件验证码请求需要人机验证:
     "Require verification for public email code requests",
   "Passkey 与硬件安全密钥": "Passkeys and hardware security keys",
-  "验证器动态码（TOTP）": "Authenticator codes (TOTP)",
-  "管理我自己的邮箱、TOTP 与安全密钥":
-    "Manage my email, TOTP and security keys",
   保存全部验证设置: "Save verification settings",
   请先保存配置: "Save the configuration first",
   尚无验证服务: "No verification services",
