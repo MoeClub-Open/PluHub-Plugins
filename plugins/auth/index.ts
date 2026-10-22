@@ -88,11 +88,7 @@ export default definePlugin({
     });
     host.provide("auth.admin@1", async ({ userId, token }) => {
       if (typeof token !== "string")
-        throw new HostError(
-          "reauth_required",
-          "请在账号设置中确认管理员身份后重试",
-          403,
-        );
+        throw new HostError("reauth_required", "请验证身份后保存更改", 403);
       const row = db
         .prepare(
           "SELECT auth_at FROM sessions WHERE hash=? AND user_id=? AND expires>?",
@@ -100,11 +96,7 @@ export default definePlugin({
         .get(digest(token), userId, Date.now()) as any;
       const user = await lookup({ id: userId });
       if (!row || row.auth_at < Date.now() - 300000)
-        throw new HostError(
-          "reauth_required",
-          "请在账号设置中确认管理员身份后重试（有效五分钟）",
-          403,
-        );
+        throw new HostError("reauth_required", "请验证身份后保存更改", 403);
       if (!user?.enabled || user.role !== "admin")
         throw new HostError("forbidden", "需要管理员身份", 403);
       return { id: user.id };

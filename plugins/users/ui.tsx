@@ -3,7 +3,6 @@ import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { UserDetail } from "./detail-ui.js";
-import { AdminIdentity } from "../../lib/ui/admin.js";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import {
   PageHeading,
@@ -36,7 +35,6 @@ function Page({ host }: { host: UIHost }) {
   return (
     <>
       <PageHeading title={tr("用户管理")}>
-        <AdminIdentity host={host} />
         <button
           className="secondary"
           aria-label={tr("刷新用户")}

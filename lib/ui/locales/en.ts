@@ -210,9 +210,10 @@ export const en: Record<string, string> = {
   账号与权限: "Account and permissions",
   用户详情: "User details",
   调整余额: "Adjust balance",
-  确认管理员身份: "Confirm administrator identity",
-  "请输入密码确认身份，或重新使用 Passkey 登录。":
-    "Enter your password, or sign in again with a passkey.",
+  验证身份: "Verify identity",
+  操作已取消: "Operation cancelled",
+  请验证身份后保存更改: "Verify your identity to save changes",
+  一次性恢复码: "One-time recovery code",
   当前密码: "Current password",
   验证器动态码: "Authenticator code",
   或一次性恢复码: "Or a one-time recovery code",
@@ -579,9 +580,6 @@ export const en: Record<string, string> = {
   尚未绑定: "Not linked",
   "安全密钥 / Passkey": "Security keys / Passkeys",
   "{0} 个": "{0}",
-  确认身份以管理安全设置: "Confirm identity to manage security",
-  "身份已确认，可以继续管理安全设置":
-    "Identity confirmed. You can manage security settings.",
   验证邮箱: "Verify email",
   "邮箱验证暂不可用，请稍后再试。":
     "Email verification is currently unavailable. Please try again later.",

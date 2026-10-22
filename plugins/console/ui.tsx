@@ -42,6 +42,7 @@ import { PaymentMethods } from "./payment-methods.js";
 import { SettingsHome, SettingsNavigation } from "./settings.js";
 import { BrandMark, BrandingSettings, useBranding } from "./branding-ui.js";
 import { CommandSearch } from "./command-search.js";
+import { IdentityConfirmation } from "./identity-confirmation.js";
 import { Select } from "../../lib/ui/select.js";
 import {
   filterPlugins,
@@ -178,6 +179,35 @@ function App() {
   const [mobile, setMobile] = React.useState(false);
   const [version, setVersion] = React.useState(0);
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [confirmingIdentity, setConfirmingIdentity] = React.useState(false);
+  const identityRequest = React.useRef<{
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (error: Error) => void;
+  } | null>(null);
+  const confirmIdentity = React.useCallback(() => {
+    if (!identityRequest.current) {
+      let resolve!: () => void, reject!: (error: Error) => void;
+      const promise = new Promise<void>((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      identityRequest.current = { promise, resolve, reject };
+      setConfirmingIdentity(true);
+    }
+    return identityRequest.current.promise;
+  }, []);
+  const finishIdentity = React.useCallback((error?: Error) => {
+    const pending = identityRequest.current;
+    identityRequest.current = null;
+    setConfirmingIdentity(false);
+    if (error) pending?.reject(error);
+    else pending?.resolve();
+  }, []);
+  React.useEffect(
+    () => () => finishIdentity(new Error(tr("操作已取消"))),
+    [hash, user?.id, finishIdentity],
+  );
   const [pluginQuery, setPluginQuery] = React.useState("");
   const [pluginCategoryFilter, setPluginCategoryFilter] = React.useState("");
   const [pluginStateFilter, setPluginStateFilter] = React.useState("");
@@ -201,6 +231,7 @@ function App() {
           location.hash = "/login";
         },
         internationalization,
+        confirmIdentity,
       ),
     [],
   );
@@ -1039,6 +1070,13 @@ function App() {
         <CommandSearch
           entries={searchEntries}
           close={() => setSearchOpen(false)}
+        />
+      )}
+      {confirmingIdentity && (
+        <IdentityConfirmation
+          client={client}
+          complete={() => finishIdentity()}
+          close={() => finishIdentity(new Error(tr("操作已取消")))}
         />
       )}
       {pendingPlugin && (

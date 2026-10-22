@@ -5,7 +5,6 @@ import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { Select } from "../../lib/ui/select.js";
 import { Dialog, Icon } from "../../lib/ui/components.js";
 import { pluginCategoryTitle } from "./plugin-list.js";
-import { AdminIdentity } from "../../lib/ui/admin.js";
 type Source = {
   id: string;
   name: string;
@@ -50,7 +49,6 @@ export function PluginUpdates({ client }: { client: UIHost }) {
             <code>{job.pluginId}</code>
             {job.state === "pending" && (
               <>
-                <AdminIdentity host={client} />
                 <button
                   disabled={busy}
                   onClick={async () => {
@@ -174,7 +172,6 @@ export function RegistryBrowser({
       }}
     >
       <style>{`.registry-mobile-meta{display:none}@media(max-width:640px){table.registry-catalog{min-width:0!important;width:100%;table-layout:fixed}.registry-catalog th:first-child,.registry-catalog td:first-child{width:68%}.registry-catalog th:nth-child(2),.registry-catalog td:nth-child(2),.registry-catalog th:nth-child(3),.registry-catalog td:nth-child(3){display:none}.registry-catalog td{overflow-wrap:anywhere}.registry-catalog td code{word-break:break-all}.registry-mobile-meta{display:block;color:var(--muted);font-size:11px;margin-top:4px}.registry-mobile-meta span{display:block;margin-top:3px}.registry-catalog button{white-space:normal;height:auto;min-height:30px;padding:5px 8px;font-size:12px;max-width:100%}}`}</style>
-      <AdminIdentity host={client} />
       <Notice message={message || catalog.error || sources.error} />
       {catalog.data?.errors.map((error) => (
         <Notice

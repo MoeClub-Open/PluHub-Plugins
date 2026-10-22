@@ -20,6 +20,7 @@ const routes: Record<string, [string, string]> = {
   "POST /logout": ["logout", "session"],
   "POST /register": ["register", "email"],
   "POST /reauth": ["identity.confirm", "password"],
+  "POST /passkeys/reauth/verify": ["identity.confirm", "passkey"],
   "POST /password": ["password.change", "session"],
   "POST /password/reset": ["password.reset", "email"],
   "POST /password/reset/finish": ["password.reset", "totp"],

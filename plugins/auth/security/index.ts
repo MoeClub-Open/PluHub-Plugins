@@ -493,6 +493,9 @@ export function installAuthSecurity(
     const id = requireSession(ctx);
     return safeJson({
       ...(await options()),
+      passwordSet: !!db
+        .prepare("SELECT 1 FROM passwords WHERE user_id=?")
+        .get(id),
       email: verifiedEmail(id),
       totpEnabled: hasTotp(id),
       recoveryCodesRemaining: (
@@ -954,113 +957,144 @@ export function installAuthSecurity(
     services.history.tag({ resourceId: "passkey:" + digest(c.id) });
     return safeJson({ ok: true });
   });
-  api("POST", "/passkeys/login/options", "public", async (r, ctx) => {
-    const w = webauthn();
-    limit("key-login:" + peer(r), 30, 900000);
-    const b = await readObject(r);
-    let user = b.resetChallenge
-      ? await passwordReset.passkeyUser(b.resetChallenge, r)
-      : undefined;
-    if (!b.resetChallenge) await captcha("login", b.turnstileToken, ctx.signal);
-    let allowed;
-    if (b.username || user) {
-      user ??= await services.lookup({
-        username: requiredString(b.username, "username", 64).toLowerCase(),
+  for (const reauthenticate of [false, true]) {
+    const path = "/passkeys/" + (reauthenticate ? "reauth" : "login");
+    const access = reauthenticate ? "authenticated" : "public";
+    const kind = reauthenticate ? "key-reauth" : "key-login";
+    api("POST", path + "/options", access, async (r, ctx) => {
+      const w = webauthn();
+      limit("key-login:" + peer(r), 30, 900000);
+      const b = await readObject(r);
+      let user = reauthenticate
+        ? await enabledUser(requireSession(ctx))
+        : b.resetChallenge
+          ? await passwordReset.passkeyUser(b.resetChallenge, r)
+          : undefined;
+      if (!reauthenticate && !b.resetChallenge)
+        await captcha("login", b.turnstileToken, ctx.signal);
+      let allowed;
+      if (b.username || user) {
+        user ??= await services.lookup({
+          username: requiredString(b.username, "username", 64).toLowerCase(),
+        });
+        allowed = user
+          ? (
+              db
+                .prepare("SELECT id,transports FROM passkeys WHERE user_id=?")
+                .all(user.id) as any[]
+            ).map((c) => ({ id: c.id, transports: JSON.parse(c.transports) }))
+          : [];
+        if (!allowed.length)
+          allowed = [
+            { id: randomBytes(32).toString("base64url"), transports: [] },
+          ];
+      }
+      const opts = await generateAuthenticationOptions({
+        rpID: w.rpID,
+        userVerification: "required",
+        allowCredentials: allowed,
       });
-      allowed = user
-        ? (
-            db
-              .prepare("SELECT id,transports FROM passkeys WHERE user_id=?")
-              .all(user.id) as any[]
-          ).map((c) => ({ id: c.id, transports: JSON.parse(c.transports) }))
-        : [];
-      if (!allowed.length)
-        allowed = [
-          { id: randomBytes(32).toString("base64url"), transports: [] },
-        ];
-    }
-    const opts = await generateAuthenticationOptions({
-      rpID: w.rpID,
-      userVerification: "required",
-      allowCredentials: allowed,
-    });
-    const id = challenge("key-login", {
-      userId: user?.id,
-      secret: opts.challenge,
-    });
-    db.prepare("UPDATE auth_challenges SET binding=? WHERE id=?").run(
-      digest(id),
-      digest(id),
-    );
-    const out = safeJson({ challenge: id, options: opts });
-    out.headers.set("set-cookie", cookie("pluhub_challenge", id, 300));
-    return out;
-  });
-  api("POST", "/passkeys/login/verify", "public", async (r) => {
-    const w = webauthn();
-    limit("key-verify:" + peer(r), 30, 900000);
-    const b = await readObject(r, 262144),
-      row = readChallenge(
-        b.challenge,
-        "key-login",
-        digest(bindingToken(r) ?? ""),
-        true,
-      );
-    const id = requiredString(b.response?.id, "credential id", 2048),
-      stored = db.prepare("SELECT * FROM passkeys WHERE id=?").get(id) as any;
-    if (!stored || (row.user_id && stored.user_id !== row.user_id))
-      throw new HostError("invalid_credentials", "Authentication failed", 401);
-    const user = await enabledUser(stored.user_id);
-    services.history.tag({ userId: user.id });
-    const handle = b.response?.response?.userHandle;
-    if (handle && Buffer.from(handle, "base64url").toString("utf8") !== user.id)
-      throw new HostError("invalid_webauthn", "Credential owner mismatch", 401);
-    let result;
-    try {
-      sameOriginResponse(b.response);
-      result = await verifyAuthenticationResponse({
-        response: b.response,
-        expectedChallenge: row.secret,
-        expectedOrigin: w.origins,
-        expectedRPID: w.rpID,
-        requireUserVerification: true,
-        credential: {
-          id: stored.id,
-          publicKey: new Uint8Array(Buffer.from(stored.public_key, "base64")),
-          counter: stored.counter,
-          transports: JSON.parse(stored.transports),
-        },
+      const id = challenge(kind, {
+        userId: user?.id,
+        secret: opts.challenge,
       });
-    } catch {
-      throw new HostError(
-        "invalid_webauthn",
-        "Security key authentication failed",
-        401,
+      db.prepare("UPDATE auth_challenges SET binding=? WHERE id=?").run(
+        digest(reauthenticate ? sessionToken(r)! : id),
+        digest(id),
       );
-    }
-    if (!result.verified)
-      throw new HostError("invalid_webauthn", "Authentication failed", 401);
-    const info = result.authenticationInfo;
-    if (
-      !db
-        .prepare(
-          "UPDATE passkeys SET counter=?,backed_up=?,last_used_at=? WHERE id=? AND counter=?",
-        )
-        .run(
-          info.newCounter,
-          info.credentialBackedUp ? 1 : 0,
-          Date.now(),
-          id,
-          stored.counter,
-        ).changes
-    )
-      throw new HostError(
-        "invalid_webauthn",
-        "Credential state changed; try again",
-        401,
-      );
-    return issue(user, id, r, "passkey");
-  });
+      const out = safeJson({ challenge: id, options: opts });
+      if (!reauthenticate)
+        out.headers.set("set-cookie", cookie("pluhub_challenge", id, 300));
+      return out;
+    });
+    api("POST", path + "/verify", access, async (r, ctx) => {
+      const w = webauthn();
+      limit("key-verify:" + peer(r), 30, 900000);
+      const sessionUser = reauthenticate ? requireSession(ctx) : undefined;
+      const b = await readObject(r, 262144),
+        row = readChallenge(
+          b.challenge,
+          kind,
+          digest((reauthenticate ? sessionToken(r) : bindingToken(r)) ?? ""),
+          true,
+        );
+      const id = requiredString(b.response?.id, "credential id", 2048),
+        stored = db.prepare("SELECT * FROM passkeys WHERE id=?").get(id) as any;
+      if (
+        !stored ||
+        (row.user_id && stored.user_id !== row.user_id) ||
+        (reauthenticate && stored.user_id !== sessionUser)
+      )
+        throw new HostError(
+          "invalid_credentials",
+          "Authentication failed",
+          401,
+        );
+      const user = await enabledUser(stored.user_id);
+      services.history.tag({ userId: user.id });
+      const handle = b.response?.response?.userHandle;
+      if (
+        handle &&
+        Buffer.from(handle, "base64url").toString("utf8") !== user.id
+      )
+        throw new HostError(
+          "invalid_webauthn",
+          "Credential owner mismatch",
+          401,
+        );
+      let result;
+      try {
+        sameOriginResponse(b.response);
+        result = await verifyAuthenticationResponse({
+          response: b.response,
+          expectedChallenge: row.secret,
+          expectedOrigin: w.origins,
+          expectedRPID: w.rpID,
+          requireUserVerification: true,
+          credential: {
+            id: stored.id,
+            publicKey: new Uint8Array(Buffer.from(stored.public_key, "base64")),
+            counter: stored.counter,
+            transports: JSON.parse(stored.transports),
+          },
+        });
+      } catch {
+        throw new HostError(
+          "invalid_webauthn",
+          "Security key authentication failed",
+          401,
+        );
+      }
+      if (!result.verified)
+        throw new HostError("invalid_webauthn", "Authentication failed", 401);
+      const info = result.authenticationInfo;
+      if (
+        !db
+          .prepare(
+            "UPDATE passkeys SET counter=?,backed_up=?,last_used_at=? WHERE id=? AND counter=?",
+          )
+          .run(
+            info.newCounter,
+            info.credentialBackedUp ? 1 : 0,
+            Date.now(),
+            id,
+            stored.counter,
+          ).changes
+      )
+        throw new HostError(
+          "invalid_webauthn",
+          "Credential state changed; try again",
+          401,
+        );
+      if (reauthenticate) {
+        db.prepare(
+          "UPDATE sessions SET auth_at=? WHERE hash=? AND user_id=? AND expires>?",
+        ).run(Date.now(), digest(sessionToken(r)!), user.id, Date.now());
+        return safeJson({ ok: true });
+      }
+      return issue(user, id, r, "passkey");
+    });
+  }
   api("DELETE", "/passkeys", "authenticated", async (r, ctx) => {
     const userId = requireRecent(r, ctx),
       id = requiredString(new URL(r.url).searchParams.get("id"), "id", 2048);

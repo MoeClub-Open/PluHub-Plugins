@@ -52,49 +52,6 @@ export function Security({ host }: { host: UIHost }) {
           </strong>
         </div>
       </div>
-      <details className="card">
-        <summary>{tr("确认身份以管理安全设置")}</summary>
-
-        <form
-          className="inline-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const form = e.currentTarget;
-            void act(async () => {
-              await post("/reauth", Object.fromEntries(new FormData(form)));
-              form.reset();
-              setMessage(tr("身份已确认，可以继续管理安全设置"));
-            });
-          }}
-        >
-          <label>
-            {tr("当前密码")}
-            <input
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-            />
-          </label>
-          {s?.totpEnabled && (
-            <>
-              <label>
-                {tr("验证器动态码")}
-                <input
-                  name="code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                />
-              </label>
-              <label>
-                {tr("或一次性恢复码")}
-                <input name="recoveryCode" />
-              </label>
-            </>
-          )}
-          <button disabled={busy}>{tr("确认身份")}</button>
-        </form>
-      </details>
       <div className="card">
         <h2>{tr("验证邮箱")}</h2>
 

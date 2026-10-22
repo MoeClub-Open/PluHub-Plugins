@@ -4,93 +4,6 @@ import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "./mount.js";
 import { PageHeading, Dialog, ListPagination, Icon } from "./components.js";
-export function AdminIdentity({ host }: { host: UIHost }) {
-  const [open, setOpen] = React.useState(false),
-    [busy, setBusy] = React.useState(false),
-    [message, setMessage] = React.useState("");
-  const security = useLoad<any>(() =>
-    host.request("/api/plugins/official.auth/security"),
-  );
-  return (
-    <>
-      <button
-        className="secondary"
-        onClick={() => {
-          setMessage("");
-          setOpen(true);
-        }}
-      >
-        {tr("确认管理员身份")}
-      </button>
-      {open && (
-        <Dialog
-          title={tr("确认管理员身份")}
-          close={() => {
-            if (!busy) setOpen(false);
-          }}
-        >
-          <Notice message={message || security.error} />
-          <p>{tr("请输入密码确认身份，或重新使用 Passkey 登录。")}</p>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const fields = Object.fromEntries(new FormData(e.currentTarget));
-              setBusy(true);
-              try {
-                await host.request("/api/plugins/official.auth/reauth", {
-                  method: "POST",
-                  body: JSON.stringify(fields),
-                });
-                setOpen(false);
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <label>
-              {tr("当前密码")}
-              <input
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-              />
-            </label>
-            {security.data?.totpEnabled && (
-              <>
-                <label>
-                  {tr("验证器动态码")}
-                  <input
-                    name="code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                  />
-                </label>
-                <label>
-                  {tr("或一次性恢复码")}
-                  <input name="recoveryCode" autoComplete="off" />
-                </label>
-              </>
-            )}
-            <div className="form-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => setOpen(false)}
-              >
-                {tr("取消")}
-              </button>
-              <button disabled={busy}>{tr("确认身份")}</button>
-            </div>
-          </form>
-        </Dialog>
-      )}
-    </>
-  );
-}
 export function AdminConfirm({
   title,
   description,
@@ -230,7 +143,6 @@ export function AdminTable({
           >
             <Icon name="refresh" size={15} />
           </button>
-          {actions && <AdminIdentity host={host} />}
           {children}
         </PageHeading>
       )}

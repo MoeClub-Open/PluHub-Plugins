@@ -4,7 +4,7 @@ import React from "react";
 import type { UIHost, Extension } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { Dialog } from "../../lib/ui/components.js";
-import { AdminConfirm, AdminIdentity } from "../../lib/ui/admin.js";
+import { AdminConfirm } from "../../lib/ui/admin.js";
 import { UserBalance } from "./balance-ui.js";
 import { UserPricing } from "./pricing-ui.js";
 export function UserDetail({
@@ -216,9 +216,6 @@ export function UserDetail({
           </button>
         </div>
       )}
-      <div className="form-actions">
-        <AdminIdentity host={host} />
-      </div>
       {tab === "balance" && billingAvailable ? (
         <UserBalance key={user.id} host={host} user={user} />
       ) : (

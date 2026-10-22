@@ -1,12 +1,7 @@
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import {
-  AdminTable,
-  AdminConfirm,
-  AdminIdentity,
-  adminTime,
-} from "../../lib/ui/admin.js";
+import { AdminTable, AdminConfirm, adminTime } from "../../lib/ui/admin.js";
 const api = "/api/plugins/official.commerce";
 const labels: Record<string, string> = {
   get pending() {
@@ -144,12 +139,9 @@ export function CommerceAdmin({
         }
       >
         {view === "outbox" && (
-          <>
-            <AdminIdentity host={host} />
-            <button className="secondary" onClick={() => setRetry(true)}>
-              {tr("重试待入账任务")}
-            </button>
-          </>
+          <button className="secondary" onClick={() => setRetry(true)}>
+            {tr("重试待入账任务")}
+          </button>
         )}
       </AdminTable>
       {target && (

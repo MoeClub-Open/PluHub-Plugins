@@ -4,7 +4,7 @@ export async function requireAdmin(
   host: Host,
   request: Request,
   ctx: RequestContext,
-  recent = true,
+  recent = !["GET", "HEAD", "OPTIONS"].includes(request.method),
 ) {
   requireAdminSession(ctx);
   if (recent && host.hasCapability("auth.admin@1")) {

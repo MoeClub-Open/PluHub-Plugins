@@ -6,7 +6,6 @@ import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, Stat } from "../../lib/ui/components.js";
 import { usdToMicros } from "../../lib/commerce/decimal.js";
 import { BillingAdmin } from "./admin-ui.js";
-import { AdminIdentity } from "../../lib/ui/admin.js";
 import { BillingGroups } from "./groups-ui.js";
 import { BillingHistory } from "./history-ui.js";
 const api = "/api/plugins/official.billing";
@@ -79,7 +78,6 @@ function Page({ host }: { host: UIHost }) {
         {wallet.data && !wallet.data.enabled && (
           <span className="badge">{tr("余额扣费未启用")}</span>
         )}
-        {settings && <AdminIdentity host={host} />}
       </PageHeading>
       <Notice message={message || wallet.error || reviews.error} />
       {!settings && (
