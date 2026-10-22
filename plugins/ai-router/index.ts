@@ -130,8 +130,7 @@ export default definePlugin({
       const channel = (
         (host.config().upstreams ?? {}) as Record<string, Upstream>
       )[id];
-      if (!channel)
-        throw new HostError("not_found", "Channel not found", 404);
+      if (!channel) throw new HostError("not_found", "Channel not found", 404);
       const connections = channelConnections(channel);
       if (!connections.length)
         return {
@@ -143,10 +142,7 @@ export default definePlugin({
           if (Object.hasOwn(subscriptionDefaults, connection.protocol)) {
             const ids = connection.subscriptionAccountIds ?? [];
             if (!ids.length)
-              throw new HostError(
-                "subscription_missing",
-                "尚未选择订阅账号",
-              );
+              throw new HostError("subscription_missing", "尚未选择订阅账号");
             const providers = await Promise.all(
               ids.map(async (accountId) => {
                 const account = await host.call<{
@@ -224,9 +220,7 @@ export default definePlugin({
         }
       }
       return {
-        models: [...models.values()].sort((a, b) =>
-          a.id.localeCompare(b.id),
-        ),
+        models: [...models.values()].sort((a, b) => a.id.localeCompare(b.id)),
         errors,
       };
     }
@@ -336,18 +330,39 @@ export default definePlugin({
         },
       };
     }
-    host.provide("ai.targets@1", (input) => {
+    host.provide("ai.targets@1", async (input, signal) => {
       const c = host.config();
       const models = (c.models ?? {}) as Record<string, ModelRoute>;
       const channels = (c.upstreams ?? {}) as Record<string, Upstream>;
-      if (input?.target)
-        return physical(
+      if (input?.target) {
+        const target = physical(
           requiredString(input.target, "target"),
           input.request,
           [],
           input.ingressProtocol,
           input.protocolPolicy,
         );
+        const { upstream, model } = target.plan;
+        if (upstream.subscriptionAccountIds) {
+          const state = await host.call<{ available: boolean }>(
+            `ai.subscription.${upstream.protocol}@1`,
+            {
+              action: "availability",
+              ids: upstream.subscriptionAccountIds,
+              model,
+              ownerId: upstream.credentialOwner,
+            },
+            signal,
+          );
+          if (!state.available)
+            throw new HostError(
+              "subscription_unavailable",
+              "目标模型的订阅账号暂不可用",
+              503,
+            );
+        }
+        return target;
+      }
       return Object.entries(models)
         .filter(
           ([, r]) =>
@@ -647,11 +662,7 @@ export default definePlugin({
       handle: async (request, ctx) =>
         json(
           await channelModels(
-            requiredString(
-              (await readObject(request)).id,
-              "channel id",
-              256,
-            ),
+            requiredString((await readObject(request)).id, "channel id", 256),
             ctx.signal,
           ),
         ),

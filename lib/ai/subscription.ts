@@ -1,179 +1,270 @@
-import { createHash, randomUUID } from "node:crypto";
-import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
-import type {
-  AIRequest,
-  AIEvent,
-  Upstream,
-  Protocol,
-} from "@pluhub/contracts/ai";
 import {
-  encodeRequest,
-  decodeResult,
-  resultEvents,
-  parseSSE,
-  cancelSSE,
-} from "./protocols.js";
-import { upstreamEvents } from "./streams.js";
-import { supportsOutputLimit } from "./output-budget.js";
+  definePlugin,
+  HostError,
+  requiredString,
+  type Host,
+} from "@pluhub/sdk";
+import type { AIRequest, AIEvent, Upstream } from "@pluhub/contracts/ai";
 import type {
   SubscriptionCredential,
   SubscriptionLease,
 } from "@pluhub/contracts/subscription";
+import { subscriptionRequest } from "./subscription-request.js";
 import {
-  subscriptionDefaults,
+  subscriptionEvents,
+  rejectedSubscription,
+  SubscriptionFailure,
+} from "./subscription-response.js";
+import { cancelSSE } from "./sse.js";
+import {
   subscriptionQuota,
   type SubscriptionKind,
 } from "./subscription-auth.js";
-import {
-  discoverAntigravityProject,
-  antigravityUserAgent,
-} from "./antigravity-control.js";
+import { discoverAntigravityProject } from "./antigravity-control.js";
+export { subscriptionRequest } from "./subscription-request.js";
 export type { SubscriptionKind } from "./subscription-auth.js";
-export function subscriptionRequest(
+
+async function* execute(
+  host: Host,
   kind: SubscriptionKind,
   request: AIRequest,
   upstream: Upstream,
-  credential: { secret: string; accountId?: string; projectId?: string },
-) {
-  const protocol: Protocol =
-    kind === "codex"
-      ? "openai-responses"
-      : kind === "claude-subscription"
-        ? "anthropic"
-        : "gemini";
-  let body: any = encodeRequest(protocol, request);
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    authorization: "Bearer " + credential.secret,
-  };
-  const url = new URL(
-    requiredString(
-      upstream.baseUrl ||
-        (upstream.subscriptionAccountIds
-          ? subscriptionDefaults[kind].baseUrl
-          : undefined),
-      "subscription URL",
-      2048,
-    ),
-  );
+  signal: AbortSignal,
+): AsyncGenerator<AIEvent> {
+  const ids = upstream.subscriptionAccountIds;
   if (
-    !["https:", "http:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
+    ids &&
+    ((upstream.credentialId && !upstream.credentialOwner) || upstream.keyRef)
   )
     throw new HostError(
-      "invalid_upstream",
-      "Invalid subscription upstream URL",
+      "subscription_binding",
+      "Choose subscription accounts or a static credential",
     );
-  let suffix = "";
-  if (kind === "codex") {
-    suffix = "/responses";
-    if (!supportsOutputLimit({ ...upstream, protocol: kind })) {
-      if (request.maxTokens !== undefined || request.temperature !== undefined)
-        throw new HostError(
-          "unsupported_feature",
-          "Codex CLI does not support output-token or temperature overrides; use SIWC or omit them",
-        );
-      body.stream = true;
-      body.store = false;
-      body.input = encodeRequest("openai-responses", {
-        ...request,
-        messages: request.messages.filter(
-          (m) => m.role !== "system" && m.role !== "developer",
-        ),
-      }).input;
-      body.instructions = request.messages
-        .filter((m) => m.role === "system" || m.role === "developer")
-        .map((m) => m.text)
-        .join("\n");
-      headers.originator = "codex-tui";
-      headers["openai-beta"] = "responses=experimental";
-    }
-    const account = credential.accountId ?? upstream.accountId;
-    if (account) headers["chatgpt-account-id"] = account;
-    if (request.sessionId) headers.session_id = request.sessionId;
-  } else if (kind === "claude-subscription") {
-    suffix = url.pathname.replace(/\/$/, "").endsWith("/v1")
-      ? "/messages"
-      : "/v1/messages";
-    headers["anthropic-version"] = "2023-06-01";
-    headers["anthropic-beta"] =
-      "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14";
-    if (request.sessionId)
-      headers["x-claude-code-session-id"] = request.sessionId;
-  } else {
-    const project = credential.projectId ?? upstream.projectId;
-    if (!project)
-      throw new HostError(
-        "project_required",
-        "Antigravity requires an authorized project ID",
-      );
-    // Both client modes share the provider's terminal signature and usage frames.
-    suffix = "/v1internal:streamGenerateContent";
-    body = {
-      project,
-      model: request.model,
-      userAgent: "antigravity",
-      requestType: "agent",
-      requestId: "agent-" + randomUUID(),
-      request: {
-        ...body,
-        sessionId:
-          "-" +
-          String(
-            BigInt(
-              "0x" +
-                createHash("sha256")
-                  .update(request.sessionId ?? randomUUID())
-                  .digest("hex")
-                  .slice(0, 14),
-            ),
-          ),
-      },
-    };
-    delete body.request.model;
-    headers["user-agent"] = antigravityUserAgent;
-    url.searchParams.set("alt", "sse");
-  }
-  url.pathname = url.pathname.replace(/\/$/, "") + suffix;
-  return { url: url.href, headers, body, protocol };
-}
-function unwrapStream(body: ReadableStream<Uint8Array>) {
-  const iterator = (async function* () {
-    for await (const frame of parseSSE(body)) {
-      if (frame.data === "[DONE]") {
-        yield new TextEncoder().encode("data: [DONE]\n\n");
-        continue;
-      }
-      const value = JSON.parse(frame.data);
-      if (value.error)
-        throw new HostError("upstream_error", "Antigravity stream error", 502);
-      yield new TextEncoder().encode(
-        "data: " + JSON.stringify(value.response ?? value) + "\n\n",
-      );
-    }
-  })()[Symbol.asyncIterator]();
-  return new ReadableStream<Uint8Array>(
-    {
-      async pull(c) {
-        try {
-          const item = await iterator.next();
-          if (item.done) c.close();
-          else c.enqueue(item.value);
-        } catch (e) {
-          c.error(e);
+  const attempts = ids ? Math.min(3, ids.length) : 1;
+  const attempted = new Set<string>();
+  let failure: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    let lease: SubscriptionLease | undefined;
+    let credential:
+      | {
+          secret: string;
+          accountId?: string;
+          projectId?: string;
+          version?: number;
         }
-      },
-      async cancel() {
-        await cancelSSE(body);
-        await iterator.return?.();
-      },
-    },
-    { highWaterMark: 0 },
+      | undefined;
+    let body: ReadableStream<Uint8Array> | null | undefined;
+    let delivered = false;
+    let closing: Promise<void> | undefined;
+    const detached = new AbortController().signal;
+    const close = () =>
+      (closing ??= (async () => {
+        signal.removeEventListener("abort", onAbort);
+        try {
+          if (body) await cancelSSE(body);
+        } finally {
+          if (lease)
+            await host.call(
+              `ai.subscription.${kind}@1`,
+              { action: "release", leaseId: lease.leaseId },
+              detached,
+            );
+        }
+      })());
+    const onAbort = () => {
+      void close().catch(() => {});
+    };
+    const report = (input: Record<string, unknown>) =>
+      lease
+        ? host.call(
+            `ai.subscription.${kind}@1`,
+            {
+              action: "report",
+              leaseId: lease.leaseId,
+              version: credential?.version ?? lease.credential.version,
+              ...input,
+            },
+            detached,
+          )
+        : Promise.resolve();
+    try {
+      if (ids) {
+        lease = await host.call<SubscriptionLease>(
+          `ai.subscription.${kind}@1`,
+          {
+            action: "acquire",
+            provider: kind,
+            ids,
+            model: request.model,
+            sessionId: request.sessionId,
+            excludeIds: [...attempted],
+            ...(upstream.credentialId
+              ? {
+                  ownerId: requiredString(
+                    upstream.credentialOwner,
+                    "credential owner",
+                  ),
+                }
+              : {}),
+          },
+          signal,
+        );
+        attempted.add(lease.accountId);
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+      signal.throwIfAborted();
+      credential =
+        lease?.credential ??
+        (upstream.credentialId
+          ? await host.call<{
+              secret: string;
+              accountId?: string;
+              projectId?: string;
+            }>(
+              "credentials.resolve@1",
+              { id: upstream.credentialId, userId: upstream.credentialOwner },
+              signal,
+            )
+          : {
+              secret: host.secret(
+                requiredString(upstream.keyRef, "subscription keyRef"),
+              ),
+            });
+      if (
+        kind === "antigravity" &&
+        !credential.projectId &&
+        !upstream.projectId
+      )
+        credential = {
+          ...credential,
+          projectId: await discoverAntigravityProject(
+            host,
+            credential.secret,
+            signal,
+          ),
+        };
+      let prepared = subscriptionRequest(kind, request, upstream, credential);
+      const send = async () => {
+        const response = await host.call<Response>(
+          "http.transport@1",
+          {
+            url: prepared.url,
+            headers: prepared.headers,
+            body: JSON.stringify(prepared.body),
+            publicOnly: upstream.publicOnly || !!lease,
+          },
+          signal,
+        );
+        body = response.body;
+        signal.throwIfAborted();
+        return response;
+      };
+      let refreshed = false;
+      const refresh = async () => {
+        refreshed = true;
+        if (body) await cancelSSE(body);
+        body = undefined;
+        try {
+          credential = await host.call<SubscriptionCredential>(
+            `ai.subscription.${kind}@1`,
+            {
+              action: "refresh",
+              leaseId: lease!.leaseId,
+              version: credential!.version,
+            },
+            signal,
+          );
+        } catch (error) {
+          signal.throwIfAborted();
+          throw new SubscriptionFailure(
+            error instanceof HostError &&
+              error.code === "subscription_reauthorize"
+              ? 401
+              : 503,
+          );
+        }
+        prepared = subscriptionRequest(kind, request, upstream, credential);
+      };
+      for (;;) {
+        const response = await send();
+        if (response.status === 401 && lease && !refreshed) {
+          await refresh();
+          continue;
+        }
+        if (!response.ok) throw await rejectedSubscription(response, signal);
+        await report({
+          status: response.status,
+          quota: subscriptionQuota(kind, response.headers),
+        });
+        try {
+          for await (const event of subscriptionEvents(
+            kind,
+            prepared.protocol,
+            response,
+            !!prepared.body.stream || request.stream,
+            request.model,
+            signal,
+          )) {
+            signal.throwIfAborted();
+            delivered = true;
+            yield event;
+          }
+        } catch (error) {
+          if (
+            error instanceof SubscriptionFailure &&
+            error.upstreamStatus === 401 &&
+            !delivered &&
+            lease &&
+            !refreshed
+          ) {
+            await refresh();
+            continue;
+          }
+          throw error;
+        }
+        return;
+      }
+    } catch (error) {
+      signal.throwIfAborted();
+      if (error instanceof SubscriptionFailure) {
+        await report({
+          status: error.upstreamStatus,
+          retryAfter: error.retryAfter,
+          quotaExhausted: error.quotaExhausted,
+          resetAt: error.resetAt,
+        });
+        if (
+          !delivered &&
+          lease &&
+          error.retryable &&
+          attempt + 1 < attempts &&
+          ids?.some((id) => !attempted.has(id))
+        ) {
+          failure = error;
+          host.log(
+            "warn",
+            `订阅请求切换账号：${kind}/${lease.accountId} (${error.code})`,
+          );
+          continue;
+        }
+      }
+      if (
+        error instanceof HostError &&
+        error.code === "subscription_unavailable" &&
+        failure
+      )
+        throw failure;
+      throw error;
+    } finally {
+      await close();
+    }
+  }
+  throw (
+    failure ??
+    new HostError("subscription_unavailable", "暂无可用订阅账号", 503)
   );
 }
+
 export function createSubscription(kind: SubscriptionKind) {
   return definePlugin({
     setup(host) {
@@ -188,275 +279,31 @@ export function createSubscription(kind: SubscriptionKind) {
               "adapter_mismatch",
               "Wrong subscription adapter",
             );
-          let lease: SubscriptionLease | undefined;
-          let responseBody: ReadableStream<Uint8Array> | null | undefined;
-          const detached = new AbortController().signal;
-          let released = false;
-          const release = async () => {
-            if (released) return;
-            released = true;
-            signal.removeEventListener("abort", onAbort);
-            if (responseBody) await cancelSSE(responseBody);
-            if (lease)
-              await host.call(
-                `ai.subscription.${kind}@1`,
-                { action: "release", leaseId: lease.leaseId },
-                detached,
-              );
-          };
-          const onAbort = () => {
-            void release().catch(() => {});
-          };
-          function managed(
-            events: AsyncIterable<AIEvent>,
-          ): AsyncIterableIterator<AIEvent> {
-            const iterator = events[Symbol.asyncIterator]();
-            return {
-              [Symbol.asyncIterator]() {
-                return this;
-              },
-              async next() {
-                try {
-                  signal.throwIfAborted();
-                  const item = await iterator.next();
-                  signal.throwIfAborted();
-                  if (item.done) await release();
-                  return item;
-                } catch (error) {
-                  await release();
-                  throw error;
-                }
-              },
-              async return() {
-                try {
-                  return (
-                    (await iterator.return?.()) ?? {
-                      done: true as const,
-                      value: undefined,
-                    }
-                  );
-                } finally {
-                  await release();
-                }
-              },
-              async throw(error) {
-                try {
-                  if (iterator.throw) return await iterator.throw(error);
-                  throw error;
-                } finally {
-                  await release();
-                }
-              },
-            };
-          }
-          try {
-            if (upstream.subscriptionAccountIds) {
-              if (
-                (upstream.credentialId && !upstream.credentialOwner) ||
-                upstream.keyRef
-              )
-                throw new HostError(
-                  "subscription_binding",
-                  "Choose subscription accounts or a static credential",
-                );
-              lease = await host.call<SubscriptionLease>(
-                `ai.subscription.${kind}@1`,
-                {
-                  action: "acquire",
-                  provider: kind,
-                  ids: upstream.subscriptionAccountIds,
-                  sessionId: request.sessionId,
-                  ...(upstream.credentialId
-                    ? {
-                        ownerId: requiredString(
-                          upstream.credentialOwner,
-                          "credential owner",
-                        ),
-                      }
-                    : {}),
-                },
-                signal,
-              );
-              signal.addEventListener("abort", onAbort, { once: true });
-              signal.throwIfAborted();
-            }
-            let credential =
-              lease?.credential ??
-              (upstream.credentialId
-                ? await host.call<{
-                    secret: string;
-                    accountId?: string;
-                    projectId?: string;
-                  }>(
-                    "credentials.resolve@1",
-                    {
-                      id: upstream.credentialId,
-                      userId: upstream.credentialOwner,
-                    },
-                    signal,
-                  )
-                : {
-                    secret: host.secret(
-                      requiredString(upstream.keyRef, "subscription keyRef"),
-                    ),
-                  });
-            if (
-              kind === "antigravity" &&
-              !credential.projectId &&
-              !upstream.projectId
-            )
-              credential = {
-                ...credential,
-                projectId: await discoverAntigravityProject(
-                  host,
-                  credential.secret,
-                  signal,
-                ),
-              };
-            let prepared = subscriptionRequest(
-              kind,
-              request,
-              upstream,
-              credential,
-            );
-            const send = () =>
-              host.call<Response>(
-                "http.transport@1",
-                {
-                  url: prepared.url,
-                  headers: prepared.headers,
-                  body: JSON.stringify(prepared.body),
-                  publicOnly: upstream.publicOnly || !!lease,
-                },
-                signal,
-              );
-            let response = await send();
-            responseBody = response.body;
-            signal.throwIfAborted();
-            if (response.status === 401 && lease) {
-              await response.body?.cancel();
-              credential = await host.call<SubscriptionCredential>(
-                `ai.subscription.${kind}@1`,
-                {
-                  action: "refresh",
-                  leaseId: lease.leaseId,
-                  version: (credential as SubscriptionCredential).version,
-                },
-                signal,
-              );
-              prepared = subscriptionRequest(
-                kind,
-                request,
-                upstream,
-                credential,
-              );
-              response = await send();
-              responseBody = response.body;
-              signal.throwIfAborted();
-            }
-            if (lease)
-              await host.call(
-                `ai.subscription.${kind}@1`,
-                {
-                  action: "report",
-                  leaseId: lease.leaseId,
-                  version: (credential as SubscriptionCredential).version,
-                  status: response.status,
-                  retryAfter: response.headers.get("retry-after"),
-                  quota: subscriptionQuota(kind, response.headers),
-                },
-                detached,
-              );
-            if (!response.ok) {
-              await response.body?.cancel();
-              throw new HostError(
-                response.status === 429
-                  ? "subscription_rate_limited"
-                  : response.status === 401
-                    ? "subscription_reauthorize"
-                    : response.status === 403
-                      ? "subscription_forbidden"
-                      : "upstream_error",
-                "Subscription upstream rejected request",
-                response.status === 429 ? 429 : 502,
-              );
-            }
-            if (!response.body)
-              throw new HostError(
-                "upstream_protocol",
-                "Empty subscription response",
-                502,
-              );
-            const contentType = response.headers.get("content-type");
-            if (
-              contentType?.includes("text/event-stream") ||
-              // Codex CLI can omit Content-Type on an otherwise valid SSE response.
-              (kind === "codex" && prepared.body.stream && !contentType)
-            )
-              return managed(
-                upstreamEvents(
-                  prepared.protocol,
-                  kind === "antigravity"
-                    ? unwrapStream(response.body)
-                    : response.body,
-                ),
-              );
-            if (prepared.body.stream || request.stream) {
-              await response.body.cancel();
-              throw new HostError(
-                "upstream_protocol",
-                "Expected subscription SSE response",
-                502,
-              );
-            }
-            const reader = response.body.getReader();
-            const chunks: Uint8Array[] = [];
-            let size = 0;
-            try {
-              for (;;) {
-                signal.throwIfAborted();
-                const item = await reader.read();
-                if (item.done) break;
-                size += item.value.length;
-                if (size > 16777216) {
-                  await reader.cancel();
-                  throw new HostError(
-                    "upstream_protocol",
-                    "Response too large",
-                    502,
-                  );
-                }
-                chunks.push(item.value);
+          const iterator = execute(host, kind, request, upstream, signal);
+          // Resolve initial provider errors and failover before the ingress sends HTTP headers.
+          let pending: IteratorResult<AIEvent> | undefined =
+            await iterator.next();
+          return {
+            [Symbol.asyncIterator]() {
+              return this;
+            },
+            next() {
+              if (pending) {
+                const value = pending;
+                pending = undefined;
+                return Promise.resolve(value);
               }
-            } catch (error) {
-              await reader.cancel().catch(() => {});
-              throw error;
-            } finally {
-              reader.releaseLock();
-            }
-            const raw = JSON.parse(Buffer.concat(chunks).toString());
-            const data = kind === "antigravity" ? (raw.response ?? raw) : raw;
-            const usage =
-              kind === "antigravity" ? data.usageMetadata : data.usage;
-            const fields =
-              kind === "antigravity"
-                ? ["promptTokenCount", "candidatesTokenCount"]
-                : ["input_tokens", "output_tokens"];
-            const known = fields.every(
-              (k) => Number.isSafeInteger(usage?.[k]) && usage[k] >= 0,
-            );
-            return managed(
-              (async function* () {
-                for await (const event of resultEvents(
-                  decodeResult(prepared.protocol, data, request.model),
-                ))
-                  if (event.type !== "usage" || known) yield event;
-              })(),
-            );
-          } catch (error) {
-            await release();
-            throw error;
-          }
+              return iterator.next();
+            },
+            return() {
+              pending = undefined;
+              return iterator.return(undefined);
+            },
+            throw(error: unknown) {
+              pending = undefined;
+              return iterator.throw(error);
+            },
+          } satisfies AsyncIterableIterator<AIEvent>;
         },
       );
     },

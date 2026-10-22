@@ -355,6 +355,11 @@ export default definePlugin({
           release(input.leaseId);
           return;
         }
+        if (!("leaseId" in input))
+          return fail(
+            "subscription_action",
+            "Unknown subscription account action",
+          );
         const lease =
           leases.get(input.leaseId) ??
           fail("subscription_lease", "订阅账号占用已失效", 409);

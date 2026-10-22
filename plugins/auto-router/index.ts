@@ -181,6 +181,7 @@ export default definePlugin({
           if (
             [
               "model_not_found",
+              "subscription_unavailable",
               "protocol_not_allowed",
               "protocol_conversion_forbidden",
             ].includes((e as HostError).code)

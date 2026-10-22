@@ -20,8 +20,10 @@ import type {
   SubscriptionCredential,
   SubscriptionLease,
 } from "@pluhub/contracts/subscription";
-import { openDatabase } from "../storage/sqlite.js";
+import { openDatabase, transaction } from "../storage/sqlite.js";
 import { affinityMigration, createSessionAffinity } from "./affinity.js";
+import { healthMigration, createSubscriptionHealth } from "./health.js";
+import { startSubscriptionMaintenance } from "./maintenance.js";
 import {
   normalizeSubscriptionToken,
   subscriptionKind,
@@ -70,13 +72,18 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     "ALTER TABLE accounts ADD COLUMN quota_json TEXT NOT NULL DEFAULT '[]'; ALTER TABLE accounts ADD COLUMN quota_updated_at INTEGER;",
     "ALTER TABLE accounts ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''; CREATE INDEX accounts_owner ON accounts(owner_id);",
     affinityMigration,
+    healthMigration,
   ]);
   const stop = new AbortController();
   const refreshing = new Map<string, Promise<SubscriptionCredential>>();
   const checking = new Map<string, Promise<unknown>>();
-  const leases = new Map<string, { id: string; version: number }>();
+  const leases = new Map<
+    string,
+    { id: string; version: number; model?: string }
+  >();
   const active = new Map<string, number>();
   const affinity = createSessionAffinity(db, active, stop.signal);
+  const health = createSubscriptionHealth(db, kind, affinity.notify);
   const row = (id: string): any =>
     db.prepare("SELECT * FROM accounts WHERE id=?").get(id) ??
     fail("subscription_not_found", "订阅账号不存在", 404);
@@ -86,6 +93,16 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       fail("subscription_not_found", "订阅账号不存在", 404);
     return r;
   };
+  const poolRows = (ids: string[], ownerId = "") =>
+    ids.flatMap((id) => {
+      const r = db.prepare("SELECT * FROM accounts WHERE id=?").get(id) as any;
+      if (!r) return [];
+      if (r.owner_id !== ownerId)
+        fail("subscription_not_found", "订阅账号不存在", 404);
+      if (r.provider !== kind)
+        fail("subscription_provider", "订阅账号与提供商不匹配");
+      return [r];
+    });
   const aad = (id: string, provider: string, ownerId = "") =>
     Buffer.from(
       JSON.stringify(ownerId ? [id, provider, ownerId] : [id, provider]),
@@ -133,14 +150,21 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         ? "disabled"
         : r.status !== "ready"
           ? r.status
-          : r.cooldown_until > Date.now()
+          : r.cooldown_until > Date.now() || health.blocked(r.id)
             ? "cooldown"
             : value.expires_at !== undefined &&
                 value.expires_at <= Date.now() &&
                 !value.refresh_token
               ? "reauthorize"
               : "ready",
-      cooldownUntil: r.cooldown_until,
+      cooldownUntil: Math.max(
+        r.cooldown_until,
+        ...health
+          .cooldowns(r.id)
+          .filter((c) => !c.model)
+          .map((c) => c.until),
+      ),
+      modelCooldowns: health.cooldowns(r.id).filter((c) => c.model),
       errorCode: r.error_code,
       lastStatus: r.last_status,
       active: active.get(r.id) ?? 0,
@@ -227,11 +251,13 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       Date.now(),
       ownerId,
     );
+    health.remove(id);
     return metadata(row(id));
   }
   async function resolve(
     id: string,
     forceVersion?: number,
+    ahead = 60000,
   ): Promise<SubscriptionCredential> {
     const r = row(id),
       value = decrypt(r);
@@ -241,7 +267,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     const expired =
       !value.access_token ||
       (value.expires_at !== undefined &&
-        value.expires_at <= Date.now() + 60000);
+        value.expires_at <= Date.now() + ahead);
     if (!expired && forceVersion === undefined) return credential(r);
     const existing = refreshing.get(id);
     if (existing) return existing;
@@ -283,7 +309,10 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           project_id: next.project_id ?? value.project_id,
         };
         db.prepare(
-          "UPDATE accounts SET cipher=?,version=version+1,status='ready',error_code=NULL,cooldown_until=0,updated_at=? WHERE id=? AND version=?",
+          `UPDATE accounts SET cipher=?,version=version+1,
+            status=CASE WHEN status='reauthorize' THEN 'ready' ELSE status END,
+            error_code=CASE WHEN error_code IN ('oauth_refresh_failed','subscription_reauthorize') THEN NULL ELSE error_code END,
+            updated_at=? WHERE id=? AND version=?`,
         ).run(
           encrypt(id, r.provider, merged, r.owner_id),
           Date.now(),
@@ -298,10 +327,20 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         if (current.version !== r.version) return credential(current);
         const code =
           error instanceof HostError ? error.code : "oauth_refresh_failed";
+        if (
+          code !== "subscription_reauthorize" &&
+          forceVersion === undefined &&
+          value.access_token &&
+          value.expires_at !== undefined &&
+          value.expires_at > Date.now() + 60000
+        )
+          throw error instanceof HostError
+            ? error
+            : new HostError("oauth_refresh_failed", "授权服务暂时不可用", 502);
         db.prepare(
-          "UPDATE accounts SET status=?,error_code=?,cooldown_until=? WHERE id=? AND version=?",
+          "UPDATE accounts SET status=?,error_code=?,cooldown_until=MAX(cooldown_until,?),health_revision=health_revision+1 WHERE id=? AND version=?",
         ).run(
-          code === "subscription_reauthorize" ? "reauthorize" : "ready",
+          code === "subscription_reauthorize" ? "reauthorize" : current.status,
           code,
           Date.now() + 30000,
           id,
@@ -315,6 +354,18 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     refreshing.set(id, task);
     try {
       return await task;
+    } catch (error) {
+      if (
+        !stop.signal.aborted &&
+        forceVersion === undefined &&
+        (!(error instanceof HostError) ||
+          error.code !== "subscription_reauthorize") &&
+        value.access_token &&
+        value.expires_at !== undefined &&
+        value.expires_at > Date.now() + 60000
+      )
+        return credential(row(id));
+      throw error;
     } finally {
       if (refreshing.get(id) === task) refreshing.delete(id);
     }
@@ -333,17 +384,50 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     const pending = checking.get(id);
     if (pending) return pending;
     const task = (async () => {
-      const token = await resolve(id);
-      const current = row(id);
+      let token = await resolve(id);
+      let current = row(id);
+      const read = () =>
+        subscriptionOverview(
+          host,
+          kind,
+          decrypt(current),
+          AbortSignal.any([stop.signal, AbortSignal.timeout(20000)]),
+        );
+      let overview: Awaited<ReturnType<typeof subscriptionOverview>>;
+      try {
+        try {
+          overview = await read();
+        } catch (error) {
+          if (
+            !(error instanceof HostError) ||
+            error.code !== "subscription_reauthorize" ||
+            !decrypt(current).refresh_token
+          )
+            throw error;
+          token = await resolve(id, token.version);
+          current = row(id);
+          overview = await read();
+        }
+      } catch (error) {
+        if (
+          error instanceof HostError &&
+          error.code === "subscription_reauthorize"
+        ) {
+          db.prepare(
+            `UPDATE accounts SET status='reauthorize',error_code='subscription_reauthorize',
+            health_revision=health_revision+1 WHERE id=? AND version=?`,
+          ).run(id, token.version);
+          affinity.notify(id);
+        }
+        throw error;
+      }
       const value = decrypt(current);
-      const overview = await subscriptionOverview(
-        host,
-        kind,
-        value,
-        AbortSignal.any([stop.signal, AbortSignal.timeout(20000)]),
-      );
       const latest = row(id);
-      if (latest.version !== token.version || !latest.enabled)
+      if (
+        latest.version !== token.version ||
+        !latest.enabled ||
+        latest.health_revision !== current.health_revision
+      )
         return metadata(latest);
       const name =
         overview.email && [kind, subscriptionNames[kind]].includes(latest.name)
@@ -357,16 +441,19 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         project_id: overview.projectId ?? value.project_id,
       };
       // Quota metadata does not rotate credentials; refresh merges the latest encrypted metadata.
-      db.prepare(
-        "UPDATE accounts SET name=?,quota_json=?,quota_updated_at=?,cipher=? WHERE id=? AND version=?",
-      ).run(
-        name,
-        JSON.stringify(overview.quota),
-        Date.now(),
-        encrypt(id, kind, updated, latest.owner_id),
-        id,
-        token.version,
-      );
+      transaction(db, () => {
+        db.prepare(
+          "UPDATE accounts SET name=?,quota_json=?,quota_updated_at=?,cipher=? WHERE id=? AND version=?",
+        ).run(
+          name,
+          JSON.stringify(overview.quota),
+          Date.now(),
+          encrypt(id, kind, updated, latest.owner_id),
+          id,
+          token.version,
+        );
+        health.recovered(id, overview.quota, current.health_revision);
+      });
       return metadata(row(id));
     })();
     checking.set(id, task);
@@ -388,8 +475,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           fail("subscription_provider", "订阅账号与提供商不匹配");
         return metadata(r);
       }
-      if (input.action === "acquire") {
-        const provider = subscriptionKind(input.provider);
+      if (input.action === "acquire" || input.action === "availability") {
         if (
           !Array.isArray(input.ids) ||
           !input.ids.length ||
@@ -398,46 +484,90 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           input.ids.some((id) => typeof id !== "string" || id.length > 256)
         )
           fail("subscription_binding", "请选择订阅账号，且不可重复");
+        if (input.action === "availability")
+          return {
+            available: poolRows(input.ids, input.ownerId).some(
+              (r) =>
+                r.enabled &&
+                r.status === "ready" &&
+                r.cooldown_until <= Date.now() &&
+                !health.blocked(r.id, input.model),
+            ),
+          };
         const sessionKey = input.sessionId
           ? JSON.stringify([
               input.ownerId ?? "",
               requiredString(input.sessionId, "sessionId", 256),
             ])
           : undefined;
-        const selected = await affinity.acquire(
-          () => {
-            const rows = input.ids.flatMap((id) => {
-              const r = db
-                .prepare("SELECT * FROM accounts WHERE id=?")
-                .get(id) as any;
-              if (!r) return [];
-              if (r.owner_id !== (input.ownerId ?? ""))
-                fail("subscription_not_found", "订阅账号不存在", 404);
-              if (r.provider !== provider)
-                fail("subscription_provider", "订阅账号与提供商不匹配");
-              return [r];
-            });
-            return rows;
-          },
-          sessionKey,
-          signal,
-        );
-        const leaseId = randomUUID();
-        leases.set(leaseId, { id: selected.id, version: selected.version });
-        try {
-          const result = await cancellable(resolve(selected.id), signal);
-          signal.throwIfAborted();
-          leases.get(leaseId)!.version = result.version;
-          return {
-            leaseId,
-            accountId: selected.id,
-            credential: result,
-          } satisfies SubscriptionLease;
-        } catch (error) {
-          if (!signal.aborted) affinity.forget(sessionKey, selected.id);
-          release(leaseId);
-          throw error;
+        if (
+          input.excludeIds !== undefined &&
+          (!Array.isArray(input.excludeIds) ||
+            input.excludeIds.some((id) => typeof id !== "string"))
+        )
+          fail("subscription_binding", "无效的账号排除列表");
+        const excluded = new Set(input.excludeIds ?? []);
+        let failure: unknown;
+        for (
+          let attempt = 0;
+          attempt < Math.min(3, input.ids.length);
+          attempt++
+        ) {
+          let selected;
+          try {
+            selected = await affinity.acquire(
+              () =>
+                poolRows(input.ids, input.ownerId).filter(
+                  (r) =>
+                    !excluded.has(r.id) && !health.blocked(r.id, input.model),
+                ),
+              sessionKey,
+              signal,
+            );
+          } catch (error) {
+            if (
+              error instanceof HostError &&
+              error.code === "subscription_unavailable" &&
+              failure
+            )
+              throw failure;
+            throw error;
+          }
+          const leaseId = randomUUID();
+          leases.set(leaseId, {
+            id: selected.id,
+            version: selected.version,
+            model: input.model,
+          });
+          try {
+            const result = await cancellable(resolve(selected.id), signal);
+            signal.throwIfAborted();
+            leases.get(leaseId)!.version = result.version;
+            return {
+              leaseId,
+              accountId: selected.id,
+              credential: result,
+            } satisfies SubscriptionLease;
+          } catch (error) {
+            release(leaseId);
+            signal.throwIfAborted();
+            stop.signal.throwIfAborted();
+            affinity.forget(sessionKey, selected.id);
+            if (
+              !(error instanceof HostError) ||
+              ![
+                "subscription_reauthorize",
+                "oauth_refresh_failed",
+                "oauth_response",
+                "subscription_disabled",
+              ].includes(error.code)
+            )
+              throw error;
+            excluded.add(selected.id);
+            failure = error;
+          }
         }
+        throw failure;
       }
       if (input.action === "release") {
         release(input.leaseId);
@@ -460,84 +590,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           .prepare("SELECT * FROM accounts WHERE id=?")
           .get(lease.id) as any;
         if (!r || r.version !== input.version) return;
-        let cooldown = 0,
-          status = "ready",
-          code: string | null = null;
-        if (input.status === 401) {
-          status = "reauthorize";
-          code = "subscription_reauthorize";
-        } else if (input.status === 403) {
-          status = "forbidden";
-          code = "subscription_forbidden";
-        } else if (input.status === 429 || input.status >= 500) {
-          const retry = input.retryAfter?.trim() ?? "";
-          const seconds = /^\d+(\.\d+)?$/.test(retry)
-            ? Number(retry)
-            : (Date.parse(retry) - Date.now()) / 1000;
-          cooldown =
-            Date.now() +
-            Math.min(
-              86400,
-              Math.max(
-                1,
-                Number.isFinite(seconds)
-                  ? seconds
-                  : input.status === 429
-                    ? 60
-                    : 10,
-              ),
-            ) *
-              1000;
-          code =
-            input.status === 429
-              ? "subscription_rate_limited"
-              : "subscription_upstream_error";
-        } else if (input.status >= 400) return;
-        if (
-          Array.isArray(input.quota) &&
-          input.quota.length > 0 &&
-          input.quota.length <= 2 &&
-          input.quota.every(
-            (q) =>
-              ["primary", "secondary"].includes(q.window) &&
-              Number.isFinite(q.usedPercent) &&
-              q.usedPercent >= 0 &&
-              q.usedPercent <= 100 &&
-              (q.resetAt === undefined ||
-                (Number.isFinite(q.resetAt) &&
-                  q.resetAt >= 0 &&
-                  q.resetAt <= Date.now() + 2592000000)),
-          )
-        ) {
-          const merged = new Map(
-            (JSON.parse(r.quota_json) as any[]).map((q) => [q.window, q]),
-          );
-          for (const q of input.quota)
-            merged.set(q.window, { ...q, updatedAt: Date.now() });
-          db.prepare(
-            "UPDATE accounts SET quota_json=?,quota_updated_at=? WHERE id=? AND version=?",
-          ).run(
-            JSON.stringify([...merged.values()]),
-            Date.now(),
-            r.id,
-            input.version,
-          );
-          for (const q of input.quota)
-            if (q.usedPercent >= 100 && q.resetAt && q.resetAt > Date.now()) {
-              cooldown = Math.max(cooldown, q.resetAt);
-              code ??= "subscription_rate_limited";
-            }
-        }
-        // Success on another concurrent request must not undo a newer cooldown or authorization failure.
-        if (
-          input.status < 400 &&
-          (r.status !== "ready" || r.cooldown_until > Date.now())
-        )
-          return;
-        db.prepare(
-          "UPDATE accounts SET status=?,error_code=?,cooldown_until=MAX(cooldown_until,?),last_status=? WHERE id=? AND version=?",
-        ).run(status, code, cooldown, input.status, r.id, input.version);
-        affinity.notify(r.id);
+        health.report(r, input, lease.model);
         return;
       }
       fail("subscription_action", "Unknown subscription account action");
@@ -591,6 +644,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       if (b.action === "delete") {
         db.prepare("DELETE FROM accounts WHERE id=?").run(r.id);
         affinity.remove(r.id);
+        health.remove(r.id);
         return json({ ok: true });
       }
       if (b.action === "update") {
@@ -617,11 +671,12 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       } else if (b.action === "quota")
         return json(await cancellable(queryOverview(r.id), ctx.signal));
       else if (b.action === "refresh") await resolve(r.id, r.version);
-      else if (b.action === "resume")
+      else if (b.action === "resume") {
         db.prepare(
-          "UPDATE accounts SET status='ready',error_code=NULL,cooldown_until=0 WHERE id=?",
+          "UPDATE accounts SET status='ready',error_code=NULL,cooldown_until=0,health_revision=health_revision+1 WHERE id=?",
         ).run(r.id);
-      else if (b.action === "project") {
+        health.remove(r.id);
+      } else if (b.action === "project") {
         if (r.provider !== "antigravity")
           fail("subscription_provider", "仅 Antigravity 支持项目 ID");
         let project = b.projectId;
@@ -701,8 +756,29 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       );
     oauthConfig(host, kind, config);
   });
+  const maintenance = startSubscriptionMaintenance({
+    host,
+    signal: stop.signal,
+    list: () =>
+      (
+        db
+          .prepare(
+            "SELECT id,status,cooldown_until FROM accounts WHERE enabled=1 AND status<>'reauthorize'",
+          )
+          .all() as any[]
+      ).map((r) => ({
+        id: r.id,
+        cooling:
+          r.status !== "ready" ||
+          r.cooldown_until > Date.now() ||
+          health.cooldowns(r.id).length > 0,
+      })),
+    refresh: (id) => resolve(id, undefined, 300000),
+    overview: queryOverview,
+  });
   host.cleanup(async () => {
     stop.abort();
+    await maintenance();
     await oauth.close();
     await Promise.allSettled([...refreshing.values(), ...checking.values()]);
     leases.clear();
