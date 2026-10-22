@@ -39,6 +39,7 @@ type Router = {
   upstreams: Record<string, Upstream>;
   models: Record<string, ModelRoute>;
   redirects?: Record<string, ModelRedirect>;
+  nextChannelId?: string;
 };
 function Page({ host }: { host: UIHost }) {
   const loaded = useLoad<any>(() => host.request("/api/host/config"));
@@ -158,9 +159,19 @@ function Page({ host }: { host: UIHost }) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const text = (key: string) => String(f.get(key) ?? "").trim();
-    const id = dialog?.id || text("id");
+    let id = dialog?.id || text("id");
     try {
       await save((r) => {
+        if (dialog?.type === "channel" && !dialog.id) {
+          let next = BigInt(r.nextChannelId ?? "1");
+          for (const current of Object.keys(r.upstreams)) {
+            if (!/^\d+$/.test(current)) continue;
+            const candidate = BigInt(current) + 1n;
+            if (candidate > next) next = candidate;
+          }
+          id = String(next);
+          r.nextChannelId = String(next + 1n);
+        }
         const collection = dialog?.type === "channel" ? r.upstreams : r.models;
         if (!dialog?.id && Object.hasOwn(collection, id))
           throw new Error(tr("该 ID 已存在，请使用不同的 ID。"));
@@ -465,18 +476,14 @@ function Page({ host }: { host: UIHost }) {
           <form onSubmit={submit} key={dialog.type + dialog.id}>
             <Notice message={message} />
             <div className="form-grid">
-              {!dialog.id && (
+              {!dialog.id && dialog.type === "model" && (
                 <label className="full">
-                  {dialog.type === "channel"
-                    ? tr("渠道 ID")
-                    : tr("公开模型 ID")}
+                  {tr("公开模型 ID")}
                   <input
                     name="id"
                     required
                     pattern={"[a-zA-Z0-9][a-zA-Z0-9._\\-\\/]{0,127}"}
-                    placeholder={
-                      dialog.type === "channel" ? "primary" : "my-chat-model"
-                    }
+                    placeholder="my-chat-model"
                   />
                 </label>
               )}

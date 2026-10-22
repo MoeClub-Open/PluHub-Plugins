@@ -5,7 +5,7 @@
   "name": "渠道与模型路由",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.12",
+  "version": "0.1.0-alpha.13",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -28,6 +28,10 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "nextChannelId": {
+        "type": "string",
+        "pattern": "^[1-9][0-9]*$"
+      },
       "upstreams": {
         "type": "object",
         "additionalProperties": {
