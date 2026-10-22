@@ -22,7 +22,6 @@ import {
 } from "../../lib/ui/i18n.js";
 import { usePageTransition } from "./page-transition.js";
 import { AccountMenu } from "./account-menu.js";
-import { Install } from "./install-ui.js";
 import { RegistryBrowser, PluginUpdates } from "./registry-ui.js";
 import { Dashboard } from "./dashboard.js";
 import { Login } from "./login.js";
@@ -1011,7 +1010,6 @@ function App() {
               {plugins.length > 0 && visiblePlugins.length === 0 && (
                 <Empty title={tr("没有匹配的插件")} />
               )}
-              <Install client={client} done={() => setVersion((v) => v + 1)} />
             </>
           ) : (
             <React.Fragment
