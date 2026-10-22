@@ -128,6 +128,13 @@ export function ChannelFlowCanvas({
     pointerId: number;
     current: { x: number; y: number };
   }>();
+  const [panning, setPanning] = React.useState<{
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  }>();
   const [linkTarget, setLinkTarget] = React.useState<string>();
   const points = workflowNodePositions(flow);
   const width = Math.max(
@@ -193,7 +200,26 @@ export function ChannelFlowCanvas({
     setLinking({ from, field, pointerId: event.pointerId, current });
     svgCanvas.current?.setPointerCapture(event.pointerId);
   }
+  function startPanning(event: React.PointerEvent<SVGSVGElement>) {
+    if (event.button !== 1 || !canvas.current) return;
+    event.preventDefault();
+    setPanning({
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      scrollLeft: canvas.current.scrollLeft,
+      scrollTop: canvas.current.scrollTop,
+    });
+    svgCanvas.current?.setPointerCapture(event.pointerId);
+  }
   function movePointer(event: React.PointerEvent<SVGSVGElement>) {
+    if (panning?.pointerId === event.pointerId) {
+      canvas.current!.scrollLeft =
+        panning.scrollLeft - (event.clientX - panning.clientX);
+      canvas.current!.scrollTop =
+        panning.scrollTop - (event.clientY - panning.clientY);
+      return;
+    }
     const pointer = pointFromEvent(event.clientX, event.clientY);
     if (movingNode?.pointerId === event.pointerId) {
       update({
@@ -218,6 +244,11 @@ export function ChannelFlowCanvas({
     }
   }
   function endPointer(event: React.PointerEvent<SVGSVGElement>) {
+    if (panning?.pointerId === event.pointerId) {
+      if (svgCanvas.current?.hasPointerCapture(event.pointerId))
+        svgCanvas.current.releasePointerCapture(event.pointerId);
+      setPanning(undefined);
+    }
     if (movingNode?.pointerId === event.pointerId) {
       if (svgCanvas.current?.hasPointerCapture(event.pointerId))
         svgCanvas.current.releasePointerCapture(event.pointerId);
@@ -270,7 +301,7 @@ export function ChannelFlowCanvas({
       : undefined;
   return (
     <div>
-      <style>{`.workflow-canvas{overflow:auto;min-height:340px}.workflow-canvas svg{display:block;touch-action:none;user-select:none}.workflow-node{cursor:grab;touch-action:none}.workflow-node:active{cursor:grabbing}.workflow-node:focus{outline:2px solid currentColor}.workflow-port{cursor:crosshair;touch-action:none}`}</style>
+      <style>{`.workflow-canvas{overflow:auto;min-height:340px}.workflow-canvas svg{display:block;touch-action:none;user-select:none}.workflow-canvas.is-panning svg,.workflow-canvas.is-panning .workflow-node{cursor:grabbing}.workflow-node{cursor:grab;touch-action:none}.workflow-node:active{cursor:grabbing}.workflow-node:focus{outline:2px solid currentColor}.workflow-port{cursor:crosshair;touch-action:none}`}</style>
       <div className="workflow-tools">
         <button
           className="secondary"
@@ -306,7 +337,7 @@ export function ChannelFlowCanvas({
       </div>
       <section
         ref={canvas}
-        className="panel workflow-canvas"
+        className={"panel workflow-canvas" + (panning ? " is-panning" : "")}
         aria-label={tr("渠道流程画布")}
       >
         <svg
@@ -316,9 +347,11 @@ export function ChannelFlowCanvas({
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={tr("渠道功能连接图")}
+          onPointerDown={startPanning}
           onPointerMove={movePointer}
           onPointerUp={endPointer}
           onPointerCancel={endPointer}
+          onAuxClick={(event) => event.preventDefault()}
         >
           <defs>
             <marker
