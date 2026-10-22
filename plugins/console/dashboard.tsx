@@ -210,11 +210,6 @@ export function Dashboard({
             <div className="quiet-empty">
               <Icon name="models" size={30} />
               <p>{tr("暂无模型用量")}</p>
-              {!management && (
-                <a className="text-link" href="#/playground">
-                  {tr("开始对话 →")}
-                </a>
-              )}
             </div>
           )}
         </section>
@@ -303,12 +298,6 @@ export function Dashboard({
           {recent.data?.total === 0 && (
             <p className="empty-inline">
               {tr("还没有调用记录。")}
-              {!management && (
-                <a className="text-link" href="#/playground">
-                  {tr("开始对话")}
-                  <Icon name="arrow" size={13} />
-                </a>
-              )}
             </p>
           )}
         </div>
@@ -345,10 +334,6 @@ export function Dashboard({
           <div className="actions">
             <a className="text-link" href="#/auth">
               {tr("管理密钥")}
-            </a>
-            <a className="button secondary" href="#/playground">
-              {tr("在线对话")}
-              <Icon name="arrow" size={14} />
             </a>
           </div>
         </section>
