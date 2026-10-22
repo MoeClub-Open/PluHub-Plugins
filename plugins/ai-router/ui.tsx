@@ -272,7 +272,7 @@ function Page({ host }: { host: UIHost }) {
           className={tab === "models" ? "active" : ""}
           onClick={() => setTab("models")}
         >
-          {tr("模型映射 {0}", { "0": textValue(Object.keys(models).length) })}
+          {tr("模型与定价")} {textValue(Object.keys(models).length)}
         </button>
         <button
           role="tab"
@@ -467,7 +467,7 @@ function Page({ host }: { host: UIHost }) {
         <Dialog
           title={
             (dialog.id ? tr("编辑") : tr("添加")) +
-            (dialog.type === "channel" ? tr("渠道") : tr("模型映射"))
+            (dialog.type === "channel" ? tr("渠道") : tr("模型与定价"))
           }
           close={() => {
             if (!busy) setDialog(undefined);
@@ -544,7 +544,12 @@ function Page({ host }: { host: UIHost }) {
                       placeholder={tr("可选")}
                     />
                   </label>
-                  <ModelPriceFields model={existing} />
+                  <fieldset className="full">
+                    <legend>{tr("模型定价")}</legend>
+                    <div className="form-grid">
+                      <ModelPriceFields model={existing} />
+                    </div>
+                  </fieldset>
                   <label className="full">
                     {tr("支持的思考档位（逗号分隔）")}
                     <input

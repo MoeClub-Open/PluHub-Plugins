@@ -26,6 +26,11 @@ const ingressOptions: { value: Protocol; label: string }[] = [
   { value: "anthropic", label: "Anthropic Messages" },
   { value: "gemini", label: "Gemini" },
 ];
+const subscriptionProtocols = new Set([
+  "codex",
+  "claude-subscription",
+  "antigravity",
+]);
 const routerConfig = (config: any) =>
   config.plugins.find((p: any) =>
     /\/(?:official\.)?ai-router$/.test(p.path.replaceAll("\\", "/")),
@@ -125,6 +130,18 @@ export function ChannelGraphEditor({
     "claude-subscription",
     "antigravity",
   ];
+  function changeProtocol(protocol: string) {
+    if (node?.type !== "provider") return;
+    const upstream: any = { protocol };
+    if (subscriptionProtocols.has(protocol)) {
+      upstream.subscriptionAccountIds = [];
+      if (protocol === "codex") upstream.authMode = "cli";
+    } else {
+      upstream.baseUrl = node.upstream?.baseUrl ?? "";
+      upstream.keyRef = node.upstream?.keyRef ?? "";
+    }
+    change({ upstream });
+  }
   function connection(patch: Record<string, unknown>) {
     if (node?.type !== "provider") return;
     change({
@@ -238,6 +255,49 @@ export function ChannelGraphEditor({
       ],
     });
     select(key);
+  }
+  function removeNode(id: string) {
+    if (!flow || id === flow.entry) return;
+    const target = flow.nodes.find((node) => node.id === id);
+    if (!target) return;
+    const fallback = "next" in target ? target.next : "";
+    const hadIncoming = flow.nodes.some((node) =>
+      node.type === "condition"
+        ? node.yes === id || node.no === id
+        : "next" in node && node.next === id,
+    );
+    update({
+      ...flow,
+      layout: Object.fromEntries(
+        Object.entries(flow.layout ?? {}).filter(([nodeId]) => nodeId !== id),
+      ),
+      nodes: flow.nodes
+        .filter((node) => node.id !== id)
+        .map((node) =>
+          "next" in target
+            ? node.type === "condition"
+              ? {
+                  ...node,
+                  yes: node.yes === id ? fallback : node.yes,
+                  no: node.no === id ? fallback : node.no,
+                }
+              : "next" in node && node.next === id
+                ? { ...node, next: fallback }
+                : node
+            : node.type === "condition"
+              ? {
+                  ...node,
+                  yes: node.yes === id ? "" : node.yes,
+                  no: node.no === id ? "" : node.no,
+                }
+              : "next" in node && node.next === id
+                ? { ...node, next: "" }
+                : node,
+        ),
+    });
+    select(flow.entry);
+    if (hadIncoming && !fallback)
+      setMessage(tr("流程节点已删除，请重新连接受影响的出口。"));
   }
   async function save() {
     if (!flow) return;
@@ -406,6 +466,7 @@ export function ChannelGraphEditor({
               personal={personal}
               select={select}
               update={update}
+              remove={removeNode}
             />
             <section className="panel workflow-side">
               <h2>{tr("节点设置")}</h2>
@@ -689,15 +750,7 @@ export function ChannelGraphEditor({
                             <Select
                               aria-label={tr("上游调用协议")}
                               value={node.upstream?.protocol ?? "openai-chat"}
-                              onChange={(e) =>
-                                change({
-                                  upstream: {
-                                    protocol: e.target.value,
-                                    baseUrl: node.upstream?.baseUrl ?? "",
-                                    keyRef: node.upstream?.keyRef ?? "",
-                                  },
-                                })
-                              }
+                              onChange={(e) => changeProtocol(e.target.value)}
                             >
                               {protocols.map((p) => (
                                 <option key={p}>{p}</option>
@@ -778,6 +831,15 @@ export function ChannelGraphEditor({
                                         {!a.enabled ? " · " + tr("已停用") : ""}
                                       </label>
                                     ))}
+                                  {subscriptionAccounts.data &&
+                                    !subscriptionAccounts.data.some(
+                                      (a) =>
+                                        a.provider === node.upstream?.protocol,
+                                    ) && (
+                                      <span className="muted">
+                                        {tr("暂无可用订阅账号")}
+                                      </span>
+                                    )}
                                   {(node.upstream.subscriptionAccountIds ?? [])
                                     .filter(
                                       (id) =>
@@ -971,49 +1033,7 @@ export function ChannelGraphEditor({
                     </>
                   )}
                   {node.type !== "start" && (
-                    <button
-                      className="secondary"
-                      onClick={() => {
-                        const incoming = flow.nodes.some((n) =>
-                          n.type === "condition"
-                            ? n.yes === selected || n.no === selected
-                            : "next" in n && n.next === selected,
-                        );
-                        if (!("next" in node) && incoming) {
-                          setMessage(
-                            tr(
-                              "请先将前置节点连接到其他节点，再删除此分支或终点。",
-                            ),
-                          );
-                          return;
-                        }
-                        update({
-                          ...flow,
-                          layout: Object.fromEntries(
-                            Object.entries(flow.layout ?? {}).filter(
-                              ([id]) => id !== selected,
-                            ),
-                          ),
-                          nodes: flow.nodes
-                            .filter((n) => n.id !== selected)
-                            .map((n) =>
-                              "next" in node
-                                ? n.type === "condition"
-                                  ? {
-                                      ...n,
-                                      yes:
-                                        n.yes === selected ? node.next : n.yes,
-                                      no: n.no === selected ? node.next : n.no,
-                                    }
-                                  : "next" in n && n.next === selected
-                                    ? { ...n, next: node.next }
-                                    : n
-                                : n,
-                            ),
-                        });
-                        select(flow.entry);
-                      }}
-                    >
+                    <button className="secondary" onClick={() => removeNode(selected)}>
                       {tr("删除节点")}
                     </button>
                   )}

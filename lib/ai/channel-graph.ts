@@ -114,6 +114,7 @@ export function compileWorkflow(flow: ChannelWorkflow) {
   function visit(id: string) {
     if (visiting.has(id)) bad("Workflow cycles are not allowed");
     if (done.has(id)) return;
+    if (!id) bad("Workflow output is not connected");
     const node = nodes.get(id);
     if (!node) bad("Workflow edge references a missing node: " + id);
     visiting.add(id);

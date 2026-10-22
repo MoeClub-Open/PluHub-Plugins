@@ -15,15 +15,22 @@ export async function installedSubscriptionProviders(host: UIHost) {
 }
 export async function listSubscriptionAccounts(host: UIHost, personal = false) {
   const providers = await installedSubscriptionProviders(host);
-  return (
-    await Promise.all(
-      providers.map((provider) =>
-        host.request<any[]>(
-          subscriptionApi(provider) +
-            (personal ? "/personal" : "") +
-            "/accounts",
-        ),
+  const results = await Promise.allSettled(
+    providers.map((provider) =>
+      host.request<any[]>(
+        subscriptionApi(provider) +
+          (personal ? "/personal" : "") +
+          "/accounts",
       ),
-    )
-  ).flat();
+    ),
+  );
+  const accounts = results.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+  const firstError = results.find(
+    (result) => result.status === "rejected",
+  );
+  if (!accounts.length && firstError?.status === "rejected")
+    throw firstError.reason;
+  return accounts;
 }

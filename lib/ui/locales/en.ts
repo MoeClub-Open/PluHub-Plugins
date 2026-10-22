@@ -304,8 +304,8 @@ export const en: Record<string, string> = {
   "隐式 · 保持请求模型名": "Implicit · Keep requested model name",
   "显式 · 显示目标模型名": "Explicit · Return target model name",
   删除节点: "Delete node",
-  "请先将前置节点连接到其他节点，再删除此分支或终点。":
-    "Reconnect preceding nodes before deleting this branch or endpoint.",
+  "流程节点已删除，请重新连接受影响的出口。":
+    "Flow node deleted. Reconnect the affected outputs.",
   路径预览: "Path preview",
   预览任务: "Preview task",
   预览入口协议: "Preview entry protocol",
@@ -832,6 +832,8 @@ export const en: Record<string, string> = {
   "手动 · 统一消耗倍率": "Manual · Shared usage multiplier",
   消耗倍率: "Usage multiplier",
   模型映射与原价: "Model mappings and original prices",
+  模型与定价: "Models and pricing",
+  模型定价: "Model pricing",
   匹配平台原价: "Match platform original prices",
   "USD / 百万 Token；无上游报价时按原价 1× 估算，费用由上游结算。":
     "USD / million tokens. Without upstream prices, estimates use 1× original price. The upstream bills you directly.",

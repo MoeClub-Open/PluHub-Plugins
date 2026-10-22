@@ -103,6 +103,7 @@ export function ChannelFlowCanvas({
   personal,
   select,
   update,
+  remove,
 }: {
   flow: ChannelWorkflow;
   selected: string;
@@ -110,6 +111,7 @@ export function ChannelFlowCanvas({
   personal: boolean;
   select: (id: string) => void;
   update: (flow: ChannelWorkflow) => void;
+  remove: (id: string) => void;
 }) {
   const canvas = React.useRef<HTMLElement>(null);
   const svgCanvas = React.useRef<SVGSVGElement>(null);
@@ -375,6 +377,12 @@ export function ChannelFlowCanvas({
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     select(node.id);
+                  } else if (
+                    (event.key === "Delete" || event.key === "Backspace") &&
+                    node.id !== flow.entry
+                  ) {
+                    event.preventDefault();
+                    remove(node.id);
                   }
                 }}
               >
