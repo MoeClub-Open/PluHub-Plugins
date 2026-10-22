@@ -9,9 +9,20 @@ import {
   type EpayConfig,
   type EpayMethod,
 } from "./config.js";
+import { epaySecrets } from "./secrets.js";
 export default definePlugin({
   setup(host) {
-    host.validateConfig(validateEpayConfig);
+    const secrets = epaySecrets(host);
+    host.validateConfig((config) => {
+      validateEpayConfig(config);
+      for (const method of epayMethods(config))
+        for (const kind of method.algorithm === "RSA"
+          ? (["privateKeyRef", "platformPublicKeyRef"] as const)
+          : (["keyRef"] as const)) {
+          const reference = method[kind];
+          if (reference?.startsWith("local:")) secrets.read(reference, kind);
+        }
+    });
     function settings(id: string | undefined, checkout = false) {
       const config = host.config() as EpayConfig;
       if (checkout && config.methods && !id)
@@ -28,14 +39,15 @@ export default definePlugin({
         throw new HostError("payment_disabled", "Epay is disabled", 503);
       return method;
     }
-    const key = (c: EpayMethod, verify = false) =>
-      host.secret(
+    const key = (c: EpayMethod, verify = false) => {
+      const kind =
         c.algorithm === "RSA"
           ? verify
-            ? c.platformPublicKeyRef!
-            : c.privateKeyRef!
-          : c.keyRef!,
-      );
+            ? "platformPublicKeyRef"
+            : "privateKeyRef"
+          : "keyRef";
+      return secrets.read(c[kind]!, kind);
+    };
     host.provide(
       "payments.epay@1",
       async (input: PaymentCheckout & { action: string }, signal) => {

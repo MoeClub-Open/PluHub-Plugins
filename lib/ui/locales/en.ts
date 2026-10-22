@@ -2121,4 +2121,13 @@ export const en: Record<string, string> = {
   启用此支付方式: "Enable this payment method",
   "删除后，尚未完成的订单将无法接收此支付方式的回调。":
     "Unpaid orders will no longer receive notifications for this payment method.",
+  "MD5 商户密钥": "MD5 merchant key",
+  "RSA 商户私钥": "RSA merchant private key",
+  "RSA 平台公钥": "RSA platform public key",
+  "已保存，留空保持不变": "Saved; leave blank to keep",
+  填写密钥: "Enter key",
+  "环境变量引用格式应为 env:NAME":
+    "Use env:NAME for an environment variable reference",
+  支付密钥存储不可用: "Payment key storage is unavailable",
+  "支付密钥不存在，请重新填写": "Payment key is unavailable; enter it again",
 };

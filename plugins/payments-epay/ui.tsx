@@ -1,11 +1,12 @@
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { Checkbox } from "../../lib/ui/checkbox.js";
-import { Select } from "../../lib/ui/select.js";
 import { Dialog, PageHeading } from "../../lib/ui/components.js";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { t as tr } from "../../lib/ui/i18n.js";
 import type { EpayMethod } from "./config.js";
+import type { PaymentSecrets } from "./secrets.js";
+import { MethodEditor } from "./method-editor.js";
 
 const types: Record<string, string> = {
   alipay: "支付宝",
@@ -55,10 +56,25 @@ function Page({ host }: { host: UIHost }) {
   async function commit(
     nextMethods: EpayMethod[],
     enabled = settings.enabled === true,
+    secrets?: { methodId: string; values: PaymentSecrets },
   ) {
     setBusy(true);
     setMessage("");
     try {
+      if (secrets && Object.keys(secrets.values).length) {
+        const references = await host.request<PaymentSecrets>(
+          "/api/plugins/official.payments-epay/secrets",
+          {
+            method: "POST",
+            body: JSON.stringify(secrets.values),
+          },
+        );
+        nextMethods = nextMethods.map((method) =>
+          method.id === secrets.methodId
+            ? { ...method, ...references }
+            : method,
+        );
+      }
       const config = await host.request<any>("/api/host/config");
       const plugin = findPlugin(config);
       if (!plugin) throw new Error(tr("支付插件未安装"));
@@ -67,7 +83,10 @@ function Page({ host }: { host: UIHost }) {
       next.secretRefs = [
         ...new Set(
           [next, ...nextMethods].flatMap((m) =>
-            [m.keyRef, m.privateKeyRef, m.platformPublicKeyRef].filter(Boolean),
+            [m.keyRef, m.privateKeyRef, m.platformPublicKeyRef].filter(
+              (reference) =>
+                typeof reference === "string" && reference.startsWith("env:"),
+            ),
           ),
         ),
       ];
@@ -195,11 +214,13 @@ function Page({ host }: { host: UIHost }) {
           close={() => {
             if (!busy) setEditor(undefined);
           }}
-          save={(method) =>
+          save={(method, secrets) =>
             void commit(
               methods.some((m) => m.id === method.id)
                 ? methods.map((m) => (m.id === method.id ? method : m))
                 : [...methods, method],
+              settings.enabled === true,
+              { methodId: method.id, values: secrets },
             )
           }
         />
@@ -234,133 +255,6 @@ function Page({ host }: { host: UIHost }) {
         </Dialog>
       )}
     </>
-  );
-}
-function MethodEditor({
-  method,
-  busy,
-  message,
-  save,
-  close,
-}: {
-  method: EpayMethod;
-  busy: boolean;
-  message: string;
-  save: (method: EpayMethod) => void;
-  close: () => void;
-}) {
-  const [algorithm, setAlgorithm] = React.useState(method.algorithm);
-  const [enabled, setEnabled] = React.useState(method.enabled === true);
-  const input = (
-    name: keyof EpayMethod,
-    label: string,
-    placeholder = "",
-    required = true,
-  ) => (
-    <label>
-      {tr(label)}
-      <input
-        name={name}
-        defaultValue={String(method[name] ?? "")}
-        placeholder={placeholder}
-        autoComplete="off"
-        required={enabled && required}
-      />
-    </label>
-  );
-  return (
-    <Dialog title={tr("支付方式")} close={close}>
-      <Notice message={message} />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          const next = {
-            id: method.id,
-            enabled,
-            name: String(form.get("name") ?? "").trim(),
-          } as EpayMethod;
-          for (const field of fields) {
-            const value = String(form.get(field) ?? "").trim();
-            if (value) (next as any)[field] = value;
-          }
-          save(next);
-        }}
-      >
-        <label className="checkbox">
-          <Checkbox
-            appearance="switch"
-            checked={enabled}
-            onCheckedChange={(checked) => setEnabled(checked === true)}
-          />
-          {tr("启用此支付方式")}
-        </label>
-        <div className="form-grid">
-          {input("name", "名称", "", false)}
-          <label>
-            {tr("支付类型")}
-            <Select name="paymentType" defaultValue={method.paymentType}>
-              {Object.entries(types).map(([id, name]) => (
-                <option key={id} value={id}>
-                  {tr(name)}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label>
-            {tr("API 版本")}
-            <Select name="version" defaultValue={method.version}>
-              <option value="v1">V1</option>
-              <option value="v2">V2</option>
-            </Select>
-          </label>
-          <label>
-            {tr("签名方式")}
-            <Select
-              name="algorithm"
-              value={algorithm}
-              onChange={(event) =>
-                setAlgorithm(event.target.value as EpayMethod["algorithm"])
-              }
-            >
-              <option>MD5</option>
-              <option>RSA</option>
-            </Select>
-          </label>
-          {input("pid", "商户 PID")}
-          {input("baseUrl", "支付平台地址", "https://pay.example.com")}
-          {input("publicUrl", "本站公开地址", location.origin)}
-          {input("clientIp", "创建订单来源 IP", "127.0.0.1", false)}
-          {algorithm === "RSA" ? (
-            <>
-              {input(
-                "privateKeyRef",
-                "RSA 商户私钥引用",
-                "env:EPAY_PRIVATE_KEY",
-              )}
-              {input(
-                "platformPublicKeyRef",
-                "RSA 平台公钥引用",
-                "env:EPAY_PLATFORM_PUBLIC_KEY",
-              )}
-            </>
-          ) : (
-            input("keyRef", "MD5 商户密钥引用", "env:EPAY_KEY")
-          )}
-        </div>
-        <div className="form-actions">
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy}
-            onClick={close}
-          >
-            {tr("取消")}
-          </button>
-          <button disabled={busy}>{tr("保存")}</button>
-        </div>
-      </form>
-    </Dialog>
   );
 }
 export const mount = (element: HTMLElement, host: UIHost) =>
