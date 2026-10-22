@@ -188,29 +188,37 @@ function Page({ host }: { host: UIHost }) {
           )}
         </Empty>
       ) : (
-        <div className="catalog-grid">
+        <div className="catalog-list">
+          <div className="catalog-list-head" aria-hidden="true">
+            <span>{tr("模型")}</span>
+            <span>{tr("能力")}</span>
+            <span>{tr("价格 / 百万 Token")}</span>
+            <span>{tr("操作")}</span>
+          </div>
           {models.map((model) => (
-            <article className="model-card" key={model.id}>
-              <div className="model-card-head">
+            <article className="model-row" key={model.id}>
+              <div className="model-row-main">
                 <span className="provider-mark" aria-hidden="true">
                   {model.provider.slice(0, 1).toUpperCase()}
                 </span>
                 <div>
                   <h2 title={model.name}>{model.name}</h2>
                   <small>
-                    {model.provider} · <code>{model.id}</code>
+                    <span>{model.provider}</span>
+                    <code>{model.id}</code>
                   </small>
                 </div>
               </div>
-              {model.description && <p>{model.description}</p>}
-              <div className="feature-pills">
+              <div className="model-row-features">
                 {model.features
                   .filter((feature) => featureNames[feature])
                   .map((feature) => (
-                    <span key={feature}>{featureNames[feature]}</span>
+                    <span className="feature-pill" key={feature}>
+                      {featureNames[feature]}
+                    </span>
                   ))}
               </div>
-              <div className="model-prices">
+              <div className="model-row-prices">
                 <div>
                   <strong>
                     {price(
@@ -219,32 +227,34 @@ function Page({ host }: { host: UIHost }) {
                         : model.inputPrice,
                     )}
                   </strong>
-                  {model.pricing?.mode === "request"
-                    ? tr("USD / 次")
-                    : tr("输入 / 百万 Token")}
+                  <span>
+                    {model.pricing?.mode === "request"
+                      ? tr("USD / 次")
+                      : tr("输入")}
+                  </span>
                 </div>
                 {model.pricing?.mode !== "request" && (
                   <div>
                     <strong>{price(model.outputPrice)}</strong>
-                    {tr("输出 / 百万 Token")}
+                    <span>{tr("输出")}</span>
                   </div>
                 )}
                 {model.contextWindow && (
                   <div>
                     <strong>{number(model.contextWindow)}</strong>
-                    {tr("上下文长度")}
+                    <span>{tr("上下文")}</span>
                   </div>
                 )}
               </div>
-              <div className="model-card-actions">
+              <div className="model-row-actions">
                 <button className="ghost" onClick={() => setSelected(model)}>
-                  {tr("查看详情")}
+                  {tr("详情")}
                 </button>
                 <button
                   className="secondary"
                   onClick={() => host.navigate(destination(model))}
                 >
-                  {tr("开始对话")}
+                  {tr("使用")}
                   <Icon name="arrow" size={14} />
                 </button>
               </div>

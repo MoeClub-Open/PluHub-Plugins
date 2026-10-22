@@ -1,5 +1,4 @@
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
-import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
@@ -80,15 +79,27 @@ export function Dashboard({
   return (
     <>
       <PageHeading title={management ? tr("全站总览") : tr("总览")}>
-        <Select
+        <div
+          className="dashboard-range"
+          role="group"
           aria-label={tr("统计时间范围")}
-          value={hours}
-          onChange={(e) => setHours(Number(e.target.value))}
         >
-          <option value="24">{tr("最近 24 小时")}</option>
-          <option value="168">{tr("最近 7 天")}</option>
-          <option value="720">{tr("最近 30 天")}</option>
-        </Select>
+          {[
+            [24, tr("24 小时")],
+            [168, tr("7 天")],
+            [720, tr("30 天")],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={hours === value ? "active" : ""}
+              aria-pressed={hours === value}
+              onClick={() => setHours(Number(value))}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button
           className="secondary icon-button"
           aria-label={tr("刷新统计")}
