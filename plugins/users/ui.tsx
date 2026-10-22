@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -216,7 +217,7 @@ function Page({ host }: { host: UIHost }) {
               />
             </label>
             <label className="checkbox">
-              <input name="isAdmin" type="checkbox" disabled={busy} />
+              <Checkbox name="isAdmin" disabled={busy} />
               {tr("管理员")}
             </label>
             <div className="form-actions">

@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { t as tr } from "../../lib/ui/i18n.js";
@@ -225,13 +226,12 @@ export function RegistryBrowser({
                         tr("保持现有授权")
                       ) : plugin.permissions.length ? (
                         <label className="checkbox">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={!!approved[plugin.id]}
-                            onChange={(e) =>
+                            onCheckedChange={(e) =>
                               setApproved({
                                 ...approved,
-                                [plugin.id]: e.target.checked,
+                                [plugin.id]: e === true,
                               })
                             }
                           />
@@ -598,13 +598,13 @@ function RegistrySources({
             />
           </label>
           <label className="checkbox">
-            <input
-              type="checkbox"
+            <Checkbox
+              appearance="switch"
               checked={source.enabled !== false}
-              onChange={(e) =>
+              onCheckedChange={(e) =>
                 setRows(
                   rows.map((s, i) =>
-                    i === index ? { ...s, enabled: e.target.checked } : s,
+                    i === index ? { ...s, enabled: e === true } : s,
                   ),
                 )
               }
@@ -612,15 +612,12 @@ function RegistrySources({
             {tr("启用")}
           </label>
           <label className="checkbox">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={!!source.allowPrivateNetwork}
-              onChange={(e) =>
+              onCheckedChange={(e) =>
                 setRows(
                   rows.map((s, i) =>
-                    i === index
-                      ? { ...s, allowPrivateNetwork: e.target.checked }
-                      : s,
+                    i === index ? { ...s, allowPrivateNetwork: e === true } : s,
                   ),
                 )
               }

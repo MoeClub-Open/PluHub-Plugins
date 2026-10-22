@@ -1,0 +1,166 @@
+:root {
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+button,
+.button,
+a,
+input,
+textarea,
+tbody tr {
+  transition:
+    background-color var(--motion-fast),
+    border-color var(--motion-fast),
+    color var(--motion-fast),
+    box-shadow var(--motion-fast);
+}
+.layout,
+.layout > aside,
+.topbar,
+.portal-header,
+.auth-header,
+.panel,
+.card {
+  transition:
+    background-color var(--motion-normal),
+    border-color var(--motion-normal);
+}
+.modal[data-state="open"] {
+  animation: ph-dialog-enter var(--motion-normal) var(--motion-ease);
+}
+.modal-overlay[data-state="open"] {
+  animation: ph-fade-in var(--motion-normal) ease-out;
+}
+.modal[data-state="closed"] {
+  animation: ph-dialog-exit var(--motion-fast) ease-in;
+}
+.modal-overlay[data-state="closed"] {
+  animation: ph-fade-out var(--motion-fast) ease-in;
+}
+.dialog-layer[data-state="closed"] > * {
+  pointer-events: none;
+}
+.select-options {
+  transform-origin: var(--radix-select-content-transform-origin);
+}
+.select-options[data-state="open"],
+.account-popover {
+  animation: ph-popover-enter var(--motion-normal) var(--motion-ease);
+}
+.select-options[data-state="closed"] {
+  animation: ph-popover-exit var(--motion-fast) ease-in;
+}
+.select-options[data-side="top"],
+.account-popover {
+  --motion-offset: 4px;
+}
+.account-popover {
+  transform-origin: bottom left;
+}
+.select-trigger > svg {
+  transition: rotate var(--motion-normal) var(--motion-ease);
+}
+.select-trigger[data-state="open"] > svg {
+  rotate: 180deg;
+}
+.checkbox-indicator {
+  animation: ph-check-enter var(--motion-fast) var(--motion-ease);
+}
+.notice,
+.selection-bar,
+.onboarding-panel,
+.auth-form-motion {
+  animation: ph-content-enter var(--motion-normal) var(--motion-ease);
+}
+@keyframes ph-content-enter {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes ph-dialog-enter {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+    scale: 0.985;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+@keyframes ph-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ph-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ph-dialog-exit {
+  from {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    translate: 0 4px;
+    scale: 0.985;
+  }
+}
+@keyframes ph-popover-enter {
+  from {
+    opacity: 0;
+    translate: 0 var(--motion-offset, -4px);
+    scale: 0.98;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+@keyframes ph-popover-exit {
+  from {
+    opacity: 1;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+@keyframes ph-check-enter {
+  from {
+    opacity: 0;
+    scale: 0.7;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -70,10 +71,10 @@ function Page({ host }: { host: UIHost }) {
           }}
         >
           <label className="checkbox">
-            <input
-              type="checkbox"
+            <Checkbox
+              appearance="switch"
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
+              onCheckedChange={(e) => setEnabled(e === true)}
             />
             {tr("启用默认单请求限速")}
           </label>

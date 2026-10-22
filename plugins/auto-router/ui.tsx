@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -433,11 +434,11 @@ function Page({ host }: { host: UIHost }) {
               )}
             </div>
             <label className="checkbox">
-              <input
-                type="checkbox"
+              <Checkbox
+                appearance="switch"
                 checked={draft.preserveClientEffort !== false}
-                onChange={(e) =>
-                  update({ preserveClientEffort: e.target.checked })
+                onCheckedChange={(e) =>
+                  update({ preserveClientEffort: e === true })
                 }
               />
               {tr("保留客户端显式指定的思考强度")}
@@ -508,16 +509,16 @@ function Page({ host }: { host: UIHost }) {
                       <div className="reasoning-chips">
                         {levels.map((l) => (
                           <label key={l}>
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={c.reasoningEfforts?.includes(l) ?? false}
-                              onChange={(e) =>
+                              onCheckedChange={(e) =>
                                 candidate(c.id, {
-                                  reasoningEfforts: e.target.checked
-                                    ? [...(c.reasoningEfforts ?? []), l]
-                                    : c.reasoningEfforts?.filter(
-                                        (x) => x !== l,
-                                      ),
+                                  reasoningEfforts:
+                                    e === true
+                                      ? [...(c.reasoningEfforts ?? []), l]
+                                      : c.reasoningEfforts?.filter(
+                                          (x) => x !== l,
+                                        ),
                                 })
                               }
                             />
@@ -554,11 +555,11 @@ function Page({ host }: { host: UIHost }) {
                     </td>
                     <td>
                       <label className="checkbox">
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          appearance="switch"
                           checked={c.enabled !== false}
-                          onChange={(e) =>
-                            candidate(c.id, { enabled: e.target.checked })
+                          onCheckedChange={(e) =>
+                            candidate(c.id, { enabled: e === true })
                           }
                         />
                         {tr("参与路由")}

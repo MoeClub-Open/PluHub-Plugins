@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { Notice } from "../../lib/ui/mount.js";
@@ -252,7 +253,7 @@ export function Onboarding({
           {tr("重新加载已保存设置")}
         </button>
       )}
-      <form className="card onboarding-panel" onSubmit={submit}>
+      <form key={step} className="card onboarding-panel" onSubmit={submit}>
         {step === 0 && (
           <>
             <h2>{tr("设置站点信息")}</h2>
@@ -341,11 +342,11 @@ export function Onboarding({
             <h2>{tr("准备公开门户")}</h2>
 
             <label className="checkbox">
-              <input
-                type="checkbox"
+              <Checkbox
+                appearance="switch"
                 checked={portal.enabled}
-                onChange={(e) =>
-                  setPortal({ ...portal, enabled: e.target.checked })
+                onCheckedChange={(e) =>
+                  setPortal({ ...portal, enabled: e === true })
                 }
               />
               {tr("启用落地门户页")}
@@ -464,10 +465,9 @@ export function Onboarding({
                 />
               </label>
               <label className="checkbox">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={showPassword}
-                  onChange={(e) => setShowPassword(e.target.checked)}
+                  onCheckedChange={(e) => setShowPassword(e === true)}
                 />
                 {tr("显示密码")}
               </label>

@@ -1,3 +1,4 @@
+import { Checkbox } from "./checkbox.js";
 import { t as tr } from "./i18n.js";
 import { Select } from "./select.js";
 import React from "react";
@@ -86,9 +87,9 @@ export function paymentSettings(kind: "stripe" | "epay") {
         {data.data && (
           <form className="card" onSubmit={save} key={JSON.stringify(settings)}>
             <label className="checkbox">
-              <input
+              <Checkbox
+                appearance="switch"
                 name="enabled"
-                type="checkbox"
                 defaultChecked={settings.enabled === true}
               />
               {tr("启用支付渠道")}

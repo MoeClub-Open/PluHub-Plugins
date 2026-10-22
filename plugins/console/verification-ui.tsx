@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { Extension, UIHost, UIExtensionModule } from "@pluhub/ui-sdk";
@@ -115,16 +116,16 @@ export function VerificationSettings({
       value = nested ? config[nested]?.[key] : config[key];
     return (
       <label className="checkbox">
-        <input
-          type="checkbox"
+        <Checkbox
+          appearance="switch"
           checked={(value ?? fallback) === true}
           disabled={!active(kind) || busy}
-          onChange={(e) =>
+          onCheckedChange={(e) =>
             patch(
               kind,
               nested
-                ? { [nested]: { ...config[nested], [key]: e.target.checked } }
-                : { [key]: e.target.checked },
+                ? { [nested]: { ...config[nested], [key]: e === true } }
+                : { [key]: e === true },
             )
           }
         />

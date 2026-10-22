@@ -1,3 +1,4 @@
+import { Checkbox } from "./checkbox.js";
 import { listSubscriptionAccounts } from "./subscription-providers.js";
 import { t as tr, textValue } from "./i18n.js";
 import { Select } from "./select.js";
@@ -653,11 +654,10 @@ export function ChannelGraphEditor({
                 />
               </label>
               <label>
-                <input
-                  type="checkbox"
-                  style={{ width: "auto" }}
+                <Checkbox
+                  appearance="switch"
                   checked={enabled}
-                  onChange={(e) => setEnabled(e.target.checked)}
+                  onCheckedChange={(e) => setEnabled(e === true)}
                 />{" "}
                 {tr("启用渠道")}
               </label>
@@ -736,15 +736,14 @@ export function ChannelGraphEditor({
                       <legend>{tr("允许的入口协议")}</legend>
                       {ingressOptions.map((p) => (
                         <label key={p.value}>
-                          <input
-                            type="checkbox"
-                            style={{ width: "auto" }}
+                          <Checkbox
                             checked={node.allow.includes(p.value)}
-                            onChange={(e) =>
+                            onCheckedChange={(e) =>
                               change({
-                                allow: e.target.checked
-                                  ? [...node.allow, p.value]
-                                  : node.allow.filter((v) => v !== p.value),
+                                allow:
+                                  e === true
+                                    ? [...node.allow, p.value]
+                                    : node.allow.filter((v) => v !== p.value),
                               })
                             }
                           />{" "}
@@ -911,12 +910,11 @@ export function ChannelGraphEditor({
                             />
                           </label>
                           <label>
-                            <input
-                              type="checkbox"
-                              style={{ width: "auto" }}
+                            <Checkbox
+                              appearance="switch"
                               checked={node.inheritDefault !== false}
-                              onChange={(e) =>
-                                change({ inheritDefault: e.target.checked })
+                              onCheckedChange={(e) =>
+                                change({ inheritDefault: e === true })
                               }
                             />{" "}
                             {tr("同时应用默认 TPS")}
@@ -1000,23 +998,22 @@ export function ChannelGraphEditor({
                                         className="checkbox-row"
                                         key={a.id}
                                       >
-                                        <input
-                                          type="checkbox"
+                                        <Checkbox
                                           checked={node.upstream!.subscriptionAccountIds!.includes(
                                             a.id,
                                           )}
-                                          onChange={(e) =>
+                                          onCheckedChange={(e) =>
                                             connection({
-                                              subscriptionAccountIds: e.target
-                                                .checked
-                                                ? [
-                                                    ...node.upstream!
-                                                      .subscriptionAccountIds!,
-                                                    a.id,
-                                                  ]
-                                                : node.upstream!.subscriptionAccountIds!.filter(
-                                                    (id) => id !== a.id,
-                                                  ),
+                                              subscriptionAccountIds:
+                                                e === true
+                                                  ? [
+                                                      ...node.upstream!
+                                                        .subscriptionAccountIds!,
+                                                      a.id,
+                                                    ]
+                                                  : node.upstream!.subscriptionAccountIds!.filter(
+                                                      (id) => id !== a.id,
+                                                    ),
                                             })
                                           }
                                         />
@@ -1033,10 +1030,9 @@ export function ChannelGraphEditor({
                                     )
                                     .map((id) => (
                                       <label className="checkbox-row" key={id}>
-                                        <input
-                                          type="checkbox"
+                                        <Checkbox
                                           checked
-                                          onChange={() =>
+                                          onCheckedChange={() =>
                                             connection({
                                               subscriptionAccountIds:
                                                 node.upstream!.subscriptionAccountIds!.filter(
@@ -1288,18 +1284,16 @@ export function ChannelGraphEditor({
                 ))}
               </Select>
               <label>
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={toolTask}
-                  onChange={(e) => setToolTask(e.target.checked)}
+                  onCheckedChange={(e) => setToolTask(e === true)}
                 />{" "}
                 {tr("包含工具")}
               </label>
               <label>
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={streamTask}
-                  onChange={(e) => setStreamTask(e.target.checked)}
+                  onCheckedChange={(e) => setStreamTask(e === true)}
                 />{" "}
                 {tr("流式请求")}
               </label>

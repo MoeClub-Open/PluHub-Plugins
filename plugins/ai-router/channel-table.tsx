@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -37,7 +38,6 @@ export function ChannelTable({
   const [pageSize, setPageSize] = React.useState(10);
   const [selection, setSelection] = React.useState<string[]>([]);
   const [confirmStop, setConfirmStop] = React.useState(false);
-  const allCheck = React.useRef<HTMLInputElement>(null);
   const ids = Object.keys(upstreams);
   const filtered = filterChannels(upstreams, models, query, status, "");
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -58,10 +58,6 @@ export function ChannelTable({
   React.useEffect(() => {
     setSelection((old) => old.filter((id) => Object.hasOwn(upstreams, id)));
   }, [ids.join("\0")]);
-  React.useEffect(() => {
-    if (allCheck.current)
-      allCheck.current.indeterminate = selectedOnPage > 0 && !allSelected;
-  }, [selectedOnPage, allSelected]);
   function reset() {
     setQuery("");
     setStatus("");
@@ -168,14 +164,13 @@ export function ChannelTable({
           <thead>
             <tr>
               <th className="selection-cell">
-                <input
-                  ref={allCheck}
+                <Checkbox
+                  indeterminate={selectedOnPage > 0 && !allSelected}
                   className="table-check"
-                  type="checkbox"
                   aria-label={tr("选择本页渠道")}
                   checked={allSelected}
                   disabled={!rows.length || busy}
-                  onChange={() =>
+                  onCheckedChange={() =>
                     setSelection((old) =>
                       allSelected
                         ? old.filter(
@@ -200,13 +195,12 @@ export function ChannelTable({
                 className={selected.includes(id) ? "row-selected" : undefined}
               >
                 <td className="selection-cell">
-                  <input
+                  <Checkbox
                     className="table-check"
-                    type="checkbox"
                     aria-label={tr("选择渠道 ") + (channel.name || id)}
                     checked={selected.includes(id)}
                     disabled={busy}
-                    onChange={() =>
+                    onCheckedChange={() =>
                       setSelection((old) =>
                         old.includes(id)
                           ? old.filter((key) => key !== id)

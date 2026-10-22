@@ -1,3 +1,4 @@
+import { Checkbox } from "./checkbox.js";
 import { t as tr } from "./i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -103,9 +104,9 @@ export function SecurityProviderForm({
   );
   const check = (name: string, title: string, value?: boolean) => (
     <label key={name} className="checkbox">
-      <input
+      <Checkbox
+        appearance="switch"
         name={name}
-        type="checkbox"
         defaultChecked={value ?? settings[name] === true}
       />
       {title}

@@ -157,6 +157,7 @@ export function PasswordReset({
         </div>
       )}
       <form
+        className="auth-form-motion"
         aria-busy={busy}
         onSubmit={(event) => {
           event.preventDefault();

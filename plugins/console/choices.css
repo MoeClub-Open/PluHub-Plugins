@@ -1,0 +1,114 @@
+.checkbox-control,
+.switch-control {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  border: 1px solid color-mix(in srgb, var(--muted) 45%, var(--border));
+  background: var(--surface);
+  color: var(--accent-contrast, #fff);
+  vertical-align: middle;
+  box-shadow: var(--shadow-control);
+  transition:
+    background-color var(--motion-fast),
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast);
+}
+.checkbox-control {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  border-radius: 4px;
+}
+.checkbox-control:not([data-disabled]):hover,
+.switch-control:not([data-disabled]):hover {
+  border-color: var(--accent);
+  filter: none;
+}
+.checkbox-control[data-state="checked"],
+.checkbox-control[data-state="indeterminate"],
+.switch-control[data-state="checked"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.checkbox-control:focus-visible,
+.switch-control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.checkbox-control[aria-invalid="true"],
+.switch-control[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.checkbox-control[data-disabled],
+.switch-control[data-disabled] {
+  opacity: 0.45;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.checkbox-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.switch-control {
+  width: 30px;
+  height: 18px;
+  min-height: 18px;
+  padding: 2px;
+  border-radius: 999px;
+  justify-content: flex-start;
+  background: color-mix(in srgb, var(--muted) 24%, var(--surface));
+}
+.switch-thumb {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+  transition: translate var(--motion-normal) var(--motion-ease);
+}
+.switch-thumb[data-state="checked"] {
+  translate: 12px 0;
+}
+label.checkbox,
+label:has(> .checkbox-control),
+label:has(> .switch-control) {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin-block: 0;
+  cursor: pointer;
+}
+label:has(> [data-disabled]) {
+  cursor: default;
+}
+@media (forced-colors: active) {
+  .checkbox-control,
+  .switch-control {
+    border-color: ButtonText;
+    forced-color-adjust: none;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .checkbox-control[data-state="checked"],
+  .checkbox-control[data-state="indeterminate"],
+  .switch-control[data-state="checked"] {
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+  .switch-thumb {
+    background: ButtonText;
+  }
+  .switch-thumb[data-state="checked"] {
+    background: HighlightText;
+  }
+}

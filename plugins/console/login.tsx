@@ -293,7 +293,12 @@ export function Login({
           )}
         </div>
       )}
-      <form onSubmit={submit} aria-busy={busy}>
+      <form
+        key={mode}
+        className="auth-form-motion"
+        onSubmit={submit}
+        aria-busy={busy}
+      >
         {(mode === "password" || mode === "register") && (
           <label>
             {tr("用户名")}

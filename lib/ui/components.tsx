@@ -197,20 +197,26 @@ export function Dialog({
   close: () => void;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = React.useState(true);
+  const onClose = React.useRef(close);
+  onClose.current = close;
+  React.useEffect(() => {
+    if (open) return;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(() => onClose.current(), reduced ? 0 : 120);
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const [opener] = React.useState(() =>
     document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null,
   );
   return (
-    <RadixDialog.Root
-      open
-      onOpenChange={(open) => {
-        if (!open) close();
-      }}
-    >
-      <RadixDialog.Portal>
-        <div className="dialog-layer">
+    <RadixDialog.Root open={open} onOpenChange={setOpen}>
+      <RadixDialog.Portal forceMount>
+        <div className="dialog-layer" data-state={open ? "open" : "closed"}>
           <RadixDialog.Overlay className="modal-overlay" />
           <RadixDialog.Content
             className="modal"

@@ -47,13 +47,6 @@ textarea {
   font: inherit;
 }
 button,
-a {
-  transition:
-    background 0.16s,
-    color 0.16s,
-    box-shadow 0.16s;
-}
-button,
 .button {
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -1615,13 +1608,6 @@ code {
     justify-self: start;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-    animation: none !important;
-    scroll-behavior: auto !important;
-  }
-}
 .settings-tabs {
   display: flex;
   flex-direction: row;
@@ -1705,21 +1691,6 @@ code {
   text-align: center;
   color: var(--muted);
   padding: 20px;
-}
-label.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-label.checkbox input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  flex: none;
-  accent-color: var(--accent);
 }
 .section-heading > .actions > input {
   width: 220px;

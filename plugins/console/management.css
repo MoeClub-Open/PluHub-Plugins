@@ -218,15 +218,6 @@
   width: 42px;
   padding-inline: 14px;
 }
-input.table-check {
-  width: 16px;
-  height: 16px;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  accent-color: var(--accent);
-  vertical-align: middle;
-}
 .row-selected {
   background: var(--accent-soft);
 }

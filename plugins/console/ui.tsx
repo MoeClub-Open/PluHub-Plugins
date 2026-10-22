@@ -61,17 +61,22 @@ import "./stripe.css";
 import "./portal.css";
 import "./auth.css";
 import "./controls.css";
+import "./choices.css";
+import "./motion.css";
 import { en } from "../../lib/ui/locales/en.js";
 import { configureMessages } from "../../lib/ui/i18n.js";
 const auth = "/api/plugins/official.auth";
 function PublicExtension({
   extension,
   client,
+  containerRef,
 }: {
   extension: Extension;
   client: UIHost;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }) {
-  const target = React.useRef<HTMLDivElement>(null);
+  const localTarget = React.useRef<HTMLDivElement>(null);
+  const target = containerRef ?? localTarget;
   const [error, setError] = React.useState("");
   React.useEffect(() => {
     let canceled = false;
@@ -411,13 +416,8 @@ function App() {
         .catch((e) => setMessage(e.message));
   }, [admin, path, version, client]);
   usePageTransition(
-    path!,
-    !!user &&
-      loaded &&
-      publicLoaded &&
-      setupChecked &&
-      !setupState?.required &&
-      !(portal.enabled && (path === "/" || path?.startsWith("/public/"))),
+    path + ":" + (new URLSearchParams(hash.split("?")[1]).get("tab") ?? ""),
+    loaded && publicLoaded && setupChecked && !!setupState,
     content,
     page,
   );
@@ -502,7 +502,7 @@ function App() {
             </button>
           </div>
         </header>
-        <main>
+        <main ref={content}>
           <Onboarding
             host={client}
             initial={setupState}
@@ -524,6 +524,7 @@ function App() {
         user={user}
         theme={theme}
         modelCatalog={!!modelCatalog}
+        contentRef={content}
       >
         {!user && path === "/models" ? (
           modelCatalog ? (
@@ -531,6 +532,7 @@ function App() {
               key={version}
               extension={modelCatalog}
               client={client}
+              containerRef={page}
             />
           ) : (
             <Empty title={tr("模型目录暂不可用")}>
@@ -583,7 +585,12 @@ function App() {
             </section>
           )}
           <div className="login-panel">
-            <div className="login-content">
+            <div
+              className="login-content"
+              ref={(element) => {
+                content.current = element;
+              }}
+            >
               <Login
                 key={path === "/register" ? "register" : "login"}
                 register={path === "/register"}

@@ -1,3 +1,4 @@
+import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -18,6 +19,7 @@ export function Portal({
   theme,
   modelCatalog = false,
   children,
+  contentRef,
 }: {
   brand: Branding;
   content: PortalContent;
@@ -26,6 +28,7 @@ export function Portal({
   theme: { mode: ThemeMode; change: (mode: ThemeMode) => void };
   modelCatalog?: boolean;
   children?: React.ReactNode;
+  contentRef?: React.Ref<HTMLElement>;
 }) {
   const [copyStatus, setCopyStatus] = React.useState("");
   const [exampleOpen, setExampleOpen] = React.useState(
@@ -91,7 +94,7 @@ export function Portal({
           )}
         </nav>
       </header>
-      <main className="portal-main">
+      <main className="portal-main" ref={contentRef}>
         {children ??
           (slug ? (
             page ? (
@@ -478,10 +481,10 @@ export function PortalSettings({ host }: { host: UIHost }) {
               </a>
             </div>
             <label className="checkbox">
-              <input
-                type="checkbox"
+              <Checkbox
+                appearance="switch"
                 checked={draft.enabled}
-                onChange={(event) => set("enabled", event.target.checked)}
+                onCheckedChange={(event) => set("enabled", event === true)}
               />
               {tr("启用落地门户页")}
             </label>
@@ -495,10 +498,10 @@ export function PortalSettings({ host }: { host: UIHost }) {
               {field("docsUrl", tr("文档链接（可留空）"))}
             </div>
             <label className="checkbox">
-              <input
-                type="checkbox"
+              <Checkbox
+                appearance="switch"
                 checked={draft.showEndpoint}
-                onChange={(event) => set("showEndpoint", event.target.checked)}
+                onCheckedChange={(event) => set("showEndpoint", event === true)}
               />
               {tr("显示 API 接入区")}
             </label>
