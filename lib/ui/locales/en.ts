@@ -517,9 +517,6 @@ export const en: Record<string, string> = {
   绑定渠道: "Bound channel",
   "原绑定（不可用，请更换）": "Previous binding (unavailable; select another)",
   调用凭证: "Credentials",
-  "平台凭证（按平台规则计费）": "Platform credentials (platform billing)",
-  "原凭证（已不可用）": "Previous credentials (unavailable)",
-  "{0} · 自带凭证": "{0} · Own credentials",
   "仅可调用绑定渠道的模型。":
     "Only models from the bound channel are accessible.",
   管理个人渠道: "Manage personal channels",
@@ -534,7 +531,6 @@ export const en: Record<string, string> = {
   "状态 / 到期时间": "Status / Expiry",
   创建时间: "Created",
   绑定渠道不可用: "Bound channel unavailable",
-  " · 自带凭证": " · Own credentials",
   "{0} 次 / 分钟": "{0} requests / minute",
   不限请求频率: "Unlimited request rate",
   尚未使用: "Not used yet",
@@ -777,7 +773,6 @@ export const en: Record<string, string> = {
   "凭证已加密保存，之后仅显示元信息。":
     "Credentials saved. Only metadata will be shown.",
   "凭证已撤销。": "Credentials revoked.",
-  平台渠道凭证: "Platform channel credentials",
   添加凭证: "Add credentials",
   授权类型: "Authorization type",
   "凭证 ID": "Credential ID",
@@ -790,7 +785,6 @@ export const en: Record<string, string> = {
   "确定撤销「{0} 」？通过此凭证发起的调用将失效，其他凭证不受影响。":
     "Revoke “{0}”? Calls using these credentials will fail. Other credentials are unaffected.",
   保留凭证: "Keep credentials",
-  添加自带凭证: "Add own credentials",
   凭证类型: "Credential type",
   "OAuth 授权 JSON": "OAuth authorization JSON",
   密钥: "Secret key",
@@ -1571,8 +1565,6 @@ export const en: Record<string, string> = {
     "Required for prepaid billing. In Codex CLI mode, clear this and Temperature.",
   模型来源: "Model source",
   对话模型来源: "Chat model source",
-  "自带凭证（免平台模型费）": "Own credentials (no platform model fee)",
-  不使用自带凭证: "Do not use own credentials",
   "请求 {0}": "Request {0}",
   首字延迟: "Time to first token",
   限流插件未配置: "Rate limit plugin is not configured",

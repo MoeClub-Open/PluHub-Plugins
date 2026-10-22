@@ -182,12 +182,6 @@ function Page({ host }: { host: UIHost }) {
             {tab === "users" ? tr("用户榜") : tr("模型榜")}
           </button>
         ))}
-        <span
-          className="leaderboard-scope"
-          title={tr("仅统计平台渠道的成功调用，个人渠道不参与公开排名。")}
-        >
-          {tr("平台调用")}
-        </span>
       </div>
       <Notice message={error} />
       <section
@@ -264,21 +258,7 @@ function Page({ host }: { host: UIHost }) {
                     ? tr("排行榜暂不可用")
                     : tr("这个时段还没有排名")
               }
-            >
-              {!busy &&
-                (error ? (
-                  <button
-                    className="secondary"
-                    onClick={() => setVersion((value) => value + 1)}
-                  >
-                    {tr("重试")}
-                  </button>
-                ) : (
-                  <a className="button secondary" href="#/playground">
-                    {tr("打开 Playground")}
-                  </a>
-                ))}
-            </Empty>
+            />
           </div>
         )}
         {current && (

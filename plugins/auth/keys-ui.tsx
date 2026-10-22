@@ -21,7 +21,6 @@ type Key = {
   expires_at?: number;
   last_used_at?: number;
   channel_id?: string;
-  credential_id?: string;
 };
 export function Keys({ host }: { host: UIHost }) {
   const keys = useLoad<Key[]>(() => host.request(api));
@@ -139,7 +138,6 @@ export function Keys({ host }: { host: UIHost }) {
                       ? (channelNames.data?.find((c) => c.id === key.channel_id)
                           ?.name ?? tr("绑定渠道不可用"))
                       : tr("平台默认路由")}
-                    {key.credential_id ? tr(" · 自带凭证") : ""}
                   </small>
                   <small>
                     {key.requests_per_minute
@@ -250,7 +248,6 @@ export function Keys({ host }: { host: UIHost }) {
                     body: JSON.stringify({
                       name: fields.get("name"),
                       channelId: fields.get("channelId") || null,
-                      credentialId: fields.get("credentialId") || null,
                       models: String(fields.get("models") ?? "")
                         .split(",")
                         .map((s) => s.trim())
@@ -398,7 +395,6 @@ export function Keys({ host }: { host: UIHost }) {
                   body: JSON.stringify({
                     id: binding.id,
                     channelId: f.get("channelId") || null,
-                    credentialId: f.get("credentialId") || null,
                   }),
                 });
                 setBinding(undefined);
@@ -414,7 +410,6 @@ export function Keys({ host }: { host: UIHost }) {
             <ChannelBinding
               host={host}
               initialChannel={binding.channel_id ?? ""}
-              initialCredential={binding.credential_id ?? ""}
             />
             <div className="form-actions">
               <button

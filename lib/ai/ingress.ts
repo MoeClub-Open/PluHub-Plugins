@@ -58,8 +58,7 @@ export function createIngress(protocol: Protocol) {
             : decode(protocol, input, model);
           if (protocol === "gemini") decoded.stream = stream;
           const allowed = ctx.principal?.attributes?.models as
-            | string[]
-            | undefined;
+            string[] | undefined;
           if (allowed?.length && !allowed.includes(decoded.model))
             throw new HostError(
               "model_forbidden",
@@ -68,21 +67,15 @@ export function createIngress(protocol: Protocol) {
             );
           ctx.state.set("ai.request", decoded);
           const policy = ctx.principal?.attributes;
+          if (request.headers.has("x-pluhub-credential"))
+            throw new HostError("unsupported_credential", "平台渠道凭证已移除");
           const boundChannel = policy?.channelId as string | undefined;
-          const boundCredential = policy?.credentialId as string | undefined;
           const channelHeader =
             request.headers.get("x-pluhub-channel") ?? undefined;
-          const credentialHeader =
-            request.headers.get("x-pluhub-credential") ?? undefined;
-          if (
-            (boundChannel && channelHeader && channelHeader !== boundChannel) ||
-            (boundCredential &&
-              credentialHeader &&
-              credentialHeader !== boundCredential)
-          )
+          if (boundChannel && channelHeader && channelHeader !== boundChannel)
             throw new HostError(
               "channel_forbidden",
-              "请求不能覆盖 API Key 的渠道或凭证绑定",
+              "请求不能覆盖 API Key 的渠道绑定",
               403,
             );
           if (host.hasCapability("auth.admit@1")) {
@@ -111,7 +104,6 @@ export function createIngress(protocol: Protocol) {
                 ],
                 principalId: ctx.principal?.id,
                 channelId: boundChannel ?? channelHeader,
-                credentialId: boundCredential ?? credentialHeader,
               },
               ctx.signal,
             ),

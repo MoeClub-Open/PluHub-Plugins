@@ -5,7 +5,7 @@
   "name": "账号认证",
   "description": "管理密码、会话、API Key 和多因素验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.10",
+  "version": "0.1.0-alpha.11",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -19,8 +19,15 @@
     "auth.admin@1",
     "auth.security-history@1"
   ],
-  "requires": ["users.lookup@1", "users.manage@1"],
-  "permissions": ["api.register", "identity.provide", "hooks.register"],
+  "requires": [
+    "users.lookup@1",
+    "users.manage@1"
+  ],
+  "permissions": [
+    "api.register",
+    "identity.provide",
+    "hooks.register"
+  ],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -133,7 +140,6 @@
     "mail.options@1",
     "captcha.verify@1",
     "captcha.options@1",
-    "ai.channels@1",
-    "credentials.select@1"
+    "ai.channels@1"
   ]
 }

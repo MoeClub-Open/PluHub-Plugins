@@ -39,10 +39,6 @@ function Page({ host }: { host: UIHost }) {
   const [system, setSystem] = React.useState("");
   const [temperature, setTemperature] = React.useState("0.7");
   const [maxTokens, setMaxTokens] = React.useState("1024");
-  const [credentialId, setCredentialId] = React.useState("");
-  const credentials = useLoad<any[]>(() =>
-    host.request("/api/plugins/official.byok/credentials").catch(() => []),
-  );
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [busy, setBusy] = React.useState(false);
   const [settings, setSettings] = React.useState(false);
@@ -88,7 +84,6 @@ function Page({ host }: { host: UIHost }) {
         headers: {
           "content-type": "application/json",
           ...(channel ? { "x-pluhub-channel": channel } : {}),
-          ...(credentialId ? { "x-pluhub-credential": credentialId } : {}),
         },
         body: JSON.stringify({
           model,
@@ -177,7 +172,6 @@ function Page({ host }: { host: UIHost }) {
               onChange={(e) => {
                 setChannel(e.target.value);
                 setModel("");
-                setCredentialId("");
                 setMessages([]);
                 setMeta({});
               }}
@@ -325,29 +319,6 @@ function Page({ host }: { host: UIHost }) {
                 )}
               </small>
             </label>
-            {!channel.startsWith("personal:") && !!credentials.data?.length && (
-              <label>
-                {tr("自带凭证（免平台模型费）")}
-                <Select
-                  value={credentialId}
-                  disabled={busy}
-                  onChange={(e) => setCredentialId(e.target.value)}
-                >
-                  <option value="">{tr("不使用自带凭证")}</option>
-                  {credentials.data
-                    ?.filter(
-                      (c) =>
-                        !c.channel.startsWith("personal:") &&
-                        (!channel || c.channel === channel),
-                    )
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} · {c.channel}
-                      </option>
-                    ))}
-                </Select>
-              </label>
-            )}
           </div>
         </Dialog>
       )}

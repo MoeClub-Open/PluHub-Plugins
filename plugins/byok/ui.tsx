@@ -11,7 +11,6 @@ import {
 } from "../../lib/ui/components.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { consumptionPrices } from "../../lib/ai/channel-pricing.js";
-import { LegacyCredentials } from "./credentials-ui.js";
 import { ChannelAdmin } from "./admin-ui.js";
 import { SubscriptionAccounts } from "../../lib/ui/subscription-accounts.js";
 import { parseApiConnection } from "../../lib/ai/personal-api.js";
@@ -231,14 +230,6 @@ function Page({ host }: { host: UIHost }) {
             {tr("自带订阅")}
           </button>
         )}
-        <button
-          role="tab"
-          aria-selected={tab === "credentials"}
-          className={tab === "credentials" ? "active" : ""}
-          onClick={() => setTab("credentials")}
-        >
-          {tr("平台渠道凭证")}
-        </button>
       </div>
       {tab === "subscriptions" ? (
         <SubscriptionAccounts
@@ -263,8 +254,6 @@ function Page({ host }: { host: UIHost }) {
             });
           }}
         />
-      ) : tab === "credentials" ? (
-        <LegacyCredentials host={host} />
       ) : (
         <>
           <PageHeading title={tr("个人渠道")}>

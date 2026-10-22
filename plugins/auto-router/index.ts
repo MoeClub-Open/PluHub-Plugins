@@ -247,28 +247,6 @@ export default definePlugin({
             input.request.temperature !== undefined)
         )
           continue;
-        if (input.credentialId) {
-          if (!input.principalId)
-            throw new HostError(
-              "unauthorized",
-              "BYOK requires a principal",
-              401,
-            );
-          try {
-            await host.call(
-              "credentials.select@1",
-              {
-                id: input.credentialId,
-                userId: input.principalId,
-                channel: target.plan.upstreamId,
-              },
-              signal,
-            );
-          } catch (e) {
-            if ((e as HostError).code === "credential_channel") continue;
-            throw e;
-          }
-        }
         eligible.push({ candidate, ...target, allowed });
       }
       if (!eligible.length)

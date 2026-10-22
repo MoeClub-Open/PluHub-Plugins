@@ -217,10 +217,7 @@ export function Dashboard({
       <section className="recent-requests" aria-label={tr("最近调用")}>
         <div className="panel-heading">
           <h2>{tr("最近调用")}</h2>
-          <a
-            className="text-link"
-            href={management ? "#/admin/activity" : "#/activity"}
-          >
+          <a className="text-link" href="#/activity">
             {tr("查看全部")}
             <Icon name="arrow" size={14} />
           </a>
@@ -296,9 +293,7 @@ export function Dashboard({
             </p>
           )}
           {recent.data?.total === 0 && (
-            <p className="empty-inline">
-              {tr("还没有调用记录。")}
-            </p>
+            <p className="empty-inline">{tr("还没有调用记录。")}</p>
           )}
         </div>
       </section>

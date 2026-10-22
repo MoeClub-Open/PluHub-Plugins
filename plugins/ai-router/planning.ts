@@ -21,7 +21,7 @@ export async function planRoute(
   signal: AbortSignal,
 ): Promise<AIPlan> {
   let config = host.config();
-  let credentialId = input.credentialId;
+  let credentialId: string | undefined;
   if (input.channelId?.startsWith("personal:")) {
     if (!input.principalId)
       throw new HostError("unauthorized", "个人渠道需要用户身份", 401);
@@ -32,8 +32,6 @@ export async function planRoute(
     );
     if (!channel)
       throw new HostError("channel_not_found", "个人渠道不可用", 404);
-    if (credentialId && credentialId !== channel.id)
-      throw new HostError("credential_channel", "凭证与绑定渠道不一致", 403);
     credentialId = channel.id;
     config = {
       upstreams: { [channel.id]: channel.upstream },
@@ -171,7 +169,6 @@ export async function planRoute(
           profile,
           request: prepared,
           principalId: input.principalId,
-          credentialId: input.credentialId,
           ingressProtocol: input.ingressProtocol,
           protocolPolicy,
         },

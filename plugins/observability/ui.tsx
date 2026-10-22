@@ -52,7 +52,6 @@ function estimateReceipt(row: any) {
   }
 }
 function Page({ host }: { host: UIHost }) {
-  const management = host.page === "/admin/activity";
   const [initial] = React.useState(
     () => new URLSearchParams(location.hash.split("?")[1]),
   );
@@ -115,8 +114,7 @@ function Page({ host }: { host: UIHost }) {
   });
   React.useEffect(() => {
     const next = new URL(location.href);
-    next.hash =
-      (management ? "/admin/activity" : "/activity") + "?" + query.toString();
+    next.hash = "/activity?" + query.toString();
     history.replaceState(history.state, "", next);
   }, [query.toString()]);
   const active = [
@@ -171,7 +169,7 @@ function Page({ host }: { host: UIHost }) {
   };
   return (
     <>
-      <PageHeading title={management ? tr("全站调用记录") : tr("调用记录")}>
+      <PageHeading title={tr("调用记录")}>
         <button
           className="secondary"
           disabled={exporting || !data.data?.total}
@@ -443,18 +441,7 @@ function Page({ host }: { host: UIHost }) {
         </div>
       )}
       {data.data?.total === 0 ? (
-        <Empty title={tr("还没有匹配的调用记录")}>
-          {active.length ? (
-            <button className="secondary" onClick={() => clear()}>
-              {tr("重置筛选")}
-            </button>
-          ) : (
-            <a className="button secondary" href="#/playground">
-              {tr("发起一次调用")}
-              <Icon name="arrow" size={15} />
-            </a>
-          )}
-        </Empty>
+        <Empty title={tr("还没有匹配的调用记录")} />
       ) : (
         <div className="table-wrap">
           <table>

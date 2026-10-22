@@ -62,6 +62,7 @@ export default definePlugin({
       setupMigration,
       sessionMigration,
       historyMigration,
+      "UPDATE api_keys SET expires_at=0 WHERE credential_id IS NOT NULL AND (channel_id IS NULL OR channel_id NOT LIKE 'personal:%'); UPDATE api_keys SET credential_id=NULL;",
     ]);
     rawHost.cleanup(() => db.close());
     const history = installSecurityHistory(rawHost, db),
@@ -206,7 +207,6 @@ export default definePlugin({
                 models: JSON.parse(row.models_json),
                 requestsPerMinute: row.requests_per_minute,
                 channelId: row.channel_id ?? undefined,
-                credentialId: row.credential_id ?? undefined,
               },
             }
           : {}),
@@ -409,7 +409,7 @@ export default definePlugin({
         return json(
           db
             .prepare(
-              "SELECT id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id,credential_id FROM api_keys WHERE user_id=? ORDER BY created_at DESC",
+              "SELECT id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id FROM api_keys WHERE user_id=? ORDER BY created_at DESC",
             )
             .all(ctx.principal!.id)
             .map((row: any) => {
@@ -420,14 +420,11 @@ export default definePlugin({
       },
     });
     async function keyBinding(body: any, userId: string) {
+      if (body.credentialId)
+        throw new HostError("unsupported_credential", "平台渠道凭证已移除");
       const channelId = body.channelId
         ? requiredString(body.channelId, "channelId", 256)
         : null;
-      let credentialId = body.credentialId
-        ? requiredString(body.credentialId, "credentialId", 256)
-        : null;
-      if (credentialId && !channelId)
-        throw new HostError("invalid_binding", "请先选择凭证绑定的渠道");
       if (channelId) {
         const options = await host.call<{ id: string; scope: string }[]>(
           "ai.channels@1",
@@ -440,23 +437,8 @@ export default definePlugin({
             "渠道不可用或不属于当前用户",
             403,
           );
-        if (channel.scope === "personal") {
-          if (credentialId && credentialId !== channelId)
-            throw new HostError(
-              "invalid_binding",
-              "个人渠道使用其自己的凭证",
-              403,
-            );
-          credentialId = channelId;
-        }
-        if (credentialId)
-          await host.call("credentials.select@1", {
-            id: credentialId,
-            userId,
-            channel: channelId,
-          });
       }
-      return { channelId, credentialId };
+      return { channelId };
     }
     host.api({
       method: "POST",
@@ -490,7 +472,7 @@ export default definePlugin({
         const token = "ph_" + randomBytes(32).toString("base64url");
         const id = randomUUID();
         db.prepare(
-          "INSERT INTO api_keys(id,user_id,name,hash,prefix,created_at,models_json,expires_at,requests_per_minute,channel_id,credential_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO api_keys(id,user_id,name,hash,prefix,created_at,models_json,expires_at,requests_per_minute,channel_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
         ).run(
           id,
           ctx.principal!.id,
@@ -502,7 +484,6 @@ export default definePlugin({
           expires,
           rpm,
           binding.channelId,
-          binding.credentialId,
         );
         history.tag({ resourceId: id });
         return json({ id, token }, 201);
@@ -525,8 +506,8 @@ export default definePlugin({
           throw new HostError("not_found", "密钥不存在", 404);
         const binding = await keyBinding(body, userId);
         db.prepare(
-          "UPDATE api_keys SET channel_id=?,credential_id=? WHERE id=? AND user_id=?",
-        ).run(binding.channelId, binding.credentialId, id, userId);
+          "UPDATE api_keys SET channel_id=? WHERE id=? AND user_id=?",
+        ).run(binding.channelId, id, userId);
         history.tag({ resourceId: id });
         return json({ ok: true });
       },

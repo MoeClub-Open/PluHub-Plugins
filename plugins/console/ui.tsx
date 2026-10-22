@@ -342,10 +342,14 @@ function App() {
   }, []);
   const admin = user?.role === "admin";
   React.useEffect(() => {
+    if (path === "/admin/activity") {
+      client.navigate(hash.replace("/admin/activity", "/activity"));
+      return;
+    }
     const destination = channelSettingsDestination(path!);
     if (admin && destination && extensions.some((e) => e.path === "/ai-router"))
       client.navigate(destination);
-  }, [admin, path, client, extensions]);
+  }, [admin, hash, path, client, extensions]);
   const modelCatalog = extensions.find(
     (e) =>
       e.id === "official.model-catalog" && e.path === "/models" && e.public,

@@ -87,7 +87,7 @@ export function installAdmin(host: Host, db: DatabaseSync) {
       const clause = where.length ? " WHERE " + where.join(" AND ") : "";
       const items = db
         .prepare(
-          "SELECT id,user_id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id,credential_id FROM api_keys" +
+          "SELECT id,user_id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id FROM api_keys" +
             clause +
             " ORDER BY created_at DESC,id LIMIT ? OFFSET ?",
         )

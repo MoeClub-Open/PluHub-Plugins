@@ -5,7 +5,7 @@
   "name": "个人渠道",
   "description": "管理用户自带密钥、个人渠道及消耗倍率。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.12",
+  "version": "0.1.0-alpha.13",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -17,7 +17,6 @@
     "ai.user-channels@1"
   ],
   "requires": [
-    "ai.channels@1",
     "http.transport@1"
   ],
   "optionalRequires": [
@@ -58,30 +57,6 @@
           "pattern": "^env:[A-Z][A-Z0-9_]*$"
         },
         "uniqueItems": true
-      },
-      "oauth": {
-        "type": "object",
-        "additionalProperties": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "tokenUrl",
-            "clientId"
-          ],
-          "properties": {
-            "tokenUrl": {
-              "type": "string",
-              "pattern": "^https://"
-            },
-            "clientId": {
-              "type": "string"
-            },
-            "clientSecretRef": {
-              "type": "string",
-              "pattern": "^env:[A-Z][A-Z0-9_]*$"
-            }
-          }
-        }
       },
       "allowedPrivateOrigins": {
         "type": "array",

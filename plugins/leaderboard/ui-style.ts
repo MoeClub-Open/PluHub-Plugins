@@ -4,7 +4,6 @@ export const styles = `
 .leaderboard-tabs>button{position:relative;display:inline-flex;align-items:center;gap:7px;padding:10px 0 12px;border:0;border-radius:0;background:transparent;color:var(--muted);box-shadow:none;font-weight:500}
 .leaderboard-tabs>button:hover,.leaderboard-tabs>button.active{color:var(--accent)}
 .leaderboard-tabs>button.active:after{position:absolute;inset:auto 0 -1px;height:2px;background:var(--accent);content:""}
-.leaderboard-scope{margin-left:auto;color:var(--muted);font-size:11px;cursor:help}
 .leaderboard-summary{display:flex;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;background:var(--surface)}
 .leaderboard-summary>div{flex:1;min-width:0;padding:14px 18px;border-right:1px solid var(--border)}
 .leaderboard-summary>div:last-child{border:0}
