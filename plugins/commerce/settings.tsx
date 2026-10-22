@@ -5,6 +5,7 @@ import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { Dialog } from "../../lib/ui/components.js";
 import { usdToMicros } from "../../lib/commerce/decimal.js";
+import { nextNumericId } from "../../lib/numeric-id.js";
 export function ProductSettings({
   host,
   onSave,
@@ -34,8 +35,14 @@ export function ProductSettings({
       const paymentMicros = usdToMicros(String(f.get("payment")));
       if (paymentMicros < 10000 || paymentMicros % 10000)
         throw new Error(tr("支付金额必须为正数且最多两位小数"));
+      const productId =
+        selected?.id ??
+        nextNumericId(
+          (plugin.config.products ?? []).map((product: any) => product.id),
+          plugin.config.nextProductId,
+        );
       const product = {
-        id: String(f.get("id")),
+        id: productId,
         name: String(f.get("name")),
         mode: String(f.get("mode")),
         interval: String(f.get("interval")),
@@ -50,6 +57,9 @@ export function ProductSettings({
       plugin.config = {
         ...plugin.config,
         publicUrl: String(f.get("publicUrl")),
+        ...(!selected && {
+          nextProductId: String(BigInt(productId) + 1n),
+        }),
         products: next,
       };
       await host.request("/api/host/config", {
@@ -115,16 +125,6 @@ export function ProductSettings({
                 required
                 defaultValue={settings.publicUrl ?? ""}
                 placeholder="https://gateway.example.com"
-              />
-            </label>
-            <label>
-              {tr("商品 ID")}
-              <input
-                name="id"
-                defaultValue={selected?.id ?? ""}
-                required
-                pattern={"[a-zA-Z0-9_\\-]+"}
-                readOnly={!!selected}
               />
             </label>
             <label>

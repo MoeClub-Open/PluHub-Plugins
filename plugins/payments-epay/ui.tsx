@@ -7,6 +7,7 @@ import { t as tr } from "../../lib/ui/i18n.js";
 import type { EpayMethod } from "./config.js";
 import type { PaymentSecrets } from "./secrets.js";
 import { MethodEditor } from "./method-editor.js";
+import { nextNumericId } from "../../lib/numeric-id.js";
 
 const types: Record<string, string> = {
   alipay: "支付宝",
@@ -78,7 +79,15 @@ function Page({ host }: { host: UIHost }) {
       const config = await host.request<any>("/api/host/config");
       const plugin = findPlugin(config);
       if (!plugin) throw new Error(tr("支付插件未安装"));
-      const next = { ...plugin.config, enabled, methods: nextMethods };
+      const next = {
+        ...plugin.config,
+        enabled,
+        methods: nextMethods,
+        nextMethodId: nextNumericId(
+          nextMethods.map((method) => method.id),
+          plugin.config.nextMethodId,
+        ),
+      };
       // Keep legacy references for notifications from orders created before multi-method support.
       next.secretRefs = [
         ...new Set(
@@ -115,7 +124,10 @@ function Page({ host }: { host: UIHost }) {
       baseUrl: "",
       publicUrl: location.origin,
       ...source,
-      id: crypto.randomUUID(),
+      id: nextNumericId(
+        methods.map((method) => method.id),
+        settings.nextMethodId,
+      ),
       name: "",
       enabled: false,
     });
