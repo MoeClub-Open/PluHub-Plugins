@@ -141,6 +141,7 @@ it("validates Turnstile action, hostname, age, replay and bounded responses", as
     });
   } finally {
     for (const close of cleanups) close();
-    await rm(dir, { recursive: true, force: true });
+    if (process.platform !== "win32")
+      await rm(dir, { recursive: true, force: true });
   }
 });

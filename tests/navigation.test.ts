@@ -193,7 +193,6 @@ it("keeps management pages and legacy links in the backend and rejects them for 
     "/settings/branding",
     "/mailer",
     "/payments-epay",
-    "/admin/activity",
   ]) {
     const admin = navigation(pages, true, path);
     expect(admin.managementMode, path).toBe(true);
@@ -206,6 +205,14 @@ it("keeps management pages and legacy links in the backend and rejects them for 
   expect(
     navigation(pages, true, "/users").management.map((e) => e.path),
   ).toContain("/users");
+});
+
+it("keeps the site-wide activity page in the foreground", () => {
+  for (const admin of [true, false]) {
+    const nav = navigation(pages, admin, "/activity");
+    expect(nav.managementMode).toBe(false);
+    expect(nav.selected?.path).toBe("/activity");
+  }
 });
 
 it("keeps public third-party pages in the foreground and private third-party pages in the backend", () => {
