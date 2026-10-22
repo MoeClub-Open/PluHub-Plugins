@@ -10,6 +10,7 @@ import type {
 import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
+import { providerSession } from "../../lib/ai/session.js";
 import {
   runWorkflow,
   checkProtocolConversion,
@@ -54,6 +55,8 @@ export async function planRoute(
     WorkflowResult["outputPolicies"]
   >[number] & { channel: string })[] = [];
   let bindingChecked = false;
+  let sessionChannel = input.channelId;
+  let providerNodeId: string | undefined;
   let consumptionMultiplier: number | undefined;
   let protocolPolicy: WorkflowResult["protocolPolicy"];
   while (path.length < 32) {
@@ -91,10 +94,12 @@ export async function planRoute(
         503,
       );
     if (!bindingChecked) {
+      sessionChannel ??= route.upstream;
       consumptionMultiplier = upstream.consumptionMultiplier ?? 1;
       bindingChecked = true;
     }
     let connection: Upstream = upstream;
+    providerNodeId = undefined;
     let providerModel = route.model;
     let profile = upstream.protocol === "auto-router" ? route.model : undefined;
     if (upstream.flow || upstream.protocol === "workflow") {
@@ -135,6 +140,7 @@ export async function planRoute(
           ),
         };
       if (result.provider) {
+        providerNodeId = result.providerId;
         const node = upstream.flow?.nodes.find(
           (n) => n.id === result.providerId,
         );
@@ -299,6 +305,17 @@ export async function planRoute(
       "Configured upstream adapter is not installed",
       503,
     );
+  if (prepared?.sessionId)
+    prepared = {
+      ...prepared,
+      sessionId: providerSession(prepared.sessionId, [
+        sessionChannel,
+        resolved.upstreamId,
+        providerNodeId,
+        resolved.upstream.protocol,
+        resolved.upstream.baseUrl,
+      ]),
+    };
   return {
     ...resolved,
     ...(decision ? { decision, logicalUpstreamId } : {}),

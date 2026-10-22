@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { HostError, requiredString } from "@pluhub/sdk";
 import { decodeReasoning, encodeReasoning } from "./reasoning.js";
 import { decodeUsage, encodeUsage } from "./usage.js";
+import { sessionPayload } from "./session.js";
 import {
   readContent,
   writeContent,
@@ -151,6 +152,7 @@ export function decode(
   body: any,
   pathModel?: string,
 ): AIRequest {
+  body = sessionPayload(body);
   const messages: Message[] = [];
   let tools: Tool[] = [];
   let maxTokens: number | undefined;
@@ -752,6 +754,14 @@ export function encodeRequest(protocol: Protocol, request: AIRequest): any {
       : {}),
   };
   const extra = writeOptions(protocol, request);
+  if (request.sessionId) {
+    if (protocol === "openai-chat" || protocol === "openai-responses")
+      extra.prompt_cache_key = request.sessionId;
+    else if (protocol === "anthropic")
+      extra.metadata = {
+        user_id: JSON.stringify({ session_id: request.sessionId }),
+      };
+  }
   for (const m of messages)
     for (const c of m.calls ?? []) parseArgs(c.arguments);
   if (

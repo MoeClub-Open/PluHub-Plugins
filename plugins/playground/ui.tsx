@@ -50,6 +50,8 @@ function Page({ host }: { host: UIHost }) {
     tokens?: number;
   }>({});
   const controller = React.useRef<AbortController | null>(null);
+  const session = React.useRef<string>("");
+  if (!session.current) session.current = crypto.randomUUID();
   const transcript = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => () => controller.current?.abort(), []);
   React.useEffect(() => {
@@ -83,6 +85,7 @@ function Page({ host }: { host: UIHost }) {
         signal: abort.signal,
         headers: {
           "content-type": "application/json",
+          "x-pluhub-session-id": session.current,
           ...(channel ? { "x-pluhub-channel": channel } : {}),
         },
         body: JSON.stringify({
@@ -151,6 +154,7 @@ function Page({ host }: { host: UIHost }) {
           className="secondary"
           disabled={busy}
           onClick={() => {
+            session.current = crypto.randomUUID();
             setMessages([]);
             setMeta({});
             setError("");
@@ -170,6 +174,7 @@ function Page({ host }: { host: UIHost }) {
               value={channel}
               disabled={busy}
               onChange={(e) => {
+                session.current = crypto.randomUUID();
                 setChannel(e.target.value);
                 setModel("");
                 setMessages([]);
@@ -239,6 +244,7 @@ function Page({ host }: { host: UIHost }) {
                   value={model}
                   disabled={busy}
                   onChange={(e) => {
+                    session.current = crypto.randomUUID();
                     setModel(e.target.value);
                     setMessages([]);
                     setMeta({});

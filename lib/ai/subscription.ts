@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
 import type {
   AIRequest,
@@ -93,6 +93,7 @@ export function subscriptionRequest(
     }
     const account = credential.accountId ?? upstream.accountId;
     if (account) headers["chatgpt-account-id"] = account;
+    if (request.sessionId) headers.session_id = request.sessionId;
   } else if (kind === "claude-subscription") {
     suffix = url.pathname.replace(/\/$/, "").endsWith("/v1")
       ? "/messages"
@@ -100,6 +101,8 @@ export function subscriptionRequest(
     headers["anthropic-version"] = "2023-06-01";
     headers["anthropic-beta"] =
       "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14";
+    if (request.sessionId)
+      headers["x-claude-code-session-id"] = request.sessionId;
   } else {
     const project = credential.projectId ?? upstream.projectId;
     if (!project)
@@ -119,7 +122,15 @@ export function subscriptionRequest(
         ...body,
         sessionId:
           "-" +
-          String(BigInt("0x" + randomUUID().replaceAll("-", "").slice(0, 14))),
+          String(
+            BigInt(
+              "0x" +
+                createHash("sha256")
+                  .update(request.sessionId ?? randomUUID())
+                  .digest("hex")
+                  .slice(0, 14),
+            ),
+          ),
       },
     };
     delete body.request.model;
@@ -254,6 +265,7 @@ export function createSubscription(kind: SubscriptionKind) {
                   action: "acquire",
                   provider: kind,
                   ids: upstream.subscriptionAccountIds,
+                  sessionId: request.sessionId,
                   ...(upstream.credentialId
                     ? {
                         ownerId: requiredString(

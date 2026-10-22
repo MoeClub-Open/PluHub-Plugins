@@ -28,6 +28,8 @@ Console 的 `config.branding` 支持站点名称、Logo/图标、主题色、登
 
 AI 插件分为两组：ingress-* 面向客户端，upstream-* 面向服务商；支持 OpenAI Chat Completions、Responses、Anthropic、Gemini。通过 AI 契约和路由组合。
 
+入口自动识别 Codex、Claude Code 和兼容客户端的会话 Header、Claude 新旧 `metadata.user_id`、请求体会话字段与 `prompt_cache_key`；没有明确标识时，使用首轮用户消息摘要。会话按用户、API Key、渠道和提供商节点隔离，只保存派生标识。订阅账号绑定持久保存，闲置一小时过期，使用时续期；绑定账号并发已满时最多等待 15 秒，超时返回 429。账号停用、删除、授权失效、冷却或被移出渠道后，下次请求重新选择并绑定当前池内的可用账号；不会在已开始的响应中切号重试。Codex 缓存键和会话 Header、Claude 会话元数据、Antigravity 会话 ID 保持稳定。无明确会话标识且客户端截断或改写首轮消息时，摘要会变化，无法保证延续原绑定。
+
 Users 与 Auth 各自拥有 SQLite 数据库及事务迁移，通过用户能力协作。Auth 不读取 Users 表。上游凭证使用环境变量引用，与用户 API Key 分离。
 
 Auto Router 将既有物理渠道组合成虚拟提供商，支持自动模型、自动思考强度及两者同时调整；Token Speed 对每个请求使用显式 tokenizer 进行输出节拍控制。配置说明见主仓 docs/AUTO_ROUTING.md。邮件与验证插件：Mailer 提供带 TLS 的 SMTP 发件能力；人机验证插件提供 Turnstile、reCAPTCHA v2/v3 和极验 v4 的服务端校验。Auth 提供验证邮箱注册/登录、TOTP 与恢复码、FIDO2 安全密钥和 Passkey。配置、恢复与测试说明见主仓 docs/IDENTITY.md。详细协议矩阵与运行方式见主仓 README。

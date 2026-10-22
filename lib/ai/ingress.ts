@@ -7,6 +7,7 @@ import type {
 } from "@pluhub/contracts/ai";
 import { decode, collect, encodeResult, protocolError } from "./protocols.js";
 import { encodeStream } from "./streams.js";
+import { clientSession } from "./session.js";
 import {
   beginObservation,
   planObservation,
@@ -57,6 +58,12 @@ export function createIngress(protocol: Protocol) {
               )
             : decode(protocol, input, model);
           if (protocol === "gemini") decoded.stream = stream;
+          decoded.sessionId = clientSession(
+            request,
+            input,
+            decoded,
+            ctx.principal,
+          );
           const allowed = ctx.principal?.attributes?.models as
             string[] | undefined;
           if (allowed?.length && !allowed.includes(decoded.model))

@@ -21,6 +21,7 @@ import type {
   SubscriptionLease,
 } from "@pluhub/contracts/subscription";
 import { openDatabase } from "../storage/sqlite.js";
+import { affinityMigration, createSessionAffinity } from "./affinity.js";
 import {
   normalizeSubscriptionToken,
   subscriptionKind,
@@ -68,12 +69,14 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
        version INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);`,
     "ALTER TABLE accounts ADD COLUMN quota_json TEXT NOT NULL DEFAULT '[]'; ALTER TABLE accounts ADD COLUMN quota_updated_at INTEGER;",
     "ALTER TABLE accounts ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''; CREATE INDEX accounts_owner ON accounts(owner_id);",
+    affinityMigration,
   ]);
   const stop = new AbortController();
   const refreshing = new Map<string, Promise<SubscriptionCredential>>();
   const checking = new Map<string, Promise<unknown>>();
   const leases = new Map<string, { id: string; version: number }>();
   const active = new Map<string, number>();
+  const affinity = createSessionAffinity(db, active, stop.signal);
   const row = (id: string): any =>
     db.prepare("SELECT * FROM accounts WHERE id=?").get(id) ??
     fail("subscription_not_found", "订阅账号不存在", 404);
@@ -186,11 +189,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       fail("subscription_provider", "无法更改授权提供商");
     let token = normalizeSubscriptionToken(input.authorization);
     if (previous) token = { ...decrypt(previous), ...token };
-    if (
-      provider === "antigravity" &&
-      token.access_token &&
-      !token.project_id
-    ) {
+    if (provider === "antigravity" && token.access_token && !token.project_id) {
       const discovery = AbortSignal.any([
         ...(signal ? [signal] : []),
         AbortSignal.timeout(15000),
@@ -327,6 +326,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       const remaining = Math.max(0, (active.get(lease.id) ?? 1) - 1);
       if (remaining) active.set(lease.id, remaining);
       else active.delete(lease.id);
+      affinity.notify(lease.id);
     }
   }
   async function queryOverview(id: string) {
@@ -398,33 +398,32 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           input.ids.some((id) => typeof id !== "string" || id.length > 256)
         )
           fail("subscription_binding", "请选择订阅账号，且不可重复");
-        const rows = input.ids.map((id) => ownedRow(id, input.ownerId ?? ""));
-        if (rows.some((r) => r.provider !== provider))
-          fail("subscription_provider", "订阅账号与提供商不匹配");
-        const candidates = rows
-          .filter(
-            (r) =>
-              r.enabled &&
-              r.status === "ready" &&
-              r.cooldown_until <= Date.now() &&
-              (active.get(r.id) ?? 0) < r.max_concurrency,
-          )
-          .sort(
-            (a, b) =>
-              (active.get(a.id) ?? 0) / a.max_concurrency -
-                (active.get(b.id) ?? 0) / b.max_concurrency ||
-              a.last_used - b.last_used,
-          );
-        const selected =
-          candidates[0] ??
-          fail("subscription_unavailable", "暂无可用订阅账号", 503);
+        const sessionKey = input.sessionId
+          ? JSON.stringify([
+              input.ownerId ?? "",
+              requiredString(input.sessionId, "sessionId", 256),
+            ])
+          : undefined;
+        const selected = await affinity.acquire(
+          () => {
+            const rows = input.ids.flatMap((id) => {
+              const r = db
+                .prepare("SELECT * FROM accounts WHERE id=?")
+                .get(id) as any;
+              if (!r) return [];
+              if (r.owner_id !== (input.ownerId ?? ""))
+                fail("subscription_not_found", "订阅账号不存在", 404);
+              if (r.provider !== provider)
+                fail("subscription_provider", "订阅账号与提供商不匹配");
+              return [r];
+            });
+            return rows;
+          },
+          sessionKey,
+          signal,
+        );
         const leaseId = randomUUID();
         leases.set(leaseId, { id: selected.id, version: selected.version });
-        active.set(selected.id, (active.get(selected.id) ?? 0) + 1);
-        db.prepare("UPDATE accounts SET last_used=? WHERE id=?").run(
-          Date.now(),
-          selected.id,
-        );
         try {
           const result = await cancellable(resolve(selected.id), signal);
           signal.throwIfAborted();
@@ -435,6 +434,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
             credential: result,
           } satisfies SubscriptionLease;
         } catch (error) {
+          if (!signal.aborted) affinity.forget(sessionKey, selected.id);
           release(leaseId);
           throw error;
         }
@@ -537,6 +537,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         db.prepare(
           "UPDATE accounts SET status=?,error_code=?,cooldown_until=MAX(cooldown_until,?),last_status=? WHERE id=? AND version=?",
         ).run(status, code, cooldown, input.status, r.id, input.version);
+        affinity.notify(r.id);
         return;
       }
       fail("subscription_action", "Unknown subscription account action");
@@ -589,6 +590,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         r = ownedRow(requiredString(b.id, "id"), owner(ctx));
       if (b.action === "delete") {
         db.prepare("DELETE FROM accounts WHERE id=?").run(r.id);
+        affinity.remove(r.id);
         return json({ ok: true });
       }
       if (b.action === "update") {
@@ -611,6 +613,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           Date.now(),
           r.id,
         );
+        affinity.notify(r.id);
       } else if (b.action === "quota")
         return json(await cancellable(queryOverview(r.id), ctx.signal));
       else if (b.action === "refresh") await resolve(r.id, r.version);
