@@ -56,11 +56,13 @@ export function ProductSettings({
           (plugin.config.products ?? []).map((product: any) => product.id),
           plugin.config.nextProductId,
         );
+      const mode = String(f.get("mode")) as Product["mode"];
       const product = {
         id: productId,
         name: String(f.get("name")),
-        mode: String(f.get("mode")),
-        interval: String(f.get("interval")),
+        mode,
+        interval:
+          mode === "subscription" ? String(f.get("interval")) : "month",
         currency: String(f.get("currency")),
         paymentMinor: paymentMicros / 10000,
         creditMicros: usdToMicros(String(f.get("credit"))),
@@ -215,23 +217,34 @@ export function ProductSettings({
               </label>
               <label>
                 {tr("购买模式")}
-                <Select name="mode" defaultValue={editing.mode ?? "payment"}>
+                <Select
+                  name="mode"
+                  value={editing.mode ?? "payment"}
+                  onChange={(event) =>
+                    setEditing({
+                      ...editing,
+                      mode: event.target.value as Product["mode"],
+                    })
+                  }
+                >
                   <option value="payment">{tr("单次支付")}</option>
                   <option value="subscription">
                     {tr("周期订阅 / 预付权益")}
                   </option>
                 </Select>
               </label>
-              <label>
-                {tr("周期")}
-                <Select
-                  name="interval"
-                  defaultValue={editing.interval ?? "month"}
-                >
-                  <option value="month">{tr("每月")}</option>
-                  <option value="year">{tr("每年")}</option>
-                </Select>
-              </label>
+              {(editing.mode ?? "payment") === "subscription" && (
+                <label>
+                  {tr("周期")}
+                  <Select
+                    name="interval"
+                    defaultValue={editing.interval ?? "month"}
+                  >
+                    <option value="month">{tr("每月")}</option>
+                    <option value="year">{tr("每年")}</option>
+                  </Select>
+                </label>
+              )}
               <label>
                 {tr("支付币种")}
                 <Select
