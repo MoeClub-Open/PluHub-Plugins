@@ -30,7 +30,7 @@ AI 插件分为两组：ingress-* 面向客户端，upstream-* 面向服务商�
 
 Users 与 Auth 各自拥有 SQLite 数据库及事务迁移，通过用户能力协作。Auth 不读取 Users 表。上游凭证使用环境变量引用，与用户 API Key 分离。
 
-Auto Router 将既有物理渠道组合成虚拟提供商，支持自动模型、自动思考强度及两者同时调整；Token Speed 对每个请求使用显式 tokenizer 进行输出节拍控制。配置说明见主仓 docs/AUTO_ROUTING.md。邮件与验证插件：Mailer 提供带 TLS 的 SMTP 发件能力；Turnstile 提供服务端验证码校验。Auth 新增验证邮箱注册/登录、TOTP 与恢复码、FIDO2 安全密钥和 Passkey。配置、恢复与测试说明见主仓 docs/IDENTITY.md。详细协议矩阵与运行方式见主仓 README。
+Auto Router 将既有物理渠道组合成虚拟提供商，支持自动模型、自动思考强度及两者同时调整；Token Speed 对每个请求使用显式 tokenizer 进行输出节拍控制。配置说明见主仓 docs/AUTO_ROUTING.md。邮件与验证插件：Mailer 提供带 TLS 的 SMTP 发件能力；人机验证插件提供 Turnstile、reCAPTCHA v2/v3 和极验 v4 的服务端校验。Auth 提供验证邮箱注册/登录、TOTP 与恢复码、FIDO2 安全密钥和 Passkey。配置、恢复与测试说明见主仓 docs/IDENTITY.md。详细协议矩阵与运行方式见主仓 README。
 
 许可证：Apache-2.0。
 

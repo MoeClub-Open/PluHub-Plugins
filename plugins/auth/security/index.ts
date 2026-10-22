@@ -327,7 +327,7 @@ export function installAuthSecurity(
   async function passwordLogin(r: Request, signal: AbortSignal) {
     limit("login:" + peer(r), 30, 900000);
     const b = await readObject(r);
-    await captcha("login", b.turnstileToken, signal);
+    await captcha("login", b.captchaToken ?? b.turnstileToken, signal);
     const username = requiredString(b.username, "username", 64).toLowerCase(),
       password = requiredString(b.password, "password", 1024);
     const user = await services.lookup({ username });
@@ -371,7 +371,7 @@ export function installAuthSecurity(
     )
       throw new HostError(
         "invalid_config",
-        "Install Turnstile before requiring CAPTCHA",
+        "启用人机验证策略前，请先配置并启用验证服务。",
       );
     const w = c.webauthn as any;
     if (w?.enabled) {
@@ -429,7 +429,22 @@ export function installAuthSecurity(
       webauthnEnabled: (cfg().webauthn as any)?.enabled === true,
       captcha: cfg().captcha ?? {},
       ...(required
-        ? { turnstile: { enabled: bot.enabled, siteKey: bot.siteKey } }
+        ? {
+            captchaProvider: {
+              enabled: bot.enabled,
+              provider: bot.provider ?? "turnstile",
+              siteKey: bot.siteKey,
+              ...(bot.provider === "recaptcha"
+                ? {
+                    recaptchaVersion: bot.recaptchaVersion,
+                    recaptchaDomain: bot.recaptchaDomain,
+                  }
+                : {}),
+            },
+            ...(!bot.provider || bot.provider === "turnstile"
+              ? { turnstile: { enabled: bot.enabled, siteKey: bot.siteKey } }
+              : {}),
+          }
         : {}),
     };
   }
@@ -617,7 +632,8 @@ export function installAuthSecurity(
         : ["login", "reset"].includes(purpose) && (cfg().captcha as any)?.login
           ? "login"
           : "email";
-    if (purpose !== "bind") await captcha(action, b.turnstileToken, ctx.signal);
+    if (purpose !== "bind")
+      await captcha(action, b.captchaToken ?? b.turnstileToken, ctx.signal);
     limit("mail-peer:" + peer(r), 30, 3600000);
     limit("mail-cooldown:" + digest(email), 1, 60000);
     limit("mail-email:" + digest(email), 5, 3600000);
@@ -971,7 +987,7 @@ export function installAuthSecurity(
           ? await passwordReset.passkeyUser(b.resetChallenge, r)
           : undefined;
       if (!reauthenticate && !b.resetChallenge)
-        await captcha("login", b.turnstileToken, ctx.signal);
+        await captcha("login", b.captchaToken ?? b.turnstileToken, ctx.signal);
       let allowed;
       if (b.username || user) {
         user ??= await services.lookup({

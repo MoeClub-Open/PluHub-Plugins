@@ -1,5 +1,17 @@
 import { t as tr } from "../../lib/ui/i18n.js";
 const authMessages: Record<string, string> = {
+  get "Verification failed; complete a new challenge"() {
+    return tr("验证码验证失败，请重新尝试");
+  },
+  get "Complete a new verification challenge"() {
+    return tr("验证码验证失败，请重新尝试");
+  },
+  get "Verification service unavailable; try again"() {
+    return tr("验证码服务暂不可用，请稍后重试");
+  },
+  get "Verification service is not enabled"() {
+    return tr("验证码服务尚未配置，暂时无法继续。");
+  },
   get "Invalid or already used verification code"() {
     return tr("动态码或恢复码不正确、已使用，请重试。");
   },

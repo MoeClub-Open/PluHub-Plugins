@@ -3,7 +3,7 @@ import type { UIHost } from "@pluhub/ui-sdk";
 import type { AuthenticationOptions } from "@pluhub/contracts/security";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { t as tr, getLocale } from "../../lib/ui/i18n.js";
-import { Turnstile } from "../../lib/ui/turnstile.js";
+import { Captcha, type CaptchaHandle } from "../../lib/ui/captcha.js";
 import { PasswordField } from "./auth-fields.js";
 import { authError } from "./auth-errors.js";
 const api = "/api/plugins/official.auth";
@@ -36,6 +36,8 @@ export function PasswordReset({
     [now, setNow] = React.useState(Date.now());
   const emailInput = React.useRef<HTMLInputElement>(null),
     codeInput = React.useRef<HTMLInputElement>(null);
+  const captcha = React.useRef<CaptchaHandle>(null);
+  const captchaProvider = options.captchaProvider ?? options.turnstile;
   const cooldown = Math.max(0, Math.ceil((resendAt - now) / 1000)),
     action = options.captcha.login ? "login" : "email",
     needsCaptcha = !!options.captcha[action];
@@ -93,7 +95,9 @@ export function PasswordReset({
           purpose: "reset",
           email: email.trim(),
           language: getLocale(),
-          turnstileToken: token,
+          captchaToken: needsCaptcha
+            ? await captcha.current?.getToken()
+            : undefined,
         });
       } catch (error) {
         setToken("");
@@ -199,9 +203,10 @@ export function PasswordReset({
             </label>
             {needsCaptcha &&
               (!challenge || cooldown === 0) &&
-              (options.turnstile?.enabled && options.turnstile.siteKey ? (
-                <Turnstile
-                  siteKey={options.turnstile.siteKey}
+              (captchaProvider?.enabled && captchaProvider.siteKey ? (
+                <Captcha
+                  ref={captcha}
+                  options={captchaProvider}
                   action={action}
                   onToken={setToken}
                   resetKey={captchaReset}

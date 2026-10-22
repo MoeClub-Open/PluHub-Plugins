@@ -106,6 +106,7 @@ it("validates Turnstile action, hostname, age, replay and bounded responses", as
       );
     expect(handlers.get("captcha.options@1")()).toEqual({
       enabled: true,
+      provider: "turnstile",
       siteKey: "public",
     });
     expect(await verify("valid")).toBe(true);

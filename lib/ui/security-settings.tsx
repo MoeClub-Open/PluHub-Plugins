@@ -10,7 +10,7 @@ export function SecurityProviderForm({
   onSaved,
 }: {
   host: UIHost;
-  kind: "auth" | "mailer" | "turnstile";
+  kind: "auth" | "mailer";
   onSaved?: () => void;
 }) {
   const loaded = useLoad<any>(() => host.request("/api/host/config"));
@@ -57,29 +57,19 @@ export function SecurityProviderForm({
         };
       } else {
         next.enabled = checked("enabled");
-        if (kind === "mailer") {
-          for (const n of [
-            "host",
-            "from",
-            "user",
-            "passwordRef",
-            "tlsServerName",
-          ])
-            if (value(n)) next[n] = value(n);
-            else delete next[n];
-          next.port = Number(value("port") || 587);
-          next.secure = checked("secure");
-          next.allowInsecure = checked("allowInsecure");
-          next.secretRefs = next.passwordRef ? [next.passwordRef] : [];
-        } else {
-          for (const n of ["siteKey", "secretRef"])
-            if (value(n)) next[n] = value(n);
-            else delete next[n];
-          next.hostnames = value("hostnames")
-            .split(/[\s,]+/)
-            .filter(Boolean);
-          next.secretRefs = next.secretRef ? [next.secretRef] : [];
-        }
+        for (const n of [
+          "host",
+          "from",
+          "user",
+          "passwordRef",
+          "tlsServerName",
+        ])
+          if (value(n)) next[n] = value(n);
+          else delete next[n];
+        next.port = Number(value("port") || 587);
+        next.secure = checked("secure");
+        next.allowInsecure = checked("allowInsecure");
+        next.secretRefs = next.passwordRef ? [next.passwordRef] : [];
       }
       plugin.config = next;
       await host.request("/api/host/config", {
@@ -126,13 +116,7 @@ export function SecurityProviderForm({
       <Notice message={message || loaded.error} />
       {loaded.data && (
         <form className="card" key={JSON.stringify(settings)} onSubmit={save}>
-          {kind !== "auth" &&
-            check(
-              "enabled",
-              kind === "mailer"
-                ? tr("启用邮件发送")
-                : tr("启用 Turnstile 服务"),
-            )}
+          {kind !== "auth" && check("enabled", tr("启用邮件发送"))}
           <div className="form-grid">
             {kind === "mailer" ? (
               <>
@@ -149,21 +133,6 @@ export function SecurityProviderForm({
                 {check("secure", tr("隐式 TLS（通常使用 465 端口）"))}
                 {check("allowInsecure", tr("允许本地 SMTP 测试服务明文连接"))}
               </>
-            ) : kind === "turnstile" ? (
-              <>
-                {input("siteKey", tr("公开 Site Key"))}
-                {input(
-                  "secretRef",
-                  tr("Secret Key 引用"),
-                  "env:TURNSTILE_SECRET",
-                )}
-                {input(
-                  "hostnames",
-                  tr("允许的站点主机名"),
-                  "hub.example.com",
-                  settings.hostnames?.join(", "),
-                )}
-              </>
             ) : (
               <>
                 {check("registrationEnabled", tr("开放邮箱验证注册"))}
@@ -177,17 +146,17 @@ export function SecurityProviderForm({
                 {check("secureCookie", tr("仅通过 HTTPS 发送会话 Cookie"))}
                 {check(
                   "captchaLogin",
-                  tr("登录需要 Turnstile"),
+                  tr("登录需要人机验证"),
                   settings.captcha?.login ?? false,
                 )}
                 {check(
                   "captchaRegister",
-                  tr("注册发送验证码前需要 Turnstile"),
+                  tr("注册发送验证码前需要人机验证"),
                   settings.captcha?.register ?? false,
                 )}
                 {check(
                   "captchaEmail",
-                  tr("公开邮件验证码请求需要 Turnstile"),
+                  tr("公开邮件验证码请求需要人机验证"),
                   settings.captcha?.email ?? false,
                 )}
                 {check(
@@ -219,13 +188,11 @@ export function SecurityProviderForm({
     </>
   );
 }
-export function securityProvider(kind: "mailer" | "turnstile") {
+export function securityProvider(kind: "mailer") {
   function Page({ host }: { host: UIHost }) {
     return (
       <>
-        <PageHeading
-          title={kind === "mailer" ? tr("邮件发件") : tr("Turnstile 验证码")}
-        />
+        <PageHeading title={tr("邮件发件")} />
         <SecurityProviderForm host={host} kind={kind} />
       </>
     );

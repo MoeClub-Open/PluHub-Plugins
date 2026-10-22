@@ -68,7 +68,7 @@ export function applyVerification(
       (combined.turnstile?.enabled !== true ||
         verificationEntry(config, "turnstile")?.enabled === false)
     )
-      throw new Error("启用人机验证策略前，请先配置并启用 Turnstile 服务。");
+      throw new Error("启用人机验证策略前，请先配置并启用验证服务。");
   }
   for (const { entry, next } of changes) entry.config = next;
   return changes.length;

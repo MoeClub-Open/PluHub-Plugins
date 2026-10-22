@@ -328,7 +328,14 @@ export const en: Record<string, string> = {
   保存支付配置: "Save payment settings",
   插件未安装: "Plugin is not installed",
   启用邮件发送: "Enable email sending",
-  "启用 Turnstile 服务": "Enable Turnstile",
+  启用人机验证服务: "Enable human verification",
+  验证服务: "Verification provider",
+  验证版本: "Verification version",
+  服务域名: "Service domain",
+  最低评分: "Minimum score",
+  "极验 v4": "GeeTest v4",
+  请填写验证服务所需的密钥与站点配置:
+    "Configure the verification provider's keys and site settings",
   "SMTP 服务器": "SMTP server",
   "SMTP 端口": "SMTP port",
   发件邮箱: "Sender email",
@@ -344,11 +351,6 @@ export const en: Record<string, string> = {
   开放邮箱验证注册: "Allow email-verified registration",
   启用邮箱验证码登录: "Enable email code sign-in",
   "仅通过 HTTPS 发送会话 Cookie": "Send session cookies over HTTPS only",
-  "登录需要 Turnstile": "Require Turnstile for sign-in",
-  "注册发送验证码前需要 Turnstile":
-    "Require Turnstile before sending registration codes",
-  "公开邮件验证码请求需要 Turnstile":
-    "Require Turnstile for public email code requests",
   "启用 Passkey / FIDO2 安全密钥": "Enable passkeys / FIDO2 security keys",
   "允许的完整 Origin": "Allowed full origins",
   保存并应用: "Save and apply",
@@ -356,13 +358,14 @@ export const en: Record<string, string> = {
   测试收件邮箱: "Test recipient",
   发送测试邮件: "Send test email",
   邮件发件: "Email delivery",
-  "Turnstile 验证码": "Turnstile",
   请选择: "Please select",
   可选项: "Options",
   暂无选项: "No options",
   "验证码无法加载，请检查网络后重试":
     "Unable to load verification. Check your connection and retry.",
   "验证码验证失败，请重新尝试": "Verification failed. Please try again.",
+  "验证码服务暂不可用，请稍后重试":
+    "Verification is temporarily unavailable. Please try again later.",
   全部渠道: "All channels",
   已启用: "Enabled",
   已停用: "Disabled",
@@ -1173,8 +1176,8 @@ export const en: Record<string, string> = {
   "管理插件安装与启停，查看宿主和网关的运行状态。":
     "Install and manage plugins; inspect host and gateway status.",
   登录与验证: "Sign-in and verification",
-  "注册 邮箱 邮件 SMTP Turnstile 验证码 人机验证 TOTP Passkey FIDO2 硬件安全密钥 ":
-    "registration email mail SMTP Turnstile captcha verification TOTP Passkey FIDO2 hardware security keys ",
+  "注册 邮箱 邮件 SMTP Turnstile reCAPTCHA Geetest 极验 验证码 人机验证 TOTP Passkey FIDO2 硬件安全密钥 ":
+    "registration email mail SMTP Turnstile reCAPTCHA Geetest captcha verification TOTP Passkey FIDO2 hardware security keys ",
   系统设置: "System settings",
   管理后台: "Administration",
   两次输入的密码不一致: "The passwords do not match",
@@ -1778,8 +1781,8 @@ export const en: Record<string, string> = {
     "Manage support tickets, replies and resolution status.",
   "通过授权凭证接入 Antigravity 订阅服务。":
     "Connect authorized Antigravity subscriptions.",
-  "校验 Cloudflare Turnstile 人机验证令牌。":
-    "Verify Cloudflare Turnstile challenges.",
+  "提供 Turnstile、reCAPTCHA 与极验人机验证。":
+    "Provide Turnstile, reCAPTCHA and GeeTest verification.",
   "限制单个请求的输出 Token 速度。": "Limit token output speed per request.",
   "调用 Anthropic Messages 兼容服务并解析结果。":
     "Call Anthropic Messages compatible services.",
@@ -1819,7 +1822,6 @@ export const en: Record<string, string> = {
   "当前渠道 · 经过此节点的请求": "This channel · Requests passing this node",
   工单与支持: "Tickets and support",
   输出速度控制: "Output pacing",
-  "Turnstile 验证": "Turnstile verification",
   "Anthropic Messages 上游": "Anthropic Messages upstream",
   "Antigravity 订阅上游": "Antigravity subscription upstream",
   "Claude 订阅上游": "Claude subscription upstream",
@@ -2020,8 +2022,8 @@ export const en: Record<string, string> = {
   请求或渠道配置: "Request or channel settings",
   "启用邮箱验证前，请配置并启用邮件发送服务。":
     "Configure and enable email delivery before enabling email verification.",
-  "启用人机验证策略前，请先配置并启用 Turnstile 服务。":
-    "Configure and enable Turnstile before requiring human verification.",
+  "启用人机验证策略前，请先配置并启用验证服务。":
+    "Configure and enable a verification provider before requiring human verification.",
   "验证服务已变化，请刷新后重新配置。":
     "Verification services changed. Refresh before editing the configuration.",
   "验证配置已被其他操作修改，请刷新后重试。":

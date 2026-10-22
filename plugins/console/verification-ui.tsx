@@ -4,6 +4,7 @@ import type { Extension, UIHost, UIExtensionModule } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { Empty, Icon } from "../../lib/ui/components.js";
 import { MailTemplateTools } from "../../lib/ui/mail-preview.js";
+import { Select } from "../../lib/ui/select.js";
 import { verificationPath, verificationTab } from "./navigation.js";
 import {
   applyVerification,
@@ -142,6 +143,9 @@ export function VerificationSettings({
       {title}
       <input
         type={type}
+        step={key === "minScore" ? "any" : undefined}
+        min={key === "minScore" ? 0 : undefined}
+        max={key === "minScore" ? 1 : undefined}
         value={drafts[kind]?.[key] ?? ""}
         placeholder={placeholder}
         disabled={!active(kind) || busy}
@@ -336,31 +340,105 @@ export function VerificationSettings({
                   <h2>{tr("人机验证")}</h2>
                   {missing("turnstile")}
 
-                  {check("turnstile", "enabled", tr("启用 Turnstile 服务"))}
+                  {check("turnstile", "enabled", tr("启用人机验证服务"))}
                   <div className="form-grid">
-                    {input("turnstile", "siteKey", tr("公开 Site Key"))}
+                    <label>
+                      {tr("验证服务")}
+                      <Select
+                        value={turnstile.provider ?? "turnstile"}
+                        disabled={!active("turnstile") || busy}
+                        onChange={(event) =>
+                          patch("turnstile", { provider: event.target.value })
+                        }
+                      >
+                        <option value="turnstile">Cloudflare Turnstile</option>
+                        <option value="recaptcha">Google reCAPTCHA</option>
+                        <option value="geetest">{tr("极验 v4")}</option>
+                      </Select>
+                    </label>
+                    {turnstile.provider === "recaptcha" && (
+                      <>
+                        <label>
+                          {tr("验证版本")}
+                          <Select
+                            value={turnstile.recaptchaVersion ?? "v2"}
+                            disabled={!active("turnstile") || busy}
+                            onChange={(event) =>
+                              patch("turnstile", {
+                                recaptchaVersion: event.target.value,
+                              })
+                            }
+                          >
+                            <option value="v2">reCAPTCHA v2</option>
+                            <option value="v3">reCAPTCHA v3</option>
+                          </Select>
+                        </label>
+                        <label>
+                          {tr("服务域名")}
+                          <Select
+                            value={
+                              turnstile.recaptchaDomain ?? "www.google.com"
+                            }
+                            disabled={!active("turnstile") || busy}
+                            onChange={(event) =>
+                              patch("turnstile", {
+                                recaptchaDomain: event.target.value,
+                              })
+                            }
+                          >
+                            <option value="www.google.com">
+                              www.google.com
+                            </option>
+                            <option value="www.recaptcha.net">
+                              www.recaptcha.net
+                            </option>
+                          </Select>
+                        </label>
+                        {turnstile.recaptchaVersion === "v3" &&
+                          input(
+                            "turnstile",
+                            "minScore",
+                            tr("最低评分"),
+                            "0.5",
+                            "number",
+                          )}
+                      </>
+                    )}
+                    {input(
+                      "turnstile",
+                      "siteKey",
+                      turnstile.provider === "geetest"
+                        ? "Captcha ID"
+                        : tr("公开 Site Key"),
+                    )}
                     {input(
                       "turnstile",
                       "secretRef",
                       tr("Secret Key 引用"),
-                      "env:TURNSTILE_SECRET",
+                      turnstile.provider === "geetest"
+                        ? "env:GEETEST_SECRET"
+                        : turnstile.provider === "recaptcha"
+                          ? "env:RECAPTCHA_SECRET"
+                          : "env:TURNSTILE_SECRET",
                     )}
-                    <label>
-                      {tr("允许的站点主机名")}
-                      <input
-                        value={hostnamesText}
-                        disabled={!active("turnstile") || busy}
-                        onChange={(e) => {
-                          setHostnamesText(e.target.value);
-                          patch("turnstile", {
-                            hostnames: e.target.value
-                              .split(/[\s,]+/)
-                              .filter(Boolean),
-                          });
-                        }}
-                        placeholder="hub.example.com"
-                      />
-                    </label>
+                    {turnstile.provider !== "geetest" && (
+                      <label>
+                        {tr("允许的站点主机名")}
+                        <input
+                          value={hostnamesText}
+                          disabled={!active("turnstile") || busy}
+                          onChange={(e) => {
+                            setHostnamesText(e.target.value);
+                            patch("turnstile", {
+                              hostnames: e.target.value
+                                .split(/[\s,]+/)
+                                .filter(Boolean),
+                            });
+                          }}
+                          placeholder="hub.example.com"
+                        />
+                      </label>
+                    )}
                   </div>
                   <h3>{tr("验证场景")}</h3>
                   <div className="form-grid">

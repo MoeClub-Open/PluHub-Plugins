@@ -1,2 +1,5 @@
-import { securityProvider } from "../../lib/ui/security-settings.js";
-export const mount = securityProvider("turnstile");
+import type { UIHost } from "@pluhub/ui-sdk";
+export function mount(_element: HTMLElement, host: UIHost) {
+  host.navigate("/settings/verification?tab=captcha");
+  return () => {};
+}

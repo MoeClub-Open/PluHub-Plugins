@@ -3,7 +3,7 @@ import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { useLoad } from "../../lib/ui/mount.js";
-import { Turnstile } from "../../lib/ui/turnstile.js";
+import { Captcha, type CaptchaHandle } from "../../lib/ui/captcha.js";
 import { Icon } from "../../lib/ui/components.js";
 import { authLink } from "./navigation.js";
 import { PasswordField } from "./auth-fields.js";
@@ -37,6 +37,7 @@ export function Login({
     [token, setToken] = React.useState(""),
     [reset, setReset] = React.useState(0);
   const emailInput = React.useRef<HTMLInputElement>(null);
+  const captcha = React.useRef<CaptchaHandle>(null);
   const codeInput = React.useRef<HTMLInputElement>(null);
   const busy = !!pending;
   React.useEffect(() => {
@@ -54,6 +55,7 @@ export function Login({
     return () => clearInterval(timer);
   }, [resendAt]);
   const c = options.data;
+  const captchaProvider = c?.captchaProvider ?? c?.turnstile;
   const action =
     mode === "register" && c?.captcha.register
       ? "register"
@@ -106,7 +108,9 @@ export function Login({
           email: email.trim(),
           purpose: mode === "register" ? "register" : "login",
           language: getLocale(),
-          turnstileToken: token,
+          captchaToken: needsCaptcha
+            ? await captcha.current?.getToken()
+            : undefined,
         }),
       });
       setChallenge(result.challenge);
@@ -126,7 +130,7 @@ export function Login({
       setMessageTone("error");
       return;
     }
-    await run(() =>
+    await run(async () =>
       client.request(
         api +
           (mode === "password"
@@ -140,7 +144,13 @@ export function Login({
           method: "POST",
           body: JSON.stringify(
             mode === "password"
-              ? { username, password, turnstileToken: token }
+              ? {
+                  username,
+                  password,
+                  captchaToken: needsCaptcha
+                    ? await captcha.current?.getToken()
+                    : undefined,
+                }
               : mode === "mfa"
                 ? {
                     challenge,
@@ -165,7 +175,9 @@ export function Login({
         method: "POST",
         body: JSON.stringify({
           ...(username ? { username } : {}),
-          turnstileToken: token,
+          captchaToken: c?.captcha.login
+            ? await captcha.current?.getToken()
+            : undefined,
         }),
       });
       const response = await startAuthentication({
@@ -352,9 +364,10 @@ export function Login({
           </div>
         )}
         {needsCaptcha &&
-          (c?.turnstile?.enabled && c.turnstile.siteKey ? (
-            <Turnstile
-              siteKey={c.turnstile.siteKey}
+          (captchaProvider?.enabled && captchaProvider.siteKey ? (
+            <Captcha
+              ref={captcha}
+              options={captchaProvider}
               action={action}
               onToken={setToken}
               resetKey={reset}

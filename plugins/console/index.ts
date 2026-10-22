@@ -1,6 +1,22 @@
 import { definePlugin, HostError } from "@pluhub/sdk";
 import { readBranding, escapeHtml } from "./branding.js";
 import { readPortal, publicPortal } from "./portal.js";
+const google =
+  "https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/";
+const geetest =
+  "https://static.geetest.com https://static.geevisit.com https://gcaptcha4.geetest.com https://gcaptcha4.geevisit.com";
+const captchaPolicy = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com ${google} https://www.gstatic.com/recaptcha/ ${geetest}`,
+  `style-src 'self' 'unsafe-inline' ${geetest}`,
+  `font-src 'self' data: ${geetest}`,
+  `connect-src 'self' https://challenges.cloudflare.com ${google} ${geetest}`,
+  `frame-src https://challenges.cloudflare.com ${google} https://recaptcha.google.com/recaptcha/ ${geetest}`,
+  "img-src 'self' data: blob: https:",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
 export default definePlugin({
   setup(host) {
     host.validateConfig((config) => {
@@ -80,8 +96,7 @@ export default definePlugin({
               headers: {
                 "content-type": "text/html; charset=utf-8",
                 "cache-control": "no-store",
-                "content-security-policy":
-                  "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                "content-security-policy": captchaPolicy,
                 "permissions-policy":
                   "publickey-credentials-get=(self), publickey-credentials-create=(self)",
               },

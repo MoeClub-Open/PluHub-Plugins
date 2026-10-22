@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "official.turnstile",
   "category": "identity",
-  "name": "Turnstile 验证",
-  "description": "校验 Cloudflare Turnstile 人机验证令牌。",
+  "name": "人机验证",
+  "description": "提供 Turnstile、reCAPTCHA 与极验人机验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -57,12 +57,39 @@
           "maxLength": 253,
           "pattern": "^[a-zA-Z0-9.-]+$"
         }
+      },
+      "provider": {
+        "type": "string",
+        "enum": [
+          "turnstile",
+          "recaptcha",
+          "geetest"
+        ]
+      },
+      "recaptchaVersion": {
+        "type": "string",
+        "enum": [
+          "v2",
+          "v3"
+        ]
+      },
+      "recaptchaDomain": {
+        "type": "string",
+        "enum": [
+          "www.google.com",
+          "www.recaptcha.net"
+        ]
+      },
+      "minScore": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
       }
     }
   },
   "ui": {
     "entry": "dist/ui.js",
-    "title": "Turnstile 验证码",
+    "title": "人机验证",
     "path": "/turnstile",
     "public": false,
     "group": "verification-services",
