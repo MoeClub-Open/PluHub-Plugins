@@ -582,7 +582,7 @@ function Page({ host }: { host: UIHost }) {
             title={tr("费用估算明细")}
           />
           {selected.routing && <RoutingDetails value={selected.routing} />}
-          {management && (
+          {scope.data?.scope === "all" && (
             <a
               className="button secondary"
               href={"#/logs?requestId=" + encodeURIComponent(selected.id)}
