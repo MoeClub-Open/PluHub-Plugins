@@ -9,15 +9,16 @@ export const subscriptionDefaults = {
     tokenUrl: "https://auth.openai.com/oauth/token",
     clientId: "app_EMoamEEZ73f0CkXaXp7hrann",
     redirectUri: "http://localhost:1455/auth/callback",
-    scope: "openid profile email offline_access",
+    scope: "openid email profile offline_access",
   },
   "claude-subscription": {
     baseUrl: "https://api.anthropic.com",
-    authorizeUrl: "https://claude.com/cai/oauth/authorize",
+    authorizeUrl: "https://claude.ai/oauth/authorize",
     tokenUrl: "https://platform.claude.com/v1/oauth/token",
     clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-    redirectUri: "https://platform.claude.com/oauth/code/callback",
-    scope: "user:profile user:inference user:sessions:claude_code",
+    redirectUri: "http://localhost:54545/callback",
+    scope:
+      "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload",
   },
   antigravity: {
     baseUrl: "https://cloudcode-pa.googleapis.com",
@@ -25,7 +26,7 @@ export const subscriptionDefaults = {
     tokenUrl: "https://oauth2.googleapis.com/token",
     clientId:
       "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com",
-    redirectUri: "http://localhost:8085/callback",
+    redirectUri: "http://localhost:51121/oauth-callback",
     scope:
       "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs",
   },

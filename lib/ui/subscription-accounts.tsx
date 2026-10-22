@@ -10,10 +10,7 @@ import {
 } from "./components.js";
 import { SubscriptionEditor } from "./subscription-editor.js";
 import { t as tr, getLocale } from "./i18n.js";
-import {
-  subscriptionDefaults,
-  type SubscriptionKind,
-} from "../ai/subscription-auth.js";
+import type { SubscriptionKind } from "../ai/subscription-auth.js";
 import {
   installedSubscriptionProviders,
   subscriptionApi,
@@ -37,115 +34,6 @@ const statusLabel = (status: string) =>
       } as any
     )[status] ?? status,
   );
-function OAuthSettings({
-  host,
-  close,
-  provider,
-}: {
-  host: UIHost;
-  close: () => void;
-  provider: SubscriptionKind;
-}) {
-  const rootApi = subscriptionApi(provider);
-  const loaded = useLoad<any>(() => host.request("/api/host/config"));
-  const [message, setMessage] = React.useState(""),
-    [busy, setBusy] = React.useState(false);
-  const plugin = (config: any) =>
-    config.plugins.find(
-      (p: any) =>
-        p.path.replaceAll("\\", "/").endsWith("/upstream-" + provider) ||
-        p.path.replaceAll("\\", "/").endsWith("/official.upstream-" + provider),
-    );
-  const profile = {
-    ...subscriptionDefaults[provider],
-    ...plugin(loaded.data ?? { plugins: [] })?.config?.oauth?.[provider],
-  };
-  return (
-    <Dialog title={tr("订阅授权设置")} close={close}>
-      <Notice message={message || loaded.error} />
-      <label>
-        {tr("本站回调地址")}
-        <input readOnly value={location.origin + rootApi + "/oauth/callback"} />
-      </label>
-      <p className="muted">
-        {tr("使用网站回调时，须先在提供商的 OAuth 客户端登记此地址。")}
-      </p>
-      {loaded.data && (
-        <form
-          className="subscription-form"
-          key={provider}
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const data = new FormData(e.currentTarget);
-            setBusy(true);
-            setMessage("");
-            try {
-              const config: any = await host.request("/api/host/config"),
-                entry = plugin(config),
-                next: any = {};
-              for (const field of [
-                "authorizeUrl",
-                "tokenUrl",
-                "clientId",
-                "redirectUri",
-                "scope",
-                "clientSecretRef",
-              ]) {
-                const value = String(data.get(field) ?? "").trim();
-                if (value) next[field] = value;
-              }
-              entry.config ??= {};
-              entry.config.oauth ??= {};
-              entry.config.oauth[provider] = next;
-              if (next.clientSecretRef)
-                entry.config.secretRefs = [
-                  ...new Set([
-                    ...(entry.config.secretRefs ?? []),
-                    next.clientSecretRef,
-                  ]),
-                ];
-              await host.request("/api/host/config", {
-                method: "PUT",
-                body: JSON.stringify(config),
-              });
-              close();
-            } catch (error) {
-              setMessage((error as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          {[
-            ["clientId", "Client ID"],
-            ["authorizeUrl", tr("授权地址")],
-            ["tokenUrl", tr("令牌地址")],
-            ["redirectUri", tr("回调地址")],
-            ["scope", "Scope"],
-            ["clientSecretRef", tr("客户端密钥引用")],
-          ].map(([field, label]) => (
-            <label key={field}>
-              {label}
-              <input
-                name={field}
-                required={field !== "clientSecretRef"}
-                defaultValue={profile[field!] ?? ""}
-                placeholder={
-                  field === "clientSecretRef"
-                    ? "env:ANTIGRAVITY_OAUTH_CLIENT_SECRET"
-                    : ""
-                }
-              />
-            </label>
-          ))}
-          <div className="actions">
-            <button disabled={busy}>{tr("保存")}</button>
-          </div>
-        </form>
-      )}
-    </Dialog>
-  );
-}
 function ProviderAccounts({
   host,
   personal = false,
@@ -161,7 +49,6 @@ function ProviderAccounts({
   const data = useLoad<any[]>(() => host.request(api + "/accounts"));
   const [query, setQuery] = React.useState("");
   const [edit, setEdit] = React.useState<any>(),
-    [settings, setSettings] = React.useState(false),
     [remove, setRemove] = React.useState<any>();
   const [message, setMessage] = React.useState(""),
     [busy, setBusy] = React.useState(false);
@@ -191,13 +78,8 @@ function ProviderAccounts({
   }
   return (
     <section className="subscription-page">
-      <style>{`.subscription-form{display:grid;gap:12px;margin-top:12px}.subscription-form textarea{min-height:100px;font-family:monospace;font-size:12px}.oauth-connect{display:grid;gap:10px}.oauth-device-code{font-family:monospace;font-size:18px;letter-spacing:3px;text-align:center}.oauth-connect p{margin:0}.subscription-page .subscription-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}.subscription-tools input{flex:1;min-width:160px}.subscription-tools>button{margin-left:auto}.subscription-page td{vertical-align:middle}.subscription-page td small{display:block;color:var(--muted);margin-top:4px}.subscription-page .row-actions{display:flex;flex-wrap:wrap;gap:4px}.subscription-page .row-actions button{padding:5px 8px;font-size:12px}.subscription-page .subscription-table{overflow:auto}.subscription-form .actions{justify-content:flex-end}`}</style>
+      <style>{`.subscription-form{display:grid;gap:12px;margin-top:12px}.subscription-form textarea{min-height:64px;font-family:monospace;font-size:12px}.oauth-connect{display:grid;gap:10px}.subscription-page .subscription-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}.subscription-tools input{flex:1;min-width:160px}.subscription-tools>button{margin-left:auto}.subscription-page td{vertical-align:middle}.subscription-page td small{display:block;color:var(--muted);margin-top:4px}.subscription-page .row-actions{display:flex;flex-wrap:wrap;gap:4px}.subscription-page .row-actions button{padding:5px 8px;font-size:12px}.subscription-page .subscription-table{overflow:auto}.subscription-form .actions{justify-content:flex-end}`}</style>
       <PageHeading title={providers[provider] + " · " + tr("订阅账号")}>
-        {!personal && (
-          <button className="secondary" onClick={() => setSettings(true)}>
-            {tr("授权设置")}
-          </button>
-        )}
         <button onClick={() => setEdit({})}>
           <Icon name="plus" size={15} />
           {tr("添加账号")}
@@ -375,13 +257,6 @@ function ProviderAccounts({
           account={edit.id ? edit : undefined}
           close={() => setEdit(undefined)}
           saved={data.reload}
-        />
-      )}
-      {settings && (
-        <OAuthSettings
-          host={host}
-          provider={provider}
-          close={() => setSettings(false)}
         />
       )}
       {remove && (

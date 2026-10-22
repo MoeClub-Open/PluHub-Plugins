@@ -2,8 +2,7 @@ import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { SubscriptionKind } from "../ai/subscription-auth.js";
 import { Dialog, Icon } from "./components.js";
-import { Notice, useLoad } from "./mount.js";
-import { Select } from "./select.js";
+import { Notice } from "./mount.js";
 import { t as tr } from "./i18n.js";
 
 const providers: Record<SubscriptionKind, string> = {
@@ -11,20 +10,7 @@ const providers: Record<SubscriptionKind, string> = {
   "claude-subscription": "Claude",
   antigravity: "Antigravity",
 };
-type Flow = {
-  id: string;
-  url: string;
-  mode: "device" | "callback" | "manual";
-  userCode?: string;
-  expiresAt: number;
-  retryAfterMs?: number;
-};
-type Provider = {
-  provider: SubscriptionKind;
-  ready: boolean;
-  device: boolean;
-  automatic: boolean;
-};
+type Flow = { id: string; url: string; expiresAt: number };
 
 export function SubscriptionEditor({
   host,
@@ -32,7 +18,7 @@ export function SubscriptionEditor({
   close,
   saved,
   api,
-  provider: fixedProvider,
+  provider,
 }: {
   host: UIHost;
   api: string;
@@ -41,26 +27,18 @@ export function SubscriptionEditor({
   close: () => void;
   saved: () => void;
 }) {
-  const available = useLoad<Provider[]>(() =>
-    host.request(api + "/oauth/providers"),
-  );
-  const [provider, setProvider] =
-    React.useState<SubscriptionKind>(fixedProvider);
   const [name, setName] = React.useState(account?.name ?? "");
   const [maxConcurrency, setMax] = React.useState(account?.maxConcurrency ?? 2);
   const [authorization, setAuthorization] = React.useState("");
   const [projectId, setProject] = React.useState(account?.projectId ?? "");
   const [tab, setTab] = React.useState(account ? "details" : "login");
-  const [method, setMethod] = React.useState("");
   const [flow, setFlow] = React.useState<Flow>();
   const [callback, setCallback] = React.useState("");
-  const [busy, setBusy] = React.useState(false),
-    [message, setMessage] = React.useState("");
+  const [copied, setCopied] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [message, setMessage] = React.useState("");
   const current = React.useRef<Flow | undefined>(undefined);
   const alive = React.useRef(true);
-  const popup = React.useRef<Window | null>(null);
-  const profile = available.data?.find((p) => p.provider === provider);
-  const selectedMethod = method || (profile?.device ? "device" : "browser");
   const input = {
     id: account?.id,
     provider,
@@ -70,8 +48,6 @@ export function SubscriptionEditor({
   const cancel = React.useCallback(async () => {
     const previous = current.current;
     current.current = undefined;
-    popup.current?.close();
-    popup.current = null;
     if (previous)
       await host
         .request(api + "/oauth/cancel", {
@@ -89,8 +65,6 @@ export function SubscriptionEditor({
   }, [cancel]);
   async function done(result: any) {
     current.current = undefined;
-    popup.current?.close();
-    popup.current = null;
     if (
       provider === "antigravity" &&
       projectId &&
@@ -105,40 +79,6 @@ export function SubscriptionEditor({
       close();
     }
   }
-  React.useEffect(() => {
-    if (!flow || flow.mode === "manual") return;
-    let gone = false,
-      timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      try {
-        if (Date.now() >= flow!.expiresAt)
-          throw new Error(tr("授权会话已过期，请重新开始"));
-        const result: any = await host.request(api + "/oauth/status", {
-          method: "POST",
-          body: JSON.stringify({ id: flow!.id }),
-        });
-        if (gone) return;
-        if (result.status === "complete") {
-          await done(result.account);
-          return;
-        }
-        timer = setTimeout(
-          () => void poll(),
-          Math.min(300000, Math.max(1000, result.retryAfterMs ?? 1500)),
-        );
-      } catch (error) {
-        if (!gone) {
-          setMessage((error as Error).message);
-          setBusy(false);
-        }
-      }
-    }
-    timer = setTimeout(() => void poll(), flow.retryAfterMs ?? 1500);
-    return () => {
-      gone = true;
-      clearTimeout(timer);
-    };
-  }, [flow]);
   async function run(work: () => Promise<void>) {
     setBusy(true);
     setMessage("");
@@ -150,41 +90,48 @@ export function SubscriptionEditor({
       if (alive.current) setBusy(false);
     }
   }
-  async function start() {
-    popup.current = window.open(
-      "about:blank",
-      "_blank",
-      "popup,width=620,height=760",
-    );
-    if (popup.current) popup.current.opener = null;
+  async function authorize(action: "copy" | "open") {
+    const opened =
+      action === "open" ? window.open("about:blank", "_blank") : null;
+    if (opened) opened.opener = null;
     await run(async () => {
       try {
-        const next = await host.request<Flow>(api + "/oauth/start", {
-          method: "POST",
-          body: JSON.stringify({ ...input, mode: selectedMethod }),
-        });
-        current.current = next;
-        if (!alive.current) {
+        let next = current.current;
+        if (!next || next.expiresAt <= Date.now()) {
           await cancel();
-          return;
+          next = await host.request<Flow>(api + "/oauth/start", {
+            method: "POST",
+            body: JSON.stringify({ ...input, mode: "manual" }),
+          });
+          current.current = next;
+          if (!alive.current) {
+            await cancel();
+            opened?.close();
+            return;
+          }
+          setFlow(next);
+          setCallback("");
+          setCopied(false);
         }
-        setFlow(next);
-        setAuthorization("");
-        if (popup.current) popup.current.location.href = next.url;
+        if (action === "copy") {
+          await navigator.clipboard.writeText(next.url);
+          if (alive.current) setCopied(true);
+        } else if (opened) opened.location.replace(next.url);
+        else throw new Error(tr("无法打开新标签页，请复制授权链接。"));
       } catch (error) {
-        popup.current?.close();
-        popup.current = null;
+        opened?.close();
         throw error;
       }
     });
   }
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    if (tab === "login" && !flow) return;
     await run(async () => {
       const result = flow
         ? await host.request(api + "/oauth/finish", {
             method: "POST",
-            body: JSON.stringify({ id: flow.id, callback }),
+            body: JSON.stringify({ id: flow.id, callback: callback.trim() }),
           })
         : tab === "import"
           ? await host.request(api + "/accounts", {
@@ -207,11 +154,15 @@ export function SubscriptionEditor({
   }
   return (
     <Dialog
-      title={account ? tr("编辑订阅账号") : tr("添加订阅账号")}
+      title={
+        providers[provider] +
+        " · " +
+        (account ? tr("编辑订阅账号") : tr("添加订阅账号"))
+      }
       close={close}
     >
       <form className="subscription-form" onSubmit={save}>
-        <Notice message={message || available.error} />
+        <Notice message={message} />
         {!flow && (
           <div className="tabs" role="tablist" aria-label={tr("账号接入方式")}>
             {(account
@@ -221,7 +172,7 @@ export function SubscriptionEditor({
                   ["import", tr("导入授权")],
                 ]
               : [
-                  ["login", tr("OAuth 登录")],
+                  ["login", tr("登录授权")],
                   ["import", tr("导入授权")],
                 ]
             ).map(([id, title]) => (
@@ -250,28 +201,9 @@ export function SubscriptionEditor({
               value={name}
               placeholder={providers[provider]}
               required={tab === "details"}
-              disabled={!!flow}
-              onChange={(e) => setName(e.target.value)}
+              disabled={!!flow || busy}
+              onChange={(event) => setName(event.target.value)}
             />
-          </label>
-          <label>
-            {tr("提供商")}
-            <Select
-              value={provider}
-              disabled
-              onChange={(e) => {
-                setProvider(e.target.value as SubscriptionKind);
-                setMethod("");
-                setAuthorization("");
-                setMessage("");
-              }}
-            >
-              {Object.entries(providers).map(([id, title]) => (
-                <option key={id} value={id}>
-                  {title}
-                </option>
-              ))}
-            </Select>
           </label>
           <label>
             {tr("最大并发")}
@@ -281,8 +213,8 @@ export function SubscriptionEditor({
               min={1}
               max={100}
               value={maxConcurrency}
-              disabled={!!flow}
-              onChange={(e) => setMax(Number(e.target.value))}
+              disabled={!!flow || busy}
+              onChange={(event) => setMax(Number(event.target.value))}
             />
           </label>
           {provider === "antigravity" && (
@@ -290,103 +222,80 @@ export function SubscriptionEditor({
               Project ID
               <input
                 value={projectId}
-                onChange={(e) => setProject(e.target.value)}
+                disabled={busy}
+                onChange={(event) => setProject(event.target.value)}
               />
-            </label>
-          )}
-          {!flow && tab === "login" && profile?.device && (
-            <label>
-              {tr("授权方式")}
-              <Select
-                value={selectedMethod}
-                onChange={(e) => setMethod(e.target.value)}
-              >
-                <option value="device">{tr("设备授权")}</option>
-                <option value="browser">{tr("浏览器授权")}</option>
-              </Select>
             </label>
           )}
         </div>
-        {flow ? (
+        {tab === "login" && (
           <div className="oauth-connect">
-            {flow.mode === "device" && (
-              <>
-                <label>
-                  {tr("一次性授权码")}
-                  <input
-                    aria-label={tr("一次性授权码")}
-                    readOnly
-                    value={flow.userCode}
-                    className="oauth-device-code"
-                  />
-                </label>
-                <p>{tr("在授权页面输入此码，完成后会自动连接。")}</p>
-              </>
+            {flow && (
+              <label>
+                {tr("授权链接")}
+                <input
+                  readOnly
+                  value={flow.url}
+                  spellCheck={false}
+                  autoComplete="off"
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              </label>
             )}
-            <a
-              className="button secondary"
-              href={flow.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {tr("打开授权页面")}
-              <Icon name="arrow" size={14} />
-            </a>
-            {flow.mode === "manual" ? (
+            <div className="actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => void authorize("copy")}
+              >
+                <Icon name="copy" size={14} />
+                {copied ? tr("已复制") : tr("复制授权链接")}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => void authorize("open")}
+              >
+                {tr("打开授权页面")}
+                <Icon name="arrow" size={14} />
+              </button>
+            </div>
+            {flow && (
               <>
                 <label>
-                  {tr("授权码或回调地址")}
+                  {tr("回调链接或授权码")}
                   <textarea
                     required
+                    rows={2}
                     autoComplete="off"
                     spellCheck={false}
                     value={callback}
-                    onChange={(e) => setCallback(e.target.value)}
+                    disabled={busy}
+                    onChange={(event) => setCallback(event.target.value)}
                   />
                 </label>
-                <p className="muted">
-                  {tr(
-                    "完成提供商登录后，粘贴授权码（code#state）或完整回调地址。",
-                  )}
-                </p>
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await cancel();
+                      setFlow(undefined);
+                      setCallback("");
+                      setCopied(false);
+                    })
+                  }
+                >
+                  {tr("重新开始")}
+                </button>
               </>
-            ) : (
-              <p role="status" className="muted">
-                {tr("等待授权完成…")}
-              </p>
             )}
-            <button
-              type="button"
-              className="ghost"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await cancel();
-                  setFlow(undefined);
-                  setCallback("");
-                })
-              }
-            >
-              {tr("重新开始")}
-            </button>
           </div>
-        ) : tab === "login" ? (
-          <>
-            {profile && !profile.ready && (
-              <Notice
-                message={tr("请先配置 Antigravity OAuth 客户端密钥引用")}
-              />
-            )}
-            <button
-              type="button"
-              disabled={busy || !profile?.ready}
-              onClick={() => void start()}
-            >
-              <Icon name="key" size={15} />
-              {tr("连接 {0}", { "0": providers[provider] })}
-            </button>
-          </>
-        ) : tab === "import" ? (
+        )}
+        {tab === "import" && (
           <label>
             {tr("授权 JSON")}
             <textarea
@@ -395,10 +304,11 @@ export function SubscriptionEditor({
               autoComplete="off"
               spellCheck={false}
               value={authorization}
-              onChange={(e) => setAuthorization(e.target.value)}
+              disabled={busy}
+              onChange={(event) => setAuthorization(event.target.value)}
             />
           </label>
-        ) : null}
+        )}
         <div className="actions">
           <button
             type="button"
@@ -408,7 +318,7 @@ export function SubscriptionEditor({
           >
             {tr("取消")}
           </button>
-          {(flow?.mode === "manual" || (!flow && tab !== "login")) && (
+          {(flow || tab !== "login") && (
             <button disabled={busy}>
               {flow ? tr("完成授权") : tr("保存")}
             </button>

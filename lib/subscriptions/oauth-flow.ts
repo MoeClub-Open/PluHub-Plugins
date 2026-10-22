@@ -86,7 +86,9 @@ export function createSubscriptionOAuth(
       const config = oauthConfig(host, provider);
       return {
         provider,
-        ready: provider !== "antigravity" || !!config.clientSecretRef,
+        ready:
+          provider !== "antigravity" ||
+          !!(config.clientSecretRef || config.clientSecret),
         device: deviceSupported(provider),
         automatic: automatic(config.redirectUri, requestUrl),
         callbackUrl: new URL(callbackPath, requestUrl).href,
@@ -121,7 +123,7 @@ export function createSubscriptionOAuth(
       {
         grant_type: "authorization_code",
         code,
-        code_verifier: verifier,
+        ...(flow.provider === "antigravity" ? {} : { code_verifier: verifier }),
         redirect_uri: redirectUri,
         ...(flow.provider === "claude-subscription"
           ? { state: flow.state }
@@ -154,13 +156,19 @@ export function createSubscriptionOAuth(
       config = oauthConfig(host, provider);
     if (provider !== kind)
       failure("subscription_provider", "订阅账号与提供商不匹配");
-    if (provider === "antigravity" && !config.clientSecretRef)
+    if (
+      provider === "antigravity" &&
+      !(config.clientSecretRef || config.clientSecret)
+    )
       failure(
         "oauth_client_secret",
         "请先配置 Antigravity OAuth 客户端密钥引用",
         503,
       );
-    if (input.mode !== undefined && !["browser", "device"].includes(input.mode))
+    if (
+      input.mode !== undefined &&
+      !["manual", "browser", "device"].includes(input.mode)
+    )
       failure("oauth_mode", "无效的授权方式");
     if (input.mode === "device" && !deviceSupported(provider))
       failure("oauth_mode", "当前提供商不支持设备授权");
@@ -185,7 +193,8 @@ export function createSubscriptionOAuth(
         mode:
           input.mode === "device"
             ? "device"
-            : automatic(config.redirectUri, requestUrl)
+            : input.mode !== "manual" &&
+                automatic(config.redirectUri, requestUrl)
               ? "callback"
               : "manual",
         controller: new AbortController(),
@@ -242,16 +251,23 @@ export function createSubscriptionOAuth(
         redirect_uri: flow.redirectUri,
         scope: config.scope,
         state: flow.state,
-        code_challenge: createHash("sha256")
-          .update(flow.verifier)
-          .digest("base64url"),
-        code_challenge_method: "S256",
+        ...(provider === "antigravity"
+          ? {}
+          : {
+              code_challenge: createHash("sha256")
+                .update(flow.verifier)
+                .digest("base64url"),
+              code_challenge_method: "S256",
+            }),
       }))
         url.searchParams.set(key, String(value));
       if (provider === "codex") {
+        url.searchParams.set("prompt", "login");
         url.searchParams.set("id_token_add_organizations", "true");
         url.searchParams.set("codex_cli_simplified_flow", "true");
       }
+      if (provider === "claude-subscription")
+        url.searchParams.set("code", "true");
       if (provider === "antigravity") {
         url.searchParams.set("access_type", "offline");
         url.searchParams.set("prompt", "consent");

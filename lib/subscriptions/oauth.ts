@@ -13,6 +13,13 @@ export function oauthConfig(
 ) {
   const overrides = (settings.oauth as any)?.[kind] ?? {};
   const config = { ...subscriptionDefaults[kind], ...overrides };
+  // Public installed-app credential used by the native Antigravity client.
+  // https://github.com/router-for-me/CLIProxyAPI/blob/main/internal/auth/antigravity/constants.go
+  if (
+    kind === "antigravity" &&
+    config.clientId === subscriptionDefaults.antigravity.clientId
+  )
+    config.clientSecret = "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";
   for (const field of ["authorizeUrl", "tokenUrl"] as const) {
     const url = new URL(config[field]);
     if (
@@ -55,6 +62,8 @@ export async function tokenRequest(
   const body = { ...fields, client_id: config.clientId };
   if (config.clientSecretRef)
     (body as any).client_secret = host.secret(config.clientSecretRef);
+  else if (config.clientSecret)
+    (body as any).client_secret = config.clientSecret;
   else if (kind === "antigravity")
     throw new HostError(
       "oauth_client_secret",
