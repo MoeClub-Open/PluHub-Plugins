@@ -38,7 +38,7 @@ export function ChannelBinding({
               ?.filter((c) => c.scope === "personal")
               .map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {c.name} · ×{c.consumptionMultiplier ?? 1}
                 </option>
               ))}
           </optgroup>
@@ -47,7 +47,7 @@ export function ChannelBinding({
               ?.filter((c) => c.scope === "platform")
               .map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {c.name} · ×{c.consumptionMultiplier ?? 1}
                 </option>
               ))}
           </optgroup>

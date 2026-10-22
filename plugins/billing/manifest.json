@@ -5,7 +5,7 @@
   "name": "计费与余额",
   "description": "管理余额预留、结算和资金账本。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -26,30 +26,6 @@
     "properties": {
       "enabled": {
         "type": "boolean"
-      },
-      "groups": {
-        "type": "object",
-        "maxProperties": 128,
-        "propertyNames": {
-          "pattern": "^[a-zA-Z0-9_.-]{1,64}$"
-        },
-        "additionalProperties": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["name", "multiplier"],
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64
-            },
-            "multiplier": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1000
-            }
-          }
-        }
       },
       "reserveOutputTokens": {
         "type": "integer",

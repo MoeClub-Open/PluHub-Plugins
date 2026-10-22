@@ -34,9 +34,9 @@ export function Account({ host }: { host: UIHost }) {
           <strong>{me.data?.username ?? "—"}</strong>
         </div>
         <div>
-          <small>{tr("账号角色")}</small>
+          <small>{tr("身份")}</small>
           <strong>
-            {me.data?.role === "admin" ? tr("管理员") : tr("普通用户")}
+            {me.data?.role === "admin" ? tr("管理员") : tr("非管理员")}
           </strong>
         </div>
         <a className="text-link" href="#/auth">

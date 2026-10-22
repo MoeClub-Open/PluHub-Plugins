@@ -422,8 +422,7 @@ export default definePlugin({
           "ai.channels@1",
           { userId },
         );
-        const channel = options.find((c) => c.id === channelId);
-        if (!channel)
+        if (!options.some((channel) => channel.id === channelId))
           throw new HostError(
             "invalid_binding",
             "渠道不可用或不属于当前用户",

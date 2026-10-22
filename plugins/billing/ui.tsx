@@ -6,7 +6,7 @@ import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, Stat } from "../../lib/ui/components.js";
 import { usdToMicros } from "../../lib/commerce/decimal.js";
 import { BillingAdmin } from "./admin-ui.js";
-import { BillingGroups } from "./groups-ui.js";
+import { OutputBudgetSettings } from "./budget-ui.js";
 import { BillingHistory } from "./history-ui.js";
 const api = "/api/plugins/official.billing";
 const usd = (n: number) =>
@@ -170,7 +170,9 @@ function Page({ host }: { host: UIHost }) {
           </div>
         </section>
       )}
-      {settings && me.data?.role === "admin" && <BillingGroups host={host} />}
+      {settings && me.data?.role === "admin" && (
+        <OutputBudgetSettings host={host} />
+      )}
       {settings && me.data?.role === "admin" && (
         <BillingAdmin host={host} version={adminVersion} />
       )}

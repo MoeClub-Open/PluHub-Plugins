@@ -4,7 +4,7 @@ import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { downloadCsv } from "../../lib/ui/download.js";
-import { priceUsage } from "../../lib/commerce/pricing.js";
+import { priceSnapshotUsage } from "../../lib/commerce/pricing.js";
 import { PriceReceiptView } from "../../lib/ui/price-receipt.js";
 import { RoutingDetails } from "./routing-details.js";
 import {
@@ -46,7 +46,7 @@ function estimateReceipt(row: any) {
       : pricing.mode === "request"
         ? { input: 0, output: 0 }
         : null;
-    return usage ? JSON.stringify(priceUsage(usage, pricing)) : null;
+    return usage ? JSON.stringify(priceSnapshotUsage(usage, pricing)) : null;
   } catch {
     return null;
   }

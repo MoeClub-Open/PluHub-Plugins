@@ -167,10 +167,6 @@ export default definePlugin({
                 "mode",
                 "request",
                 "multiplier",
-                "group",
-                "groupName",
-                "groupMultiplier",
-                "userMultiplier",
                 "tiers",
               ].flatMap((key) => {
                 const value = (state.pricing as any)[key];

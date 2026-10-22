@@ -37,12 +37,8 @@ export function validatePricing(price: RequestPricing) {
     throw new HostError("invalid_price", "Invalid billing mode");
   if (price.mode === "request" || price.request !== undefined)
     validRate(price.request, "request price");
-  for (const key of [
-    "multiplier",
-    "groupMultiplier",
-    "userMultiplier",
-  ] as const)
-    if (price[key] !== undefined) validRate(price[key], key, 1000);
+  if (price.multiplier !== undefined)
+    validRate(price.multiplier, "multiplier", 1000);
   let previous = -1;
   if (
     price.tiers !== undefined &&
@@ -153,6 +149,29 @@ export function priceUsage(
   usage: Usage,
   pricing: RequestPricing,
 ): PriceReceipt {
+  return calculateUsage(usage, pricing);
+}
+
+/** Only persisted pre-migration snapshots may contain retired pricing factors. */
+export function priceSnapshotUsage(
+  usage: Usage,
+  pricing: RequestPricing,
+): PriceReceipt {
+  const legacy = pricing as RequestPricing & {
+    groupMultiplier?: number;
+    userMultiplier?: number;
+  };
+  const factors = [legacy.groupMultiplier, legacy.userMultiplier]
+    .filter((factor): factor is number => factor !== undefined)
+    .map((factor) => validRate(factor, "historical multiplier", 1000));
+  return calculateUsage(usage, pricing, factors);
+}
+
+function calculateUsage(
+  usage: Usage,
+  pricing: RequestPricing,
+  historicalFactors: number[] = [],
+): PriceReceipt {
   validatePricing(pricing);
   validateUsage(usage);
   let rates: TokenPrices = pricing;
@@ -200,12 +219,8 @@ export function priceUsage(
       ),
     );
   const originalAmount = rounded(total);
-  for (const factor of [
-    pricing.multiplier,
-    pricing.groupMultiplier,
-    pricing.userMultiplier,
-  ])
-    total = multiply(total, decimal(factor ?? 1));
+  for (const factor of [pricing.multiplier ?? 1, ...historicalFactors])
+    total = multiply(total, decimal(factor));
   return {
     amount: rounded(total),
     originalAmount,

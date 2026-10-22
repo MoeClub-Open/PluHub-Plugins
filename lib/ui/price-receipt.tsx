@@ -23,6 +23,14 @@ export function PriceReceiptView({
     request: tr("请求"),
   };
   const p = receipt.pricing;
+  const historical = p as typeof p & {
+    groupMultiplier?: number;
+    userMultiplier?: number;
+  };
+  const multiplier =
+    (p.multiplier ?? 1) *
+    (historical.groupMultiplier ?? 1) *
+    (historical.userMultiplier ?? 1);
   return (
     <details>
       <summary>{title ?? tr("计费明细")}</summary>
@@ -51,9 +59,7 @@ export function PriceReceiptView({
         </table>
       </div>
       <p>
-        {tr("渠道倍率")} ×{p.multiplier ?? 1} · {tr("计费分组")}{" "}
-        {p.group ?? "default"} ×{p.groupMultiplier ?? 1} · {tr("用户倍率")} ×
-        {p.userMultiplier ?? 1}
+        {tr("消耗倍率")} ×{Number(multiplier.toPrecision(12))}
       </p>
       {receipt.tierAbove !== undefined && (
         <p>

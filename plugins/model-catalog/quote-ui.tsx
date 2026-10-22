@@ -6,10 +6,12 @@ import { PriceReceiptView } from "../../lib/ui/price-receipt.js";
 export function PriceQuote({
   host,
   model,
+  channelId,
   requestPriced = false,
 }: {
   host: UIHost;
   model: string;
+  channelId?: string;
   requestPriced?: boolean;
 }) {
   const [receipt, setReceipt] = React.useState<string>();
@@ -37,7 +39,10 @@ export function PriceQuote({
             );
             const result = await host.request<any>(
               "/api/plugins/official.billing/quote",
-              { method: "POST", body: JSON.stringify({ model, usage }) },
+              {
+                method: "POST",
+                body: JSON.stringify({ model, channelId, usage }),
+              },
             );
             setReceipt(JSON.stringify(result));
           } catch (error) {

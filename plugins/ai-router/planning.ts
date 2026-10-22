@@ -54,6 +54,7 @@ export async function planRoute(
     WorkflowResult["outputPolicies"]
   >[number] & { channel: string })[] = [];
   let bindingChecked = false;
+  let consumptionMultiplier: number | undefined;
   let protocolPolicy: WorkflowResult["protocolPolicy"];
   while (path.length < 32) {
     signal.throwIfAborted();
@@ -82,7 +83,6 @@ export async function planRoute(
         "模型不属于 API Key 绑定的渠道",
         403,
       );
-    bindingChecked = true;
     const upstream = upstreams[route.upstream];
     if (!upstream || upstream.enabled === false)
       throw new HostError(
@@ -90,6 +90,10 @@ export async function planRoute(
         "Configured upstream is unavailable",
         503,
       );
+    if (!bindingChecked) {
+      consumptionMultiplier = upstream.consumptionMultiplier ?? 1;
+      bindingChecked = true;
+    }
     let connection: Upstream = upstream;
     let providerModel = route.model;
     let profile = upstream.protocol === "auto-router" ? route.model : undefined;
@@ -209,7 +213,14 @@ export async function planRoute(
         model: providerModel,
         upstreamId: route.upstream,
         targetModelId: model,
-        ...(knownPrice ? { pricing: routePricing(pricing, upstream) } : {}),
+        ...(knownPrice
+          ? {
+              pricing: routePricing(pricing, {
+                ...upstream,
+                consumptionMultiplier,
+              }),
+            }
+          : {}),
       };
       const effort = prepared?.reasoning?.effort;
       if (

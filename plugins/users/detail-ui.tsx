@@ -6,7 +6,6 @@ import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { Dialog } from "../../lib/ui/components.js";
 import { AdminConfirm } from "../../lib/ui/admin.js";
 import { UserBalance } from "./balance-ui.js";
-import { UserPricing } from "./pricing-ui.js";
 export function UserDetail({
   host,
   user,
@@ -42,6 +41,7 @@ export function UserDetail({
     (entry) => entry.path === "/settings/billing",
   );
   const d = details.data;
+  const administrator = (d?.role ?? user.role) === "admin";
   const link = (path: string) =>
     "#" + path + "?userId=" + encodeURIComponent(user.id);
   if (action)
@@ -52,8 +52,10 @@ export function UserDetail({
             ? tr("账号归属")
             : action === "password"
               ? tr("重置用户密码")
-              : action === "role"
-                ? tr("更改用户角色")
+              : action === "admin"
+                ? administrator
+                  ? tr("取消管理员权限")
+                  : tr("设为管理员")
                 : action === "factors"
                   ? tr("重置验证方式")
                   : tr("撤销全部会话")
@@ -63,9 +65,12 @@ export function UserDetail({
             ? tr("企业主账号可查看直属子账号的请求记录。")
             : action === "password"
               ? tr("设置新密码并撤销此用户全部控制台会话，API Key 保持不变。")
-              : action === "role"
+              : action === "admin"
                 ? tr(
-                    "角色变更会在后续请求立即生效，系统会保留至少一位启用的管理员。",
+                    administrator
+                      ? "确认取消「{0}」的管理员权限？"
+                      : "确认将「{0}」设为管理员？",
+                    { "0": textValue(user.username) },
                   )
                 : action === "factors"
                   ? tr(
@@ -78,19 +83,19 @@ export function UserDetail({
           const endpoint =
             action === "password"
               ? "/api/plugins/official.auth/password"
-              : action === "role" || action === "membership"
+              : action === "admin" || action === "membership"
                 ? "/api/plugins/official.users/users"
                 : action === "factors"
                   ? "/api/plugins/official.auth/admin/factors/reset"
                   : "/api/plugins/official.auth/admin/sessions/revoke";
           const payload =
-            action === "role" || action === "membership"
+            action === "admin" || action === "membership"
               ? {
                   id: user.id,
                   reason,
                   ...(action === "membership"
                     ? { accountType: memberType, parentId: parentId || null }
-                    : { role: fields.get("role") }),
+                    : { role: administrator ? "user" : "admin" }),
                 }
               : {
                   userId: user.id,
@@ -103,7 +108,7 @@ export function UserDetail({
                 };
           await host.request(endpoint, {
             method:
-              action === "role" || action === "membership" ? "PATCH" : "POST",
+              action === "admin" || action === "membership" ? "PATCH" : "POST",
             body: JSON.stringify(payload),
           });
           details.reload();
@@ -164,15 +169,6 @@ export function UserDetail({
             />
           </label>
         )}
-        {action === "role" && (
-          <label>
-            {tr("角色")}
-            <Select name="role" defaultValue={d?.role ?? user.role}>
-              <option value="user">{tr("普通用户")}</option>
-              <option value="admin">{tr("管理员")}</option>
-            </Select>
-          </label>
-        )}
         {action === "factors" && (
           <label>
             {tr("输入用户名")}
@@ -187,7 +183,7 @@ export function UserDetail({
       <Notice message={details.error || extensions.error} />
       <p>
         <code>{user.id}</code> ·{" "}
-        {(d?.role ?? user.role) === "admin" ? tr("管理员") : tr("普通用户")} ·{" "}
+        {(d?.role ?? user.role) === "admin" ? tr("管理员") : tr("非管理员")} ·{" "}
         {(d?.enabled ?? user.enabled) ? tr("启用") : tr("禁用")}
       </p>
       {billingAvailable && (
@@ -220,7 +216,6 @@ export function UserDetail({
         <UserBalance key={user.id} host={host} user={user} />
       ) : (
         <>
-          {billingAvailable && <UserPricing host={host} userId={user.id} />}
           <div className="card">
             <p>
               {tr("验证邮箱：{0}", { "0": textValue(d?.email ?? "未绑定") })}
@@ -276,9 +271,9 @@ export function UserDetail({
             <button
               className="secondary"
               disabled={self || !d}
-              onClick={() => setAction("role")}
+              onClick={() => setAction("admin")}
             >
-              {tr("更改角色")}
+              {administrator ? tr("取消管理员权限") : tr("设为管理员")}
             </button>
             <button
               className="secondary"

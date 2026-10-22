@@ -344,8 +344,10 @@ function Page({ host }: { host: UIHost }) {
                 (selected.inputPrice !== undefined &&
                   selected.outputPrice !== undefined)) && (
                 <PriceQuote
+                  key={channel + ":" + selected.id}
                   host={host}
                   model={selected.id}
+                  channelId={channel || undefined}
                   requestPriced={selected.pricing?.mode === "request"}
                 />
               )}

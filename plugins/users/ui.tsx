@@ -68,16 +68,16 @@ function Page({ host }: { host: UIHost }) {
           }}
         />
         <Select
-          aria-label={tr("筛选用户角色")}
+          aria-label={tr("筛选管理员权限")}
           value={role}
           onChange={(e) => {
             setRole(e.target.value);
             setPage(1);
           }}
         >
-          <option value="all">{tr("全部角色")}</option>
+          <option value="all">{tr("全部用户")}</option>
           <option value="admin">{tr("管理员")}</option>
-          <option value="user">{tr("普通用户")}</option>
+          <option value="user">{tr("非管理员")}</option>
         </Select>
         <Select
           aria-label={tr("筛选用户状态")}
@@ -97,7 +97,7 @@ function Page({ host }: { host: UIHost }) {
           <thead>
             <tr>
               <th>{tr("用户名")}</th>
-              <th>{tr("角色")}</th>
+              <th>{tr("身份")}</th>
               <th>{tr("状态")}</th>
               <th>{tr("创建时间")}</th>
               <th>{tr("操作")}</th>
@@ -110,7 +110,7 @@ function Page({ host }: { host: UIHost }) {
                   <strong>{user.username}</strong>
                   {user.id === me.data?.id && <small>{tr("当前账号")}</small>}
                 </td>
-                <td>{user.role === "admin" ? tr("管理员") : tr("普通用户")}</td>
+                <td>{user.role === "admin" ? tr("管理员") : tr("非管理员")}</td>
                 <td>
                   <span className={"badge " + (user.enabled ? "ready" : "")}>
                     {user.enabled ? tr("启用") : tr("禁用")}
@@ -174,6 +174,8 @@ function Page({ host }: { host: UIHost }) {
               e.preventDefault();
               const form = e.currentTarget,
                 data = Object.fromEntries(new FormData(form));
+              data.role = data.isAdmin === "on" ? "admin" : "user";
+              delete data.isAdmin;
               setBusy(true);
               setMessage("");
               try {
@@ -215,12 +217,9 @@ function Page({ host }: { host: UIHost }) {
                 disabled={busy}
               />
             </label>
-            <label>
-              {tr("角色")}
-              <Select name="role" disabled={busy}>
-                <option value="user">{tr("普通用户")}</option>
-                <option value="admin">{tr("管理员")}</option>
-              </Select>
+            <label className="checkbox">
+              <input name="isAdmin" type="checkbox" disabled={busy} />
+              {tr("管理员")}
             </label>
             <div className="form-actions">
               <button

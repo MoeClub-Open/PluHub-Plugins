@@ -25,12 +25,10 @@ it("prices cache subsets once, separates one-hour writes and multiplies exact de
       cacheWrite: 3.75,
       cacheWrite1h: 6,
       multiplier: 0.5,
-      groupMultiplier: 0.8,
-      userMultiplier: 1.1,
     },
   );
-  // 600 + 1500 + 180 + 562.5 + 300 = 3142.5, times 0.44.
-  expect(receipt.amount).toBe(1383);
+  // 600 + 1500 + 180 + 562.5 + 300 = 3142.5, times 0.5.
+  expect(receipt.amount).toBe(1572);
   expect(receipt.originalAmount).toBe(3143);
   expect(receipt.lines.map((line) => line.quantity)).toEqual([
     200, 100, 600, 150, 50,
@@ -96,10 +94,8 @@ it("supports per-request prices without token prices and preserves original rout
     pricing: { mode: "request", request: 0.001 },
   })!;
   expect(
-    priceUsage(
-      { input: 5000, output: 6000 },
-      { ...pricing, groupMultiplier: 0.5 },
-    ).amount,
+    priceUsage({ input: 5000, output: 6000 }, { ...pricing, multiplier: 0.5 })
+      .amount,
   ).toBe(500);
   expect(reserveCost(999999, 999999, pricing)).toBe(1000);
 });

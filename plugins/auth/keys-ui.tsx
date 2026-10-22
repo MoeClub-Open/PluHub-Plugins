@@ -41,6 +41,13 @@ export function Keys({ host }: { host: UIHost }) {
   );
   const initialChannel =
     new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "";
+  const channelLabel = (id?: string) => {
+    if (!id) return tr("平台默认路由");
+    const channel = channelNames.data?.find((entry) => entry.id === id);
+    return channel
+      ? `${channel.name} · ×${channel.consumptionMultiplier ?? 1}`
+      : tr("绑定渠道不可用");
+  };
   const expired = (key: Key) =>
     !!key.expires_at && key.expires_at <= Date.now();
   const rows = (keys.data ?? []).filter(
@@ -133,12 +140,7 @@ export function Keys({ host }: { host: UIHost }) {
                 </td>
                 <td>
                   {key.models?.length ? key.models.join(", ") : tr("全部模型")}
-                  <small>
-                    {key.channel_id
-                      ? (channelNames.data?.find((c) => c.id === key.channel_id)
-                          ?.name ?? tr("绑定渠道不可用"))
-                      : tr("平台默认路由")}
-                  </small>
+                  <small>{channelLabel(key.channel_id)}</small>
                   <small>
                     {key.requests_per_minute
                       ? tr("{0} 次 / 分钟", {

@@ -15,7 +15,7 @@ import {
   validateUsage,
   type PriceReceipt,
 } from "../../lib/commerce/pricing.js";
-import { installPricingPolicy } from "./policy.js";
+import { installPriceQuote } from "./quote.js";
 import { observation } from "../../lib/ai/telemetry.js";
 import { requireAdmin, adminTarget } from "../../lib/admin/access.js";
 import { installBillingAdmin } from "./admin.js";
@@ -90,7 +90,7 @@ export default definePlugin({
     }
     installBillingAdmin(host, db, wallet);
     installBillingHistory(host, db);
-    const policy = installPricingPolicy(host, db);
+    installPriceQuote(host);
     host.validateConfig(validateOutputBudget);
     function post(userId: string, amount: number, source: string) {
       integer(Math.abs(amount));
@@ -157,10 +157,7 @@ export default definePlugin({
               tools: prepared.tools,
             }),
           ) + 1024;
-        const pricing = structuredClone({
-          ...plan.pricing,
-          ...policy(ctx.principal!.id),
-        });
+        const pricing = structuredClone(plan.pricing);
         plan.pricing = pricing;
         const state = observation(ctx);
         if (state) {

@@ -104,6 +104,7 @@ export default definePlugin({
           protocol: channelConnections(u)[0]?.protocol,
           acceptsCredentials: channelConnections(u).length > 0,
           scope: "platform",
+          consumptionMultiplier: u.consumptionMultiplier ?? 1,
         }));
       const personal =
         input?.userId && host.hasCapability("ai.user-channels@1")
@@ -117,6 +118,7 @@ export default definePlugin({
               protocol: c.upstream.protocol,
               acceptsCredentials: false,
               scope: "personal",
+              consumptionMultiplier: c.upstream.consumptionMultiplier ?? 1,
             }))
           : [];
       return [...platform, ...personal];
