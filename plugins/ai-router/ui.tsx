@@ -6,6 +6,10 @@ import type { Upstream, ModelRoute, ModelRedirect } from "@pluhub/contracts/ai";
 import { Redirects } from "./redirect-ui.js";
 import { ChannelTable } from "./channel-table.js";
 import {
+  ChannelModels,
+  type ChannelModel,
+} from "./channel-models.js";
+import {
   ModelPriceFields,
   readModelPricing,
 } from "../../lib/ui/model-pricing.js";
@@ -68,6 +72,7 @@ function Page({ host }: { host: UIHost }) {
   const [testing, setTesting] = React.useState("");
   const [tests, setTests] = React.useState<Record<string, string>>({});
   const [advanced, setAdvanced] = React.useState("");
+  const [modelChannel, setModelChannel] = React.useState("");
   const normalized = React.useMemo(() => {
     if (!loaded.data) return undefined;
     const copy = structuredClone(loaded.data);
@@ -122,6 +127,22 @@ function Page({ host }: { host: UIHost }) {
   const mutate = (fn: (r: Router) => void) => {
     void save(fn).catch(() => {});
   };
+  async function addChannelModels(id: string, picked: ChannelModel[]) {
+    await save((r) => {
+      for (const model of picked) {
+        if (Object.hasOwn(r.models, model.id)) continue;
+        r.models[model.id] = {
+          upstream: id,
+          model: model.id,
+          ...(model.name && model.name !== model.id
+            ? { name: model.name }
+            : {}),
+          ...(model.protocols[0] ? { provider: model.protocols[0] } : {}),
+          enabled: true,
+        };
+      }
+    });
+  }
   async function test(id: string) {
     const mapping = Object.entries(models).find(([, m]) => m.upstream === id);
     if (!mapping) {
@@ -317,6 +338,7 @@ function Page({ host }: { host: UIHost }) {
               mutate((r) => setChannelState(r.upstreams, [id], enabled))
             }
             test={(id) => void test(id)}
+            modelsFor={setModelChannel}
             remove={(id) =>
               mutate((r) => {
                 if (
@@ -461,6 +483,19 @@ function Page({ host }: { host: UIHost }) {
             <button disabled={busy || !loaded.data}>{tr("保存并应用")}</button>
           </p>
         </form>
+      )}
+
+      {modelChannel && (
+        <ChannelModels
+          host={host}
+          channelId={modelChannel}
+          channelName={upstreams[modelChannel]?.name || modelChannel}
+          models={models}
+          add={(picked) => addChannelModels(modelChannel, picked)}
+          close={() => {
+            if (!busy) setModelChannel("");
+          }}
+        />
       )}
 
       {dialog && (

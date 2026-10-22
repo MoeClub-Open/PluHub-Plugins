@@ -16,6 +16,7 @@ import type {
   ModelRedirect,
   PersonalChannel,
   Protocol,
+  ProviderConnection,
 } from "@pluhub/contracts/ai";
 import { redirectModel } from "./redirects.js";
 import { routePricing } from "../../lib/commerce/pricing.js";
@@ -29,6 +30,8 @@ import {
 import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
+import { discoverApiModels } from "../../lib/ai/model-directory.js";
+import { subscriptionModels } from "../../lib/ai/subscription-models.js";
 export { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 export default definePlugin({
   setup(host) {
@@ -122,6 +125,110 @@ export default definePlugin({
             }))
           : [];
       return [...platform, ...personal];
+    }
+    async function channelModels(id: string, signal: AbortSignal) {
+      const channel = (
+        (host.config().upstreams ?? {}) as Record<string, Upstream>
+      )[id];
+      if (!channel)
+        throw new HostError("not_found", "Channel not found", 404);
+      const connections = channelConnections(channel);
+      if (!connections.length)
+        return {
+          models: [],
+          errors: [{ protocol: "", message: "渠道尚未配置上游节点" }],
+        };
+      const discovered = await Promise.allSettled(
+        connections.map(async (connection: ProviderConnection) => {
+          if (Object.hasOwn(subscriptionDefaults, connection.protocol)) {
+            const ids = connection.subscriptionAccountIds ?? [];
+            if (!ids.length)
+              throw new HostError(
+                "subscription_missing",
+                "尚未选择订阅账号",
+              );
+            const providers = await Promise.all(
+              ids.map(async (accountId) => {
+                const account = await host.call<{
+                  enabled: boolean;
+                  plan?: string;
+                }>(
+                  `ai.subscription.${connection.protocol}@1`,
+                  {
+                    action: "inspect",
+                    id: accountId,
+                    ownerId: "",
+                    provider: connection.protocol,
+                  },
+                  signal,
+                );
+                return subscriptionModels(
+                  host,
+                  connection.protocol as keyof typeof subscriptionDefaults,
+                  account.plan,
+                  signal,
+                );
+              }),
+            );
+            return providers.flat().map((model) => ({
+              ...model,
+              protocol: connection.protocol,
+            }));
+          }
+          return (await discoverApiModels(host, connection, signal)).map(
+            (model) => ({ ...model, protocol: connection.protocol }),
+          );
+        }),
+      );
+      const models = new Map<
+        string,
+        {
+          id: string;
+          name?: string;
+          contextLength?: number;
+          maxOutputTokens?: number;
+          protocols: string[];
+        }
+      >();
+      const errors: { protocol: string; message: string }[] = [];
+      for (const [index, result] of discovered.entries()) {
+        if (result.status === "rejected") {
+          errors.push({
+            protocol: connections[index]!.protocol,
+            message:
+              result.reason instanceof Error
+                ? result.reason.message
+                : "模型目录查询失败",
+          });
+          continue;
+        }
+        for (const model of result.value) {
+          const previous = models.get(model.id);
+          models.set(model.id, {
+            ...previous,
+            ...model,
+            contextLength:
+              Math.max(
+                previous?.contextLength ?? 0,
+                model.contextLength ?? 0,
+              ) || undefined,
+            maxOutputTokens:
+              Math.max(
+                previous?.maxOutputTokens ?? 0,
+                model.maxOutputTokens ?? 0,
+              ) || undefined,
+            protocols: [
+              ...new Set([...(previous?.protocols ?? []), model.protocol]),
+            ],
+          });
+        }
+      }
+      return {
+        models: [...models.values()].sort((a, b) =>
+          a.id.localeCompare(b.id),
+        ),
+        errors,
+      };
     }
     host.provide("ai.channels@1", channels);
     host.api({
@@ -532,6 +639,22 @@ export default definePlugin({
       path: "/models",
       access: "host.manage",
       handle: () => json(host.config().models ?? {}),
+    });
+    host.api({
+      method: "POST",
+      path: "/channel-models",
+      access: "host.manage",
+      handle: async (request, ctx) =>
+        json(
+          await channelModels(
+            requiredString(
+              (await readObject(request)).id,
+              "channel id",
+              256,
+            ),
+            ctx.signal,
+          ),
+        ),
     });
     host.api({
       method: "POST",

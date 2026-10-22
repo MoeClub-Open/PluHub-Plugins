@@ -35,6 +35,7 @@ import {
   type SubscriptionKind,
 } from "../../lib/ai/subscription-auth.js";
 import { subscriptionModels } from "../../lib/ai/subscription-models.js";
+import { directoryModels } from "../../lib/ai/model-directory.js";
 
 type Model = {
   model: string;
@@ -54,29 +55,6 @@ type Settings = {
   subscriptionAccountId?: string;
   authMode?: "cli" | "siwc";
 };
-function directoryModels(protocol: string, raw: any) {
-  const entries = protocol === "gemini" ? raw.models : raw.data;
-  if (!Array.isArray(entries))
-    throw new HostError("upstream_error", "上游返回了无效的模型目录", 502);
-  const list = entries.map((m: any) =>
-    protocol === "gemini"
-      ? typeof m?.name === "string"
-        ? m.name.replace(/^models\//, "")
-        : undefined
-      : m?.id,
-  );
-  return [
-    ...new Set(
-      list.filter(
-        (m: unknown): m is string =>
-          typeof m === "string" &&
-          m.length > 0 &&
-          m.length <= 256 &&
-          m.trim() === m,
-      ),
-    ),
-  ].slice(0, 256);
-}
 export const channelMigration =
   "CREATE TABLE personal_channels(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,preset TEXT NOT NULL,enabled INTEGER NOT NULL,settings_json TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at INTEGER NOT NULL); CREATE INDEX personal_channels_owner ON personal_channels(user_id);";
 export const moderationMigration =
@@ -708,7 +686,9 @@ export function installPersonalChannels(
         base.publicOnly,
         AbortSignal.any([ctx.signal, AbortSignal.timeout(15000)]),
       );
-      return json({ models: directoryModels(protocol, raw) });
+      return json({
+        models: directoryModels(protocol, raw).map((model) => model.id),
+      });
     },
   });
   host.api({
@@ -766,7 +746,9 @@ export function installPersonalChannels(
             ? { "x-api-key": secret, "anthropic-version": "2023-06-01" }
             : { authorization: "Bearer " + secret };
       const raw = await getJSON(url, headers, base.publicOnly, signal);
-      return json({ models: directoryModels(protocol!, raw) });
+      return json({
+        models: directoryModels(protocol!, raw).map((model) => model.id),
+      });
     },
   });
   host.api({

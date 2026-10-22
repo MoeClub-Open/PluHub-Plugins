@@ -15,6 +15,7 @@ export function ChannelTable({
   tests,
   edit,
   graph,
+  modelsFor,
   toggle,
   test,
   remove,
@@ -27,6 +28,7 @@ export function ChannelTable({
   tests: Record<string, string>;
   edit: (id: string) => void;
   graph: (id: string) => void;
+  modelsFor: (id: string) => void;
   toggle: (id: string, enabled: boolean) => void;
   test: (id: string) => void;
   remove: (id: string) => void;
@@ -189,11 +191,17 @@ export function ChannelTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map(([id, channel]) => (
-              <tr
-                key={id}
-                className={selected.includes(id) ? "row-selected" : undefined}
-              >
+            {rows.map(([id, channel]) => {
+              const channelModels = Object.entries(models)
+                .filter(([, model]) => model.upstream === id)
+                .map(([alias, model]) => model.name || alias);
+              return (
+                <tr
+                  key={id}
+                  className={
+                    selected.includes(id) ? "row-selected" : undefined
+                  }
+                >
                 <td className="selection-cell">
                   <Checkbox
                     className="table-check"
@@ -227,13 +235,26 @@ export function ChannelTable({
                       .join(" · ") || tr("按流程选择目标")}
                   </small>
                 </td>
-                <td>
-                  {
-                    Object.values(models).filter(
-                      (model) => model.upstream === id,
-                    ).length
-                  }
-                </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={busy}
+                      onClick={() => modelsFor(id)}
+                    >
+                      <strong>{channelModels.length}</strong> {tr("个模型")}
+                    </button>
+                    <small
+                      title={channelModels.join("、")}
+                    >
+                      {channelModels.slice(0, 3).join("、") ||
+                        tr("未配置模型映射")}
+                      {channelModels.length > 3 &&
+                        tr(" 等 {0} 个", {
+                          "0": textValue(channelModels.length),
+                        })}
+                    </small>
+                  </td>
                 <td>
                   <span
                     className={
@@ -289,8 +310,9 @@ export function ChannelTable({
                     </button>
                   </div>
                 </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {!rows.length && (
