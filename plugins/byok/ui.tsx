@@ -15,6 +15,8 @@ import { ChannelAdmin } from "./admin-ui.js";
 import { SubscriptionAccounts } from "../../lib/ui/subscription-accounts.js";
 import { parseApiConnection } from "../../lib/ai/personal-api.js";
 import { listSubscriptionAccounts } from "../../lib/ui/subscription-providers.js";
+import { Checkbox } from "../../lib/ui/checkbox.js";
+import type { SubscriptionModel } from "../../lib/ai/subscription-models.js";
 const api = "/api/plugins/official.byok";
 type Model = {
   alias: string;
@@ -58,15 +60,69 @@ function Page({ host }: { host: UIHost }) {
     [models, setModels] = React.useState<Model[]>([]);
   const [synced, setSynced] = React.useState<any>();
   const [connection, setConnection] = React.useState("");
+  const [modelCatalog, setModelCatalog] = React.useState<SubscriptionModel[]>(
+    [],
+  );
+  const [catalogLoading, setCatalogLoading] = React.useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = React.useState(false);
+  const [modelQuery, setModelQuery] = React.useState("");
+  const [pickedModels, setPickedModels] = React.useState<string[]>([]);
   const subscription = ["codex", "claude-subscription", "antigravity"].includes(
     editing?.protocol,
   );
+  React.useEffect(() => {
+    let cancelled = false;
+    setModelCatalog([]);
+    setModelPickerOpen(false);
+    setModelQuery("");
+    setPickedModels([]);
+    if (!subscription || !editing?.subscriptionAccountId) {
+      setCatalogLoading(false);
+      return;
+    }
+    setCatalogLoading(true);
+    const query = new URLSearchParams({
+      provider: editing.protocol,
+      accountId: editing.subscriptionAccountId,
+    });
+    void host
+      .request<{ models: SubscriptionModel[] }>(
+        api + "/personal-channels/subscription-models?" + query,
+      )
+      .then((result) => {
+        if (!cancelled) setModelCatalog(result.models);
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage((error as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing?.protocol, editing?.subscriptionAccountId, host, subscription]);
   const filtered = (channels.data ?? []).filter((c) =>
     [c.name, c.baseUrl, ...Object.keys(c.models)]
       .join(" ")
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   );
+  const filteredCatalog = modelCatalog.filter((model) =>
+    [model.id, model.name].join(" ").toLowerCase().includes(
+      modelQuery.trim().toLowerCase(),
+    ),
+  );
+  const usedModels = new Set(models.map((model) => model.model));
+  const pickableCatalog = filteredCatalog.filter(
+    (model) => !usedModels.has(model.id),
+  );
+  const allVisiblePicked =
+    pickableCatalog.length > 0 &&
+    pickableCatalog.every((model) => pickedModels.includes(model.id));
+  const someVisiblePicked =
+    !allVisiblePicked &&
+    pickableCatalog.some((model) => pickedModels.includes(model.id));
   const current = Math.min(
     page,
     Math.max(1, Math.ceil(filtered.length / size)),
@@ -117,6 +173,33 @@ function Page({ host }: { host: UIHost }) {
   function patchModel(index: number, patch: Partial<Model>) {
     setModels((rows) =>
       rows.map((m, i) => (i === index ? { ...m, ...patch } : m)),
+    );
+  }
+  function addPickedModels() {
+    const selected = new Set(pickedModels),
+      existing = new Set(models.map((model) => model.model)),
+      additions = modelCatalog
+        .filter((model) => selected.has(model.id) && !existing.has(model.id))
+        .map((model) => ({
+          ...emptyModel(),
+          alias: model.id,
+          model: model.id,
+        }));
+    setModels(
+      [
+        ...models.filter((model) => model.alias || model.model),
+        ...additions,
+      ].slice(0, 256),
+    );
+    setModelPickerOpen(false);
+    setPickedModels([]);
+  }
+  function toggleVisibleModels(checked: boolean) {
+    const ids = pickableCatalog.map((model) => model.id);
+    setPickedModels((current) =>
+      checked
+        ? [...new Set([...current, ...ids])]
+        : current.filter((id) => !ids.includes(id)),
     );
   }
   async function mutate(channel: any, action: "state" | "delete" | "test") {
@@ -210,7 +293,7 @@ function Page({ host }: { host: UIHost }) {
     );
   return (
     <>
-      <style>{`.modal:has(.personal-models){width:min(1150px,calc(100vw - 32px));max-width:1150px}.modal:has(.personal-models.is-sub){width:min(760px,calc(100vw - 32px))}.personal-models.is-sub table{min-width:420px}.personal-models{overflow-x:auto;margin:10px 0}.personal-models table{min-width:1040px}.personal-models input{min-width:92px;width:100%}.personal-models td{padding:7px}.personal-models th{white-space:nowrap}.personal-models small{white-space:nowrap}.channel-meta{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`}</style>
+      <style>{`.modal:has(.personal-models){width:min(1150px,calc(100vw - 32px));max-width:1150px}.modal:has(.personal-models.is-sub){width:min(760px,calc(100vw - 32px))}.personal-models.is-sub table{min-width:420px}.personal-models{overflow-x:auto;margin:10px 0}.personal-models table{min-width:1040px}.personal-models input{min-width:92px;width:100%}.personal-models td{padding:7px}.personal-models th{white-space:nowrap}.personal-models small{white-space:nowrap}.subscription-model-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 14px;max-height:280px;margin:8px 0;overflow:auto}.subscription-model-option{min-width:0;padding:3px 4px}.subscription-model-option span{display:flex;min-width:0;flex-direction:column}.subscription-model-option small{overflow:hidden;text-overflow:ellipsis}.channel-meta{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:640px){.subscription-model-options{grid-template-columns:minmax(0,1fr)}}`}</style>
       <div className="tabs" role="tablist" aria-label={tr("个人上游管理")}>
         <button
           role="tab"
@@ -773,15 +856,113 @@ function Page({ host }: { host: UIHost }) {
                   {tr("匹配平台原价")}
                 </button>
               )}
+              {subscription && (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={
+                    busy ||
+                    catalogLoading ||
+                    !editing.subscriptionAccountId ||
+                    !modelCatalog.length
+                  }
+                  onClick={() => {
+                    setPickedModels([]);
+                    setModelQuery("");
+                    setModelPickerOpen(true);
+                  }}
+                >
+                  {catalogLoading ? tr("正在加载模型…") : tr("选择模型")}
+                </button>
+              )}
               <button
                 type="button"
                 className="secondary"
                 disabled={busy || models.length >= 256}
                 onClick={() => setModels([...models, emptyModel()])}
               >
-                {tr("添加模型")}
+                {subscription ? tr("手动添加") : tr("添加模型")}
               </button>
             </div>
+            {subscription && modelPickerOpen && (
+              <div className="card">
+                <div className="list-toolbar">
+                  <input
+                    type="search"
+                    aria-label={tr("搜索模型")}
+                    placeholder={tr("搜索模型")}
+                    value={modelQuery}
+                    onChange={(e) => setModelQuery(e.target.value)}
+                  />
+                </div>
+                <label className="checkbox">
+                  <Checkbox
+                    checked={allVisiblePicked}
+                    indeterminate={someVisiblePicked}
+                    disabled={!pickableCatalog.length}
+                    onCheckedChange={(checked) =>
+                      toggleVisibleModels(checked === true)
+                    }
+                  />
+                  {tr("全选")}
+                </label>
+                <div className="subscription-model-options">
+                  {filteredCatalog.map((model) => {
+                    const added = usedModels.has(model.id),
+                      checked = added || pickedModels.includes(model.id);
+                    return (
+                      <label
+                        key={model.id}
+                        className="checkbox subscription-model-option"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={added}
+                          onCheckedChange={(value) =>
+                            setPickedModels((current) =>
+                              value === true
+                                ? [...new Set([...current, model.id])]
+                                : current.filter((id) => id !== model.id),
+                            )
+                          }
+                        />
+                        <span>
+                          <strong>{model.name}</strong>
+                          <small>{model.id}</small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {!filteredCatalog.length && (
+                  <p className="muted">{tr("没有匹配的模型。")}</p>
+                )}
+                <div className="form-actions">
+                  <span className="muted">
+                    {tr("已选择 {0}", {
+                      "0": textValue(pickedModels.length),
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setModelPickerOpen(false);
+                      setPickedModels([]);
+                    }}
+                  >
+                    {tr("取消")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pickedModels.length}
+                    onClick={addPickedModels}
+                  >
+                    {tr("添加选中模型")}
+                  </button>
+                </div>
+              </div>
+            )}
             {!subscription && (
               <p className="field-note">
                 {tr(
@@ -860,12 +1041,23 @@ function Page({ host }: { host: UIHost }) {
                             aria-label={tr("上游模型名 {0}", {
                               "0": textValue(i + 1),
                             })}
+                            list={
+                              subscription
+                                ? "subscription-model-catalog"
+                                : undefined
+                            }
                             value={m.model}
                             required
                             maxLength={256}
                             disabled={busy}
                             onChange={(e) =>
-                              patchModel(i, { model: e.target.value })
+                              patchModel(i, {
+                                model: e.target.value,
+                                alias:
+                                  !m.alias || m.alias === m.model
+                                    ? e.target.value
+                                    : m.alias,
+                              })
                             }
                           />
                         </td>
@@ -934,6 +1126,15 @@ function Page({ host }: { host: UIHost }) {
                 </tbody>
               </table>
             </div>
+            {subscription && (
+              <datalist id="subscription-model-catalog">
+                {modelCatalog.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </datalist>
+            )}
             {!subscription && (
               <>
                 <div className="actions">

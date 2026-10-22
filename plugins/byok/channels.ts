@@ -34,6 +34,7 @@ import {
   subscriptionDefaults,
   type SubscriptionKind,
 } from "../../lib/ai/subscription-auth.js";
+import { subscriptionModels } from "../../lib/ai/subscription-models.js";
 
 type Model = {
   model: string;
@@ -468,6 +469,43 @@ export function installPersonalChannels(
               host.hasCapability(`ai.subscription.${p.protocol}@1`)),
         ),
       ),
+  });
+  host.api({
+    method: "GET",
+    path: "/personal-channels/subscription-models",
+    access: "authenticated",
+    handle: async (request, ctx) => {
+      const userId = session(ctx.principal),
+        query = new URL(request.url).searchParams,
+        provider = requiredString(
+          query.get("provider"),
+          "subscription provider",
+          64,
+        );
+      if (!Object.hasOwn(subscriptionDefaults, provider))
+        throw new HostError("invalid_provider", "无效的订阅提供商");
+      const account = await host.call<{
+        enabled: boolean;
+        plan?: string;
+      }>(
+        `ai.subscription.${provider}@1`,
+        {
+          action: "inspect",
+          id: requiredString(query.get("accountId"), "subscription account"),
+          ownerId: userId,
+          provider,
+        },
+        ctx.signal,
+      );
+      return json({
+        models: await subscriptionModels(
+          host,
+          provider as SubscriptionKind,
+          account.plan,
+          ctx.signal,
+        ),
+      });
+    },
   });
   host.api({
     method: "GET",
