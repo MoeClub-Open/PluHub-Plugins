@@ -5,6 +5,7 @@ import type {
   Protocol,
   ReasoningContent,
   FinishReason,
+  Usage,
 } from "@pluhub/contracts/ai";
 import { parseSSE, reason } from "./protocols.js";
 import { readReasoning } from "./content.js";
@@ -42,6 +43,7 @@ export async function* decodeEvents(
     toolSerial = 0,
     geminiReasonSerial = 0;
   let geminiReason: string | undefined;
+  let geminiUsage: Usage | undefined;
   const initialInputs = new Map<any, any>();
   function toolIndex(key: any) {
     if (!toolKeys.has(key)) {
@@ -450,7 +452,8 @@ export async function* decodeEvents(
             yield* doneTool(key);
           } else if (
             part.thought === true ||
-            (part.thoughtSignature && part.text === undefined)
+            (part.thoughtSignature &&
+              (part.text === undefined || part.text === ""))
           ) {
             geminiReason ??= "gemini-reason-" + geminiReasonSerial++;
             updateReason(
@@ -486,7 +489,8 @@ export async function* decodeEvents(
         }
       }
       const usage = decodeUsage(protocol, d.usageMetadata);
-      if (usage) yield { type: "usage", usage };
+      // Gemini can revise cumulative thought counts in its terminal snapshot.
+      if (usage) geminiUsage = usage;
     }
     if (terminal && protocol !== "openai-chat") break;
   }
@@ -498,6 +502,7 @@ export async function* decodeEvents(
     );
   for (const key of toolKeys.keys()) yield* doneTool(key);
   for (const key of reasonKeys.keys()) yield* doneReason(key);
+  if (geminiUsage) yield { type: "usage", usage: geminiUsage };
   yield {
     type: "finish",
     reason: finish,

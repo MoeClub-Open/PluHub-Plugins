@@ -6,6 +6,7 @@ import {
 } from "../lib/commerce/pricing.js";
 import { decodeUsage, encodeUsage } from "../lib/ai/usage.js";
 import { upstreamEvents, encodeStream } from "../lib/ai/streams.js";
+import { decode, decodeResult, encodeResult } from "../lib/ai/protocols.js";
 import type { Protocol, Usage } from "@pluhub/contracts/ai";
 
 it("prices cache subsets once, separates one-hour writes and multiplies exact decimals once", () => {
@@ -189,6 +190,89 @@ const body = (text: string) => {
     },
   });
 };
+it("uses Gemini's terminal usage snapshot and preserves empty-text signature parts", async () => {
+  const candidate = (parts: any[], finishReason?: string) => ({
+    content: { role: "model", parts },
+    ...(finishReason ? { finishReason } : {}),
+  });
+  const frames = [
+    {
+      candidates: [candidate([{ text: "OK" }])],
+      usageMetadata: {
+        promptTokenCount: 5,
+        candidatesTokenCount: 1,
+        thoughtsTokenCount: 128,
+      },
+    },
+    {
+      candidates: [
+        candidate([{ text: "", thoughtSignature: "signature" }], "STOP"),
+      ],
+      usageMetadata: {
+        promptTokenCount: 5,
+        candidatesTokenCount: 1,
+        thoughtsTokenCount: 64,
+      },
+    },
+  ];
+  const events = [];
+  for await (const event of upstreamEvents(
+    "gemini",
+    body(
+      frames.map((frame) => "data: " + JSON.stringify(frame) + "\n\n").join(""),
+    ),
+  ))
+    events.push(event);
+  expect(events.filter((event) => event.type === "usage")).toEqual([
+    { type: "usage", usage: { input: 5, output: 65, reasoning: 64 } },
+  ]);
+  expect(events).toContainEqual({
+    type: "reasoning",
+    index: 0,
+    source: "gemini",
+    text: "",
+    signature: "signature",
+  });
+  expect(events.at(-1)).toEqual({ type: "finish", reason: "stop" });
+  const result = decodeResult(
+    "gemini",
+    {
+      candidates: [
+        candidate(
+          [{ text: "OK" }, { text: "", thoughtSignature: "signature" }],
+          "STOP",
+        ),
+      ],
+      usageMetadata: frames[1]!.usageMetadata,
+    },
+    "demo",
+  );
+  expect(result.text).toBe("OK");
+  expect(result.reasoning).toEqual([
+    { source: "gemini", text: "", signature: "signature" },
+  ]);
+  const request = decode(
+    "gemini",
+    {
+      contents: [
+        candidate([{ text: "OK" }, { text: "", thoughtSignature: "signature" }])
+          .content,
+      ],
+    },
+    "demo",
+  );
+  expect(
+    request.messages.flatMap((message) => message.reasoning ?? []),
+  ).toEqual(result.reasoning!);
+  expect(
+    priceUsage(result.usage, { input: 0.3, output: 2.5, multiplier: 0.2 })
+      .amount,
+  ).toBe(33);
+  expect(
+    decodeResult("gemini", encodeResult("gemini", result), "demo").reasoning,
+  ).toEqual(result.reasoning!);
+});
+
 it("round trips usage through every wire protocol with arbitrary chunk splitting", async () => {
   for (const protocol of [
     "openai-chat",

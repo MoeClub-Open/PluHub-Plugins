@@ -539,7 +539,9 @@ export function decode(
         object(b, "Gemini part");
         if (
           b.thought === true ||
-          (b.thoughtSignature && b.text === undefined && !b.functionCall)
+          (b.thoughtSignature &&
+            (b.text === undefined || b.text === "") &&
+            !b.functionCall)
         ) {
           fields(b, ["text", "thought", "thoughtSignature"], "thinking part");
           flush();
@@ -1161,7 +1163,9 @@ export function decodeResult(
     for (const part of c.content?.parts ?? []) {
       if (
         part.thought === true ||
-        (part.thoughtSignature && !part.functionCall && part.text === undefined)
+        (part.thoughtSignature &&
+          !part.functionCall &&
+          (part.text === undefined || part.text === ""))
       ) {
         (result.reasoning ??= []).push(
           readReasoning(protocol, part.text ?? "", part.thoughtSignature),
