@@ -36,7 +36,7 @@ export function installOrderHistory(host: Host, db: DatabaseSync) {
       const items = (
         db
           .prepare(
-            "SELECT id,provider,product,status,created_at,checkout_url,(SELECT COUNT(*) FROM payment_adjustments a WHERE a.order_id=orders.id) AS adjustmentCount FROM orders WHERE " +
+            "SELECT id,provider,payment_method,payment_method_name,product,status,created_at,checkout_url,(SELECT COUNT(*) FROM payment_adjustments a WHERE a.order_id=orders.id) AS adjustmentCount FROM orders WHERE " +
               sql +
               " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
           )

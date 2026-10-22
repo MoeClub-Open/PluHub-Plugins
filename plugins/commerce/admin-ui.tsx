@@ -2,6 +2,7 @@ import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { AdminTable, AdminConfirm, adminTime } from "../../lib/ui/admin.js";
+import { paymentLabels } from "../../lib/commerce/checkout.js";
 const api = "/api/plugins/official.commerce";
 const labels: Record<string, string> = {
   get pending() {
@@ -105,7 +106,11 @@ export function CommerceAdmin({
                   title: tr("支付方式 / 金额"),
                   render: (r) => (
                     <>
-                      {r.provider}
+                      {tr(
+                        paymentLabels[r.payment_method_name ?? r.provider] ??
+                          r.payment_method_name ??
+                          r.provider,
+                      )}
                       <small>{currency(r.product)}</small>
                     </>
                   ),

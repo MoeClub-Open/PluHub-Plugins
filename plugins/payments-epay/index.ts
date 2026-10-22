@@ -1,63 +1,80 @@
-import { definePlugin, HostError } from "@pluhub/sdk";
+import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
 import type { PaymentCheckout } from "@pluhub/contracts/commerce";
 import { epaySign, epayVerify } from "../../lib/commerce/signatures.js";
 import { decimalAmount, minorAmount } from "../../lib/commerce/money.js";
 import { rawBody } from "../../lib/http/body.js";
+import {
+  epayMethods,
+  validateEpayConfig,
+  type EpayConfig,
+  type EpayMethod,
+} from "./config.js";
 export default definePlugin({
   setup(host) {
-    host.validateConfig((c) => {
-      if (c.enabled) {
-        for (const field of [
-          "version",
-          "algorithm",
-          "pid",
-          "baseUrl",
-          "publicUrl",
-          ...(c.algorithm === "RSA"
-            ? ["privateKeyRef", "platformPublicKeyRef"]
-            : ["keyRef"]),
-        ])
-          if (typeof c[field] !== "string" || !c[field])
-            throw new HostError("invalid_config", "Missing Epay " + field);
-      }
-    });
-    function settings() {
-      const c = host.config();
-      if (!c.enabled)
+    host.validateConfig(validateEpayConfig);
+    function settings(id: string | undefined, checkout = false) {
+      const config = host.config() as EpayConfig;
+      if (checkout && config.methods && !id)
+        throw new HostError("invalid_request", "Select an Epay payment method");
+      const method = id
+        ? epayMethods(config).find((m) => m.id === id)
+        : config.pid
+          ? ({
+              ...config,
+              paymentType: config.paymentType ?? "alipay",
+            } as EpayMethod)
+          : undefined;
+      if (!method || (checkout && (!config.enabled || !method.enabled)))
         throw new HostError("payment_disabled", "Epay is disabled", 503);
-      return c as any;
+      return method;
     }
-    const key = (c: any, verify = false) =>
+    const key = (c: EpayMethod, verify = false) =>
       host.secret(
         c.algorithm === "RSA"
           ? verify
-            ? c.platformPublicKeyRef
-            : c.privateKeyRef
-          : c.keyRef,
+            ? c.platformPublicKeyRef!
+            : c.privateKeyRef!
+          : c.keyRef!,
       );
     host.provide(
       "payments.epay@1",
       async (input: PaymentCheckout & { action: string }, signal) => {
-        if (input.action === "status")
-          return { enabled: host.config().enabled === true };
-        const c = settings();
+        if (input.action === "status") {
+          const config = host.config() as EpayConfig;
+          const methods = epayMethods(config)
+            .filter((m) => m.enabled)
+            .map((m) => ({
+              id: m.id,
+              name: m.name || m.paymentType,
+              type: m.paymentType,
+            }));
+          return {
+            enabled: config.enabled === true && methods.length > 0,
+            methods,
+          };
+        }
         if (input.action !== "checkout")
           throw new HostError(
             "unsupported_operation",
             "Unsupported Epay operation",
           );
+        const c = settings(input.paymentMethod, true);
         if (input.product.currency !== "cny")
           throw new HostError(
             "unsupported_currency",
             "Epay requires an explicitly priced CNY product",
           );
+        const notifyUrl = new URL(
+          c.publicUrl.replace(/\/$/, "") +
+            "/api/plugins/official.payments-epay/notify",
+        );
+        if (input.paymentMethod)
+          notifyUrl.searchParams.set("pluhub_method", input.paymentMethod);
         const fields: Record<string, string> = {
           pid: c.pid,
           type: c.paymentType ?? "alipay",
           out_trade_no: input.orderId,
-          notify_url:
-            c.publicUrl.replace(/\/$/, "") +
-            "/api/plugins/official.payments-epay/notify",
+          notify_url: notifyUrl.href,
           return_url: input.successUrl,
           name: input.product.name,
           money: decimalAmount(input.product.paymentMinor),
@@ -113,7 +130,11 @@ export default definePlugin({
       },
     );
     const notify = async (request: Request) => {
-      const c = settings();
+      const url = new URL(request.url);
+      if (url.searchParams.getAll("pluhub_method").length > 1)
+        throw new HostError("invalid_request", "Duplicate payment method");
+      const paymentMethod = url.searchParams.get("pluhub_method") ?? undefined;
+      const c = settings(paymentMethod);
       if (Number(request.headers.get("content-length") ?? 0) > 65536)
         throw new HostError("body_too_large", "Notification too large", 413);
       const params =
@@ -126,23 +147,31 @@ export default definePlugin({
         throw new HostError("body_too_large", "Notification too large", 413);
       const fields: Record<string, string> = {};
       for (const [k, v] of params) {
+        if (request.method === "GET" && k === "pluhub_method") continue;
         if (k in fields)
           throw new HostError("invalid_request", "Duplicate payment parameter");
         fields[k] = v;
       }
       if (
         !epayVerify(fields, c.algorithm, key(c, true)) ||
-        fields.pid !== c.pid
+        fields.pid !== c.pid ||
+        (paymentMethod && fields.type !== c.paymentType)
       )
         throw new HostError("invalid_signature", "Invalid Epay notification");
       if (fields.trade_status !== "TRADE_SUCCESS")
         return new Response("success");
+      requiredString(fields.trade_no, "trade_no", 256);
       // Epay is a prepaid purchase; no automatic debit is claimed.
       await host.call("commerce.payment@1", {
         provider: "epay",
-        eventId: fields.trade_no,
+        eventId: paymentMethod
+          ? paymentMethod + ":" + fields.trade_no
+          : fields.trade_no,
         orderId: fields.out_trade_no,
-        paymentId: fields.trade_no,
+        paymentId: paymentMethod
+          ? paymentMethod + ":" + fields.trade_no
+          : fields.trade_no,
+        paymentMethod,
         amount: minorAmount(fields.money!),
         currency: "cny",
         kind: "paid",

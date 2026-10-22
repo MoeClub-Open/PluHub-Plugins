@@ -12,6 +12,8 @@ import {
 import {
   supportsCheckout,
   paymentLabels,
+  checkoutMethodKey,
+  type CheckoutMethod,
 } from "../../lib/commerce/checkout.js";
 import { ProductSettings } from "./settings.js";
 import { CommerceAdmin } from "./admin-ui.js";
@@ -51,7 +53,7 @@ function Page({ host }: { host: UIHost }) {
   const checkoutNonce = React.useRef<
     { key: string; value: string } | undefined
   >(undefined);
-  const [provider, setProvider] = React.useState("");
+  const [methodKey, setMethodKey] = React.useState("");
   const [view, setView] = React.useState(
     new URLSearchParams(location.hash.split("?")[1]).has("order")
       ? "orders"
@@ -66,10 +68,21 @@ function Page({ host }: { host: UIHost }) {
     [status, setStatus] = React.useState("all"),
     [page, setPage] = React.useState(1),
     [size, setSize] = React.useState(10);
-  const providers: string[] = catalog.data?.providers ?? [];
+  const methods: CheckoutMethod[] =
+    catalog.data?.paymentMethods ??
+    (catalog.data?.providers ?? []).map((provider: string) => ({
+      provider,
+      name: provider,
+    }));
+  const method = methods.find((m) => checkoutMethodKey(m) === methodKey);
+  const provider = method?.provider ?? "";
+  const methodLabel = method
+    ? tr(paymentLabels[method.name] ?? method.name)
+    : "";
   React.useEffect(() => {
-    if (!providers.includes(provider)) setProvider(providers[0] ?? "");
-  }, [catalog.data, provider]);
+    if (!method)
+      setMethodKey(methods.length ? checkoutMethodKey(methods[0]!) : "");
+  }, [catalog.data, methodKey]);
   const products = (catalog.data?.products ?? []).filter((p: any) =>
     supportsCheckout(provider, p.currency),
   );
@@ -144,7 +157,7 @@ function Page({ host }: { host: UIHost }) {
             <p className="empty-inline" role="status">
               {tr("正在加载商品…")}
             </p>
-          ) : !providers.length ? (
+          ) : !methods.length ? (
             <div className="quiet-empty">
               <h2>{tr("暂时无法在线充值")}</h2>
               <p>{tr("本站暂未开放在线付款，请稍后再试或联系站点支持。")}</p>
@@ -156,15 +169,18 @@ function Page({ host }: { host: UIHost }) {
                 <label>
                   {tr("支付方式")}
                   <Select
-                    value={provider}
+                    value={methodKey}
                     onChange={(e) => {
-                      setProvider(e.target.value);
+                      setMethodKey(e.target.value);
                       setMessage("");
                     }}
                   >
-                    {providers.map((p) => (
-                      <option key={p} value={p}>
-                        {paymentLabels[p] ?? p}
+                    {methods.map((m) => (
+                      <option
+                        key={checkoutMethodKey(m)}
+                        value={checkoutMethodKey(m)}
+                      >
+                        {tr(paymentLabels[m.name] ?? m.name)}
                       </option>
                     ))}
                   </Select>
@@ -332,7 +348,13 @@ function Page({ host }: { host: UIHost }) {
                       <small>{o.id}</small>
                     </td>
                     <td>{price(o.product)}</td>
-                    <td>{paymentLabels[o.provider] ?? o.provider}</td>
+                    <td>
+                      {tr(
+                        paymentLabels[o.payment_method_name ?? o.provider] ??
+                          o.payment_method_name ??
+                          o.provider,
+                      )}
+                    </td>
                     <td>
                       <span
                         className={
@@ -410,7 +432,7 @@ function Page({ host }: { host: UIHost }) {
             <dt>{tr("商品")}</dt>
             <dd>{selected.name}</dd>
             <dt>{tr("支付方式")}</dt>
-            <dd>{paymentLabels[provider] ?? provider}</dd>
+            <dd>{methodLabel}</dd>
             <dt>{tr("付款金额")}</dt>
             <dd>{price(selected)}</dd>
             <dt>{tr("到账额度")}</dt>
@@ -436,18 +458,22 @@ function Page({ host }: { host: UIHost }) {
               {tr("返回选择")}
             </button>
             <button
-              disabled={busy}
+              disabled={busy || !method}
               onClick={async () => {
                 setBusy(true);
                 setMessage("");
                 try {
-                  const key = provider + ":" + selected.id;
+                  const key = methodKey + ":" + selected.id;
                   if (checkoutNonce.current?.key !== key)
                     checkoutNonce.current = { key, value: crypto.randomUUID() };
                   await host.request<any>(api + "/checkout", {
                     method: "POST",
                     headers: { "idempotency-key": checkoutNonce.current.value },
-                    body: JSON.stringify({ productId: selected.id, provider }),
+                    body: JSON.stringify({
+                      productId: selected.id,
+                      provider,
+                      paymentMethod: method?.id,
+                    }),
                   });
                   setMessage(
                     tr(

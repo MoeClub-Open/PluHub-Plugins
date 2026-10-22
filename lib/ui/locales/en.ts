@@ -2116,4 +2116,9 @@ export const en: Record<string, string> = {
   "账号安全记录需检查，本进程有 {0} 条记录未保存。":
     "Check account security history: {0} events were not saved in this process.",
   查看安全记录: "View security history",
+  添加支付方式: "Add payment method",
+  删除支付方式: "Delete payment method",
+  启用此支付方式: "Enable this payment method",
+  "删除后，尚未完成的订单将无法接收此支付方式的回调。":
+    "Unpaid orders will no longer receive notifications for this payment method.",
 };

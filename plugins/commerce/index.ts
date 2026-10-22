@@ -11,13 +11,18 @@ import type {
   Product,
   PaymentCheckout,
   PaymentEvent,
+  PaymentProviderStatus,
 } from "@pluhub/contracts/commerce";
 import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
 import { integer } from "../../lib/commerce/money.js";
 import { requireAdmin } from "../../lib/admin/access.js";
 import { installCommerceAdmin } from "./admin.js";
 import { nextPeriod } from "./period.js";
-import { supportsCheckout } from "../../lib/commerce/checkout.js";
+import {
+  supportsCheckout,
+  checkoutMethods,
+  type CheckoutMethod,
+} from "../../lib/commerce/checkout.js";
 import { installOrderHistory } from "./history.js";
 import {
   installPaymentAdjustments,
@@ -34,6 +39,7 @@ export default definePlugin({
   `,
       "ALTER TABLE orders ADD COLUMN request_key TEXT; CREATE UNIQUE INDEX orders_request_key ON orders(user_id,request_key) WHERE request_key IS NOT NULL; CREATE INDEX orders_user_time ON orders(user_id,created_at);",
       adjustmentMigration,
+      "ALTER TABLE orders ADD COLUMN payment_method TEXT; ALTER TABLE orders ADD COLUMN payment_method_name TEXT;",
     ]);
     host.cleanup(() => db.close());
     const products = () => (host.config().products ?? []) as Product[];
@@ -158,6 +164,11 @@ export default definePlugin({
           .get(e.orderId) as any;
         if (!order || order.provider !== e.provider)
           throw new HostError("invalid_payment", "Unknown payment order");
+        if ((order.payment_method ?? undefined) !== e.paymentMethod)
+          throw new HostError(
+            "payment_mismatch",
+            "Payment method does not match the order",
+          );
         const p = JSON.parse(order.product) as Product;
         if (
           e.provider === "epay" &&
@@ -298,18 +309,22 @@ export default definePlugin({
       path: "/catalog",
       access: "authenticated",
       handle: async () => {
-        const providers = [];
+        const paymentMethods: CheckoutMethod[] = [];
         for (const p of ["stripe", "epay"])
-          if (
-            host.hasCapability("payments." + p + "@1") &&
-            (
-              await host.call<{ enabled: boolean }>("payments." + p + "@1", {
-                action: "status",
-              })
-            ).enabled
-          )
-            providers.push(p);
-        return json({ products: products(), providers });
+          if (host.hasCapability("payments." + p + "@1"))
+            paymentMethods.push(
+              ...checkoutMethods(
+                p,
+                await host.call<PaymentProviderStatus>("payments." + p + "@1", {
+                  action: "status",
+                }),
+              ),
+            );
+        return json({
+          products: products(),
+          providers: [...new Set(paymentMethods.map((m) => m.provider))],
+          paymentMethods,
+        });
       },
     });
     host.api({
@@ -320,7 +335,7 @@ export default definePlugin({
         json(
           db
             .prepare(
-              "SELECT id,provider,product,status,created_at,checkout_url FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 100",
+              "SELECT id,provider,payment_method,payment_method_name,product,status,created_at,checkout_url FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 100",
             )
             .all(ctx.principal!.id)
             .map((r: any) => ({ ...r, product: JSON.parse(r.product) })),
@@ -357,16 +372,25 @@ export default definePlugin({
           throw new HostError("not_found", "Product not found", 404);
         if (!["stripe", "epay"].includes(b.provider))
           throw new HostError("invalid_request", "Unknown payment provider");
-        if (
-          !host.hasCapability("payments." + b.provider + "@1") ||
-          !(
-            await host.call<{ enabled: boolean }>(
-              "payments." + b.provider + "@1",
-              { action: "status" },
-              ctx.signal,
-            )
-          ).enabled
-        )
+        if (!host.hasCapability("payments." + b.provider + "@1"))
+          throw new HostError(
+            "payment_unavailable",
+            "This payment method is unavailable",
+            409,
+          );
+        const status = await host.call<PaymentProviderStatus>(
+          "payments." + b.provider + "@1",
+          { action: "status" },
+          ctx.signal,
+        );
+        const methods = checkoutMethods(b.provider, status);
+        const method =
+          b.paymentMethod === undefined
+            ? methods.length === 1
+              ? methods[0]
+              : undefined
+            : methods.find((m) => m.id === b.paymentMethod);
+        if (!method)
           throw new HostError(
             "payment_unavailable",
             "This payment method is unavailable",
@@ -394,6 +418,7 @@ export default definePlugin({
         if (
           prior &&
           (prior.provider !== b.provider ||
+            (prior.payment_method ?? undefined) !== method.id ||
             JSON.parse(prior.product).id !== product.id)
         )
           throw new HostError(
@@ -412,7 +437,7 @@ export default definePlugin({
         if (prior) product = JSON.parse(prior.product);
         else
           db.prepare(
-            "INSERT INTO orders(id,user_id,provider,product,status,created_at,checkout_url,request_key) VALUES(?,?,?,?,'pending',?,NULL,?)",
+            "INSERT INTO orders(id,user_id,provider,product,status,created_at,checkout_url,request_key,payment_method,payment_method_name) VALUES(?,?,?,?,'pending',?,NULL,?,?,?)",
           ).run(
             id,
             ctx.principal.id,
@@ -420,6 +445,8 @@ export default definePlugin({
             JSON.stringify(product),
             Date.now(),
             nonce,
+            method.id ?? null,
+            method.name,
           );
         const existing = checkouts.get(id);
         if (existing) return json(await existing);
@@ -431,6 +458,7 @@ export default definePlugin({
                 action: "checkout",
                 orderId: id,
                 userId: ctx.principal!.id,
+                paymentMethod: method.id,
                 product: product!,
                 successUrl: publicUrl + "/#/commerce?order=" + id,
                 cancelUrl: publicUrl + "/#/commerce",

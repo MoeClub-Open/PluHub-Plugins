@@ -5,24 +5,16 @@
   "name": "易支付",
   "description": "对接易支付 V1/V2、MD5/RSA 签名。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "payments.epay@1"
-  ],
-  "requires": [
-    "commerce.payment@1",
-    "http.transport@1"
-  ],
+  "provides": ["payments.epay@1"],
+  "requires": ["commerce.payment@1", "http.transport@1"],
   "optionalRequires": [],
-  "permissions": [
-    "api.register",
-    "secrets.read"
-  ],
+  "permissions": ["api.register", "secrets.read"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -32,16 +24,10 @@
         "type": "boolean"
       },
       "version": {
-        "enum": [
-          "v1",
-          "v2"
-        ]
+        "enum": ["v1", "v2"]
       },
       "algorithm": {
-        "enum": [
-          "MD5",
-          "RSA"
-        ]
+        "enum": ["MD5", "RSA"]
       },
       "pid": {
         "type": "string"
@@ -53,11 +39,7 @@
         "type": "string"
       },
       "paymentType": {
-        "enum": [
-          "alipay",
-          "wxpay",
-          "qqpay"
-        ]
+        "enum": ["alipay", "wxpay", "qqpay"]
       },
       "clientIp": {
         "type": "string"
@@ -81,6 +63,60 @@
           "pattern": "^env:[A-Z][A-Z0-9_]*$"
         },
         "uniqueItems": true
+      },
+      "methods": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "paymentType"],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "version": {
+              "enum": ["v1", "v2"]
+            },
+            "algorithm": {
+              "enum": ["MD5", "RSA"]
+            },
+            "pid": {
+              "type": "string"
+            },
+            "baseUrl": {
+              "type": "string"
+            },
+            "publicUrl": {
+              "type": "string"
+            },
+            "paymentType": {
+              "enum": ["alipay", "wxpay", "qqpay"]
+            },
+            "clientIp": {
+              "type": "string"
+            },
+            "keyRef": {
+              "type": "string",
+              "pattern": "^env:[A-Z][A-Z0-9_]*$"
+            },
+            "privateKeyRef": {
+              "type": "string",
+              "pattern": "^env:[A-Z][A-Z0-9_]*$"
+            },
+            "platformPublicKeyRef": {
+              "type": "string",
+              "pattern": "^env:[A-Z][A-Z0-9_]*$"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        }
       }
     }
   },

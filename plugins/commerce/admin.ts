@@ -70,9 +70,9 @@ export function installCommerceAdmin(
               : "outbox x";
         const fields =
           kind === "orders"
-            ? "o.id,o.user_id,o.provider,o.product,o.status,o.created_at"
+            ? "o.id,o.user_id,o.provider,o.payment_method_name,o.product,o.status,o.created_at"
             : kind === "subscriptions"
-              ? "s.*,o.user_id,o.provider,o.product"
+              ? "s.*,o.user_id,o.provider,o.payment_method_name,o.product"
               : "x.*";
         const order =
           kind === "orders"
