@@ -23,8 +23,7 @@ function Page({ host }: { host: UIHost }) {
   const [createOpen, setCreateOpen] = React.useState(false),
     [target, setTarget] = React.useState<any>();
   const [busy, setBusy] = React.useState(false);
-  const [detail, setDetail] = React.useState<any>(),
-    [reason, setReason] = React.useState("");
+  const [detail, setDetail] = React.useState<any>();
   const rows = (users.data ?? []).filter(
     (user) =>
       user.username.toLowerCase().includes(query.toLowerCase().trim()) &&
@@ -132,7 +131,6 @@ function Page({ host }: { host: UIHost }) {
                     onClick={() => {
                       setMessage("");
                       setTarget(user);
-                      setReason("");
                     }}
                   >
                     {user.enabled ? tr("禁用") : tr("启用")}
@@ -254,15 +252,6 @@ function Page({ host }: { host: UIHost }) {
                   "0": textValue(target.username),
                 })}
           </p>
-          <label>
-            {tr("操作原因")}
-            <input
-              value={reason}
-              maxLength={256}
-              required
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </label>
           <div className="form-actions">
             <button
               className="secondary"
@@ -273,7 +262,7 @@ function Page({ host }: { host: UIHost }) {
             </button>
             <button
               className={target.enabled ? "danger" : ""}
-              disabled={busy || !reason.trim()}
+              disabled={busy}
               onClick={async () => {
                 setBusy(true);
                 try {
@@ -282,7 +271,6 @@ function Page({ host }: { host: UIHost }) {
                     body: JSON.stringify({
                       id: target.id,
                       enabled: !target.enabled,
-                      reason,
                     }),
                   });
                   setTarget(undefined);

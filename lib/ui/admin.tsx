@@ -10,12 +10,14 @@ export function AdminConfirm({
   close,
   submit,
   children,
+  requestReason = true,
 }: {
   title: string;
   description: string;
   close: () => void;
   submit: (reason: string, fields: FormData) => Promise<void>;
   children?: React.ReactNode;
+  requestReason?: boolean;
 }) {
   const [message, setMessage] = React.useState(""),
     [busy, setBusy] = React.useState(false);
@@ -34,7 +36,7 @@ export function AdminConfirm({
           const fields = new FormData(e.currentTarget);
           setBusy(true);
           try {
-            await submit(String(fields.get("reason")), fields);
+            await submit(String(fields.get("reason") ?? ""), fields);
             close();
           } catch (error) {
             setMessage((error as Error).message);
@@ -44,10 +46,12 @@ export function AdminConfirm({
         }}
       >
         {children}
-        <label>
-          {tr("操作原因")}
-          <input name="reason" required maxLength={256} autoComplete="off" />
-        </label>
+        {requestReason && (
+          <label>
+            {tr("操作原因")}
+            <input name="reason" required maxLength={256} autoComplete="off" />
+          </label>
+        )}
         <div className="form-actions">
           <button
             type="button"

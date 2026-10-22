@@ -47,6 +47,7 @@ export function UserDetail({
   if (action)
     return (
       <AdminConfirm
+        requestReason={false}
         title={
           action === "membership"
             ? tr("账号归属")
@@ -79,7 +80,7 @@ export function UserDetail({
                   : tr("使该用户所有控制台会话失效，API Key 保持不变。")
         }
         close={() => setAction("")}
-        submit={async (reason, fields) => {
+        submit={async (_reason, fields) => {
           const endpoint =
             action === "password"
               ? "/api/plugins/official.auth/password"
@@ -92,14 +93,12 @@ export function UserDetail({
             action === "admin" || action === "membership"
               ? {
                   id: user.id,
-                  reason,
                   ...(action === "membership"
                     ? { accountType: memberType, parentId: parentId || null }
                     : { role: administrator ? "user" : "admin" }),
                 }
               : {
                   userId: user.id,
-                  reason,
                   ...(action === "password"
                     ? { password: fields.get("password") }
                     : action === "factors"

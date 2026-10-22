@@ -136,8 +136,12 @@ export function installAdmin(host: Host, db: DatabaseSync) {
       await requireAdmin(host, request, ctx);
       const body = await readObject(request),
         userId = requiredString(body.userId, "userId");
-      requiredString(body.reason, "reason", 256);
-      adminTarget(ctx, userId, undefined, body.reason);
+      adminTarget(
+        ctx,
+        userId,
+        undefined,
+        typeof body.reason === "string" ? body.reason : undefined,
+      );
       if (!(await host.call("users.lookup@1", { id: userId })))
         throw new HostError("not_found", "用户不存在", 404);
       const removed = db
@@ -155,8 +159,12 @@ export function installAdmin(host: Host, db: DatabaseSync) {
       await requireAdmin(host, request, ctx);
       const body = await readObject(request),
         userId = requiredString(body.userId, "userId");
-      requiredString(body.reason, "reason", 256);
-      adminTarget(ctx, userId, undefined, body.reason);
+      adminTarget(
+        ctx,
+        userId,
+        undefined,
+        typeof body.reason === "string" ? body.reason : undefined,
+      );
       const user = await host.call<any>("users.lookup@1", { id: userId });
       if (!user) throw new HostError("not_found", "用户不存在", 404);
       if (body.confirmUsername !== user.username)
