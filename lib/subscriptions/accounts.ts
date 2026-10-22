@@ -29,6 +29,7 @@ import {
 } from "../ai/subscription-auth.js";
 import { oauthConfig, tokenRequest, responseObject } from "./oauth.js";
 import { createSubscriptionOAuth } from "./oauth-flow.js";
+import { subscriptionOverview, subscriptionNames } from "./overview.js";
 
 const fail = (code: string, message: string, status = 400): never => {
   throw new HostError(code, message, status);
@@ -69,6 +70,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
   ]);
   const stop = new AbortController();
   const refreshing = new Map<string, Promise<SubscriptionCredential>>();
+  const checking = new Map<string, Promise<unknown>>();
   const leases = new Map<string, { id: string; version: number }>();
   const active = new Map<string, number>();
   const row = (id: string): any =>
@@ -118,6 +120,9 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       id: r.id,
       provider: r.provider,
       name: r.name,
+      email: value.email,
+      plan: value.plan_type,
+      credits: value.credits,
       enabled: !!r.enabled,
       maxConcurrency: r.max_concurrency,
       status: !r.enabled
@@ -158,8 +163,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     };
   }
   function save(input: any, ownerId = "") {
-    const provider = subscriptionKind(input.provider ?? kind),
-      name = requiredString(input.name, "name", 128).trim();
+    const provider = subscriptionKind(input.provider ?? kind);
     if (provider !== kind)
       fail("subscription_provider", "订阅账号与提供商不匹配");
     const max = concurrency(input.maxConcurrency ?? 2),
@@ -180,6 +184,15 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     if (previous && previous.provider !== provider)
       fail("subscription_provider", "无法更改授权提供商");
     const token = normalizeSubscriptionToken(input.authorization);
+    const requestedName = input.name
+      ? requiredString(input.name, "name", 254).trim()
+      : "";
+    const candidateName = requestedName || previous?.name;
+    const name =
+      !candidateName ||
+      [provider, subscriptionNames[provider]].includes(candidateName)
+        ? token.email || candidateName || subscriptionNames[provider]
+        : candidateName;
     db.prepare(
       `INSERT INTO accounts(id,provider,name,cipher,max_concurrency,created_at,updated_at,owner_id) VALUES(?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET name=excluded.name,cipher=excluded.cipher,max_concurrency=excluded.max_concurrency,
@@ -240,8 +253,10 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           next.expires_at <= Date.now()
         )
           fail("oauth_response", "刷新响应缺少有效令牌或到期时间", 502);
+        const latest = row(id);
+        if (latest.version !== r.version) return credential(latest);
         const merged = {
-          ...value,
+          ...decrypt(latest),
           ...next,
           refresh_token: next.refresh_token ?? value.refresh_token,
           account_id: next.account_id ?? value.account_id,
@@ -291,6 +306,52 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       const remaining = Math.max(0, (active.get(lease.id) ?? 1) - 1);
       if (remaining) active.set(lease.id, remaining);
       else active.delete(lease.id);
+    }
+  }
+  async function queryOverview(id: string) {
+    const pending = checking.get(id);
+    if (pending) return pending;
+    const task = (async () => {
+      const token = await resolve(id);
+      const current = row(id);
+      const value = decrypt(current);
+      const overview = await subscriptionOverview(
+        host,
+        kind,
+        value,
+        AbortSignal.any([stop.signal, AbortSignal.timeout(20000)]),
+      );
+      const latest = row(id);
+      if (latest.version !== token.version || !latest.enabled)
+        return metadata(latest);
+      const name =
+        overview.email && [kind, subscriptionNames[kind]].includes(latest.name)
+          ? overview.email
+          : latest.name;
+      const updated = {
+        ...decrypt(latest),
+        email: overview.email ?? value.email,
+        plan_type: overview.plan ?? value.plan_type,
+        credits: overview.credits,
+      };
+      // Quota metadata does not rotate credentials; refresh merges the latest encrypted metadata.
+      db.prepare(
+        "UPDATE accounts SET name=?,quota_json=?,quota_updated_at=?,cipher=? WHERE id=? AND version=?",
+      ).run(
+        name,
+        JSON.stringify(overview.quota),
+        Date.now(),
+        encrypt(id, kind, updated, latest.owner_id),
+        id,
+        token.version,
+      );
+      return metadata(row(id));
+    })();
+    checking.set(id, task);
+    try {
+      return await task;
+    } finally {
+      if (checking.get(id) === task) checking.delete(id);
     }
   }
   host.provide(
@@ -426,9 +487,19 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
                   q.resetAt <= Date.now() + 2592000000)),
           )
         ) {
+          const merged = new Map(
+            (JSON.parse(r.quota_json) as any[]).map((q) => [q.window, q]),
+          );
+          for (const q of input.quota)
+            merged.set(q.window, { ...q, updatedAt: Date.now() });
           db.prepare(
             "UPDATE accounts SET quota_json=?,quota_updated_at=? WHERE id=? AND version=?",
-          ).run(JSON.stringify(input.quota), Date.now(), r.id, input.version);
+          ).run(
+            JSON.stringify([...merged.values()]),
+            Date.now(),
+            r.id,
+            input.version,
+          );
           for (const q of input.quota)
             if (q.usedPercent >= 100 && q.resetAt && q.resetAt > Date.now()) {
               cooldown = Math.max(cooldown, q.resetAt);
@@ -502,7 +573,11 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         db.prepare(
           "UPDATE accounts SET name=?,enabled=?,max_concurrency=?,updated_at=? WHERE id=?",
         ).run(
-          requiredString(b.name ?? r.name, "name", 128),
+          b.name === undefined
+            ? r.name
+            : typeof b.name === "string" && !b.name.trim()
+              ? (decrypt(r).email ?? subscriptionNames[kind])
+              : requiredString(b.name, "name", 254),
           b.enabled === undefined
             ? r.enabled
             : b.enabled === true
@@ -514,7 +589,9 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           Date.now(),
           r.id,
         );
-      } else if (b.action === "refresh") await resolve(r.id, r.version);
+      } else if (b.action === "quota")
+        return json(await cancellable(queryOverview(r.id), ctx.signal));
+      else if (b.action === "refresh") await resolve(r.id, r.version);
       else if (b.action === "resume")
         db.prepare(
           "UPDATE accounts SET status='ready',error_code=NULL,cooldown_until=0 WHERE id=?",
@@ -620,7 +697,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
   host.cleanup(async () => {
     stop.abort();
     await oauth.close();
-    await Promise.allSettled([...refreshing.values()]);
+    await Promise.allSettled([...refreshing.values(), ...checking.values()]);
     leases.clear();
     active.clear();
     db.close();

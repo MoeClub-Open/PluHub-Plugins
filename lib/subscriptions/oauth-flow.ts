@@ -6,6 +6,7 @@ import {
   type SubscriptionKind,
 } from "../ai/subscription-auth.js";
 import { oauthConfig, responseObject, tokenRequest } from "./oauth.js";
+import { subscriptionIdentity } from "./overview.js";
 
 const deviceOrigin = "https://auth.openai.com";
 const deviceApi = deviceOrigin + "/api/accounts/deviceauth";
@@ -136,13 +137,22 @@ export function createSubscriptionOAuth(
       failure("oauth_session", "授权会话已过期，请重新开始", 409);
     if (!token.access_token)
       failure("oauth_response", "授权响应缺少访问令牌", 502);
+    const identity = await subscriptionIdentity(
+      host,
+      flow.provider,
+      token,
+      signal(flow),
+    );
+    flow.controller.signal.throwIfAborted();
+    if (flows.get(id) !== flow || flow.expiresAt <= Date.now())
+      failure("oauth_session", "授权会话已过期，请重新开始", 409);
     return save(
       {
         id: flow.accountId,
         provider: flow.provider,
         name: flow.name,
         maxConcurrency: flow.maxConcurrency,
-        authorization: token,
+        authorization: identity,
       },
       flow.owner,
     );
@@ -186,7 +196,7 @@ export function createSubscriptionOAuth(
         state: randomBytes(32).toString("base64url"),
         verifier: randomBytes(64).toString("base64url"),
         expiresAt: Date.now() + 600000,
-        name: requiredString(input.name, "name", 128),
+        name: input.name ? requiredString(input.name, "name", 254).trim() : "",
         accountId: input.id,
         maxConcurrency: input.maxConcurrency,
         redirectUri: config.redirectUri,

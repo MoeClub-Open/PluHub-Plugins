@@ -22,6 +22,21 @@ const providers: Record<SubscriptionKind, string> = {
 };
 const date = (v?: number) =>
   v ? new Date(v).toLocaleString(getLocale(), { hour12: false }) : "—";
+const quotaName = (q: any) =>
+  [
+    q.label,
+    q.windowMinutes
+      ? q.windowMinutes >= 1440
+        ? q.windowMinutes / 1440 + "d"
+        : q.windowMinutes / 60 + "h"
+      : !q.label
+        ? tr("额度")
+        : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+const remaining = (q: any) =>
+  tr("剩余 {0}%", { "0": Number((100 - q.usedPercent).toFixed(1)) });
 const statusLabel = (status: string) =>
   tr(
     (
@@ -50,12 +65,21 @@ function ProviderAccounts({
   const [query, setQuery] = React.useState("");
   const [edit, setEdit] = React.useState<any>(),
     [remove, setRemove] = React.useState<any>();
+  const [quota, setQuota] = React.useState<any>();
   const [message, setMessage] = React.useState(""),
     [busy, setBusy] = React.useState(false);
   const [page, setPage] = React.useState(1),
     [size, setSize] = React.useState(20);
   const rows = (data.data ?? []).filter((r) =>
-    (r.name + " " + (r.accountId ?? "") + " " + (r.projectId ?? ""))
+    (
+      r.name +
+      " " +
+      (r.email ?? "") +
+      " " +
+      (r.accountId ?? "") +
+      " " +
+      (r.projectId ?? "")
+    )
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
@@ -64,10 +88,14 @@ function ProviderAccounts({
     setBusy(true);
     setMessage("");
     try {
-      await host.request(api + "/account", {
+      const result = await host.request(api + "/account", {
         method: "POST",
         body: JSON.stringify({ id: account.id, action, ...extra }),
       });
+      if (action === "quota")
+        setQuota((current: any) =>
+          current?.id === account.id ? result : current,
+        );
       data.reload();
       setRemove(undefined);
     } catch (error) {
@@ -78,7 +106,7 @@ function ProviderAccounts({
   }
   return (
     <section className="subscription-page">
-      <style>{`.subscription-form{display:grid;gap:12px;margin-top:12px}.subscription-form textarea{min-height:64px;font-family:monospace;font-size:12px}.oauth-connect{display:grid;gap:10px}.subscription-page .subscription-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}.subscription-tools input{flex:1;min-width:160px}.subscription-tools>button{margin-left:auto}.subscription-page td{vertical-align:middle}.subscription-page td small{display:block;color:var(--muted);margin-top:4px}.subscription-page .row-actions{display:flex;flex-wrap:wrap;gap:4px}.subscription-page .row-actions button{padding:5px 8px;font-size:12px}.subscription-page .subscription-table{overflow:auto}.subscription-form .actions{justify-content:flex-end}`}</style>
+      <style>{`.subscription-form{display:grid;gap:12px;margin-top:12px}.subscription-form textarea{min-height:64px;font-family:monospace;font-size:12px}.oauth-connect{display:grid;gap:10px}.subscription-page .subscription-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}.subscription-tools input{flex:1;min-width:160px}.subscription-tools>button{margin-left:auto}.subscription-page td{vertical-align:middle}.subscription-page td small{display:block;color:var(--muted);margin-top:4px}.subscription-page .row-actions{display:flex;flex-wrap:wrap;gap:4px}.subscription-page .row-actions button{padding:5px 8px;font-size:12px}.subscription-page .subscription-table{overflow:auto}.subscription-form .actions{justify-content:flex-end}.subscription-quota-list{display:grid;gap:12px;margin-block:12px}.subscription-quota-row{display:grid;gap:4px}.subscription-quota-row>div{display:flex;justify-content:space-between;gap:12px}.subscription-quota-row progress{width:100%;height:5px;accent-color:var(--accent)}.subscription-quota-row small{color:var(--muted)}`}</style>
       <PageHeading title={providers[provider] + " · " + tr("订阅账号")}>
         <button onClick={() => setEdit({})}>
           <Icon name="plus" size={15} />
@@ -113,7 +141,7 @@ function ProviderAccounts({
           <table>
             <thead>
               <tr>
-                {["名称", "状态", "额度快照", "授权到期", "并发", "操作"].map(
+                {["名称", "状态", "订阅额度", "授权到期", "并发", "操作"].map(
                   (s) => (
                     <th key={s}>{tr(s)}</th>
                   ),
@@ -125,6 +153,8 @@ function ProviderAccounts({
                 <tr key={r.id}>
                   <td>
                     <strong>{r.name}</strong>
+                    {r.email && r.email !== r.name && <small>{r.email}</small>}
+                    {r.plan && <small>{r.plan}</small>}
                     {r.projectId && <small>{r.projectId}</small>}
                   </td>
                   <td>
@@ -148,18 +178,22 @@ function ProviderAccounts({
                     )}
                   </td>
                   <td title={date(r.quotaUpdatedAt)}>
-                    {r.quota?.length
-                      ? r.quota.map((q: any) => (
-                          <div key={q.window} title={date(q.resetAt)}>
-                            {q.windowMinutes
-                              ? q.windowMinutes >= 1440
-                                ? q.windowMinutes / 1440 + "d"
-                                : q.windowMinutes / 60 + "h"
-                              : q.window}{" "}
-                            · {tr("已用 {0}%", { "0": String(q.usedPercent) })}
-                          </div>
-                        ))
-                      : "—"}
+                    {r.quota?.slice(0, 2).map((q: any) => (
+                      <div key={q.window} title={date(q.resetAt)}>
+                        {quotaName(q)} · {remaining(q)}
+                      </div>
+                    ))}
+                    <button
+                      className="ghost"
+                      disabled={busy}
+                      onClick={() => {
+                        setMessage("");
+                        setQuota(r);
+                        if (r.enabled) void action(r, "quota");
+                      }}
+                    >
+                      {tr("查看额度")}
+                    </button>
                   </td>
                   <td>
                     {date(r.expiresAt)}
@@ -258,6 +292,65 @@ function ProviderAccounts({
           close={() => setEdit(undefined)}
           saved={data.reload}
         />
+      )}
+      {quota && (
+        <Dialog
+          title={quota.name + " · " + tr("订阅额度")}
+          close={() => setQuota(undefined)}
+        >
+          <Notice message={message} />
+          {quota.plan && <p>{quota.plan}</p>}
+          <div className="subscription-quota-list">
+            {quota.quota?.map((q: any) => (
+              <div key={q.window} className="subscription-quota-row">
+                <div>
+                  <span>{quotaName(q)}</span>
+                  <strong>{remaining(q)}</strong>
+                </div>
+                <progress
+                  max={100}
+                  value={100 - q.usedPercent}
+                  aria-label={quotaName(q) + " · " + remaining(q)}
+                />
+                {q.resetAt && (
+                  <small>{tr("重置于 {0}", { "0": date(q.resetAt) })}</small>
+                )}
+              </div>
+            ))}
+            {quota.credits && (
+              <div className="subscription-quota-row">
+                <div>
+                  <span>{tr("可用点数")}</span>
+                  <strong>
+                    {quota.credits.unlimited
+                      ? tr("无限制")
+                      : (quota.credits.balance ?? "—")}
+                  </strong>
+                </div>
+              </div>
+            )}
+            {!quota.quota?.length && !quota.credits && (
+              <span className="muted">
+                {busy ? tr("正在查询…") : tr("暂无额度数据")}
+              </span>
+            )}
+          </div>
+          <div className="actions">
+            {quota.quotaUpdatedAt && (
+              <small className="muted">
+                {tr("更新于 {0}", { "0": date(quota.quotaUpdatedAt) })}
+              </small>
+            )}
+            <button
+              className="secondary"
+              disabled={busy || !quota.enabled}
+              onClick={() => void action(quota, "quota")}
+            >
+              <Icon name="refresh" size={14} />
+              {busy ? tr("正在查询…") : tr("刷新额度")}
+            </button>
+          </div>
+        </Dialog>
       )}
       {remove && (
         <Dialog title={tr("删除订阅账号")} close={() => setRemove(undefined)}>

@@ -42,6 +42,9 @@ export interface SubscriptionToken {
   expires_at?: number;
   account_id?: string;
   project_id?: string;
+  email?: string;
+  plan_type?: string;
+  credits?: { balance?: string; unlimited?: boolean };
 }
 /** A passive snapshot from actual requests; absent headers never imply zero usage. */
 export function subscriptionQuota(
@@ -128,6 +131,15 @@ export function normalizeSubscriptionToken(
     jwt["https://api.openai.com/auth"] ??
     identity["https://api.openai.com/auth"] ??
     {};
+  const email =
+    value.email ??
+    root.email ??
+    value.account?.email_address ??
+    value.account?.email ??
+    identity.email ??
+    jwt.email ??
+    jwt["https://api.openai.com/profile"]?.email;
+  const plan = value.plan_type ?? root.plan_type ?? auth.chatgpt_plan_type;
   let expiry: any = value.expires_at ?? value.expiresAt ?? value.expiry_date;
   if (expiry === undefined && value.expires_in !== undefined) {
     if (
@@ -158,5 +170,13 @@ export function normalizeSubscriptionToken(
       512,
     ),
     project_id: text(value.project_id ?? value.projectId, 512),
+    ...(typeof email === "string" &&
+    email.length <= 254 &&
+    /^[^\s@]+@[^\s@]+$/.test(email.trim())
+      ? { email: email.trim() }
+      : {}),
+    ...(typeof plan === "string" && plan.length <= 128 && !/[\r\n\0]/.test(plan)
+      ? { plan_type: plan.trim() }
+      : {}),
   };
 }

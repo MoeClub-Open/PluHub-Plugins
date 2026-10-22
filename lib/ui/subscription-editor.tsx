@@ -42,7 +42,7 @@ export function SubscriptionEditor({
   const input = {
     id: account?.id,
     provider,
-    name: name.trim() || providers[provider],
+    name: name.trim(),
     maxConcurrency,
   };
   const cancel = React.useCallback(async () => {
@@ -197,10 +197,9 @@ export function SubscriptionEditor({
           <label>
             {tr("名称")}
             <input
-              maxLength={128}
+              maxLength={254}
               value={name}
-              placeholder={providers[provider]}
-              required={tab === "details"}
+              placeholder={tr("自动获取邮箱")}
               disabled={!!flow || busy}
               onChange={(event) => setName(event.target.value)}
             />
