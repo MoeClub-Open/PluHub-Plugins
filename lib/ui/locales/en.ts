@@ -1,5 +1,11 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "24 小时": "24 hours",
+  "7 天": "7 days",
+  "30 天": "30 days",
+  "价格 / 百万 Token": "Price / 1M tokens",
+  上下文: "Context",
+  使用: "Use",
   待核对: "Needs review",
   订单: "Order",
   金额: "Amount",
