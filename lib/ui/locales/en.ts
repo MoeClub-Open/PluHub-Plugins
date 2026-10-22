@@ -452,6 +452,7 @@ export const en: Record<string, string> = {
   添加渠道: "Add channel",
   个模型: "models",
   未配置模型映射: "No model mappings",
+  读取上游可用模型: "Load available upstream models",
   " 等 {0} 个": " and {0} total",
   路由配置: "Routing configuration",
   "渠道 {0}": "Channels {0}",

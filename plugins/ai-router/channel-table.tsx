@@ -242,13 +242,13 @@ export function ChannelTable({
                       disabled={busy}
                       onClick={() => modelsFor(id)}
                     >
-                      <strong>{channelModels.length}</strong> {tr("个模型")}
+                      <Icon name="eye" size={14} />
+                      {tr("查看模型")}
+                      <span className="badge">{channelModels.length}</span>
                     </button>
-                    <small
-                      title={channelModels.join("、")}
-                    >
+                    <small title={channelModels.join("、")}>
                       {channelModels.slice(0, 3).join("、") ||
-                        tr("未配置模型映射")}
+                        tr("读取上游可用模型")}
                       {channelModels.length > 3 &&
                         tr(" 等 {0} 个", {
                           "0": textValue(channelModels.length),
