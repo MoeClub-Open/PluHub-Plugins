@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "id": "official.commerce",
+  "category": "commerce",
+  "name": "商品与订阅",
+  "description": "管理商品、订单、订阅和支付入账。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.7",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "commerce.payment-adjustment@1",
+    "commerce.payment@1",
+    "commerce.entitlements@1"
+  ],
+  "requires": ["billing.payment-state@1"],
+  "optionalRequires": ["payments.stripe@1", "payments.epay@1", "auth.admin@1"],
+  "permissions": ["api.register"],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "publicUrl": {
+        "type": "string"
+      },
+      "products": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "paymentMinor",
+            "currency",
+            "creditMicros",
+            "mode"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "paymentMinor": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[a-z]{3}$"
+            },
+            "creditMicros": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mode": {
+              "enum": ["payment", "subscription"]
+            },
+            "interval": {
+              "enum": ["month", "year"]
+            }
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "title": "充值与订阅",
+    "entry": "dist/ui.js",
+    "path": "/commerce",
+    "public": true,
+    "pages": [
+      {
+        "title": "商品与订阅",
+        "path": "/settings/commerce",
+        "group": "payments",
+        "order": 30,
+        "public": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "official.playground",
+  "category": "tools",
+  "name": "模型试用",
+  "description": "提供多轮对话和流式模型试用。",
+  "codeReload": "parallel",
+  "version": "0.1.0-alpha.3",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "entry": "dist/index.js",
+    "kind": "native"
+  },
+  "provides": [],
+  "requires": [
+    "ai.catalog@1"
+  ],
+  "permissions": [
+    "api.register"
+  ],
+  "configReload": "restart",
+  "configSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "ui": {
+    "title": "在线对话",
+    "entry": "dist/ui.js",
+    "public": true,
+    "path": "/playground"
+  }
+}

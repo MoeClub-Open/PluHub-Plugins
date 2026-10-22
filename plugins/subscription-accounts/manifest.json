@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "id": "official.subscription-accounts",
+  "category": "routing",
+  "name": "订阅账号",
+  "description": "管理订阅授权、令牌刷新与账号可用性。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.4",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "ai.subscription-accounts@1"
+  ],
+  "requires": [
+    "http.transport@1"
+  ],
+  "permissions": [
+    "api.register",
+    "secrets.read"
+  ],
+  "configReload": "restart",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "masterKeyRef": {
+        "type": "string",
+        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+      },
+      "secretRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        },
+        "uniqueItems": true
+      },
+      "oauth": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "codex": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^env:[A-Z][A-Z0-9_]*$"
+              }
+            }
+          },
+          "claude-subscription": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^env:[A-Z][A-Z0-9_]*$"
+              }
+            }
+          },
+          "antigravity": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^env:[A-Z][A-Z0-9_]*$"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "title": "订阅账号",
+    "entry": "dist/ui.js",
+    "path": "/settings/subscription-accounts",
+    "public": false,
+    "group": "routing",
+    "order": 25
+  }
+}

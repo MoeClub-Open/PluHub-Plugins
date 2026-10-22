@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "official.users",
+  "category": "identity",
+  "name": "用户管理",
+  "description": "维护用户资料、角色和启用状态。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.7",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "users.lookup@1",
+    "users.manage@1",
+    "users.directory@1",
+    "users.log-scope@1"
+  ],
+  "requires": [],
+  "permissions": [
+    "api.register"
+  ],
+  "configReload": "restart",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "ui": {
+    "entry": "dist/ui.js",
+    "title": "用户管理",
+    "path": "/users",
+    "public": false
+  },
+  "optionalRequires": [
+    "auth.admin@1"
+  ]
+}

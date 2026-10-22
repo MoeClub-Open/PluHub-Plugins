@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "official.leaderboard",
+  "category": "operations",
+  "name": "整站排行榜",
+  "description": "展示用户用量榜和平台模型热度榜。",
+  "codeReload": "parallel",
+  "version": "0.1.0-alpha.2",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [],
+  "requires": [
+    "observability.rankings@1",
+    "users.directory@1",
+    "ai.catalog@1"
+  ],
+  "permissions": [
+    "api.register"
+  ],
+  "configReload": "restart",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "ui": {
+    "title": "排行榜",
+    "entry": "dist/ui.js",
+    "public": true,
+    "path": "/leaderboard",
+    "order": 40
+  }
+}

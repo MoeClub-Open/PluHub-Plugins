@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "official.listener",
+  "category": "core",
+  "name": "网络监听器",
+  "description": "接收 HTTP、SSE 和 WebSocket 连接。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.2",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": ["listener.address@1"],
+  "requires": [],
+  "permissions": ["http.listen"],
+  "configReload": "restart",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "type": "string",
+        "minLength": 1
+      },
+      "port": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 65535
+      },
+      "publicOrigin": {
+        "type": "string",
+        "pattern": "^https?://"
+      },
+      "trustedProxies": {
+        "type": "array",
+        "maxItems": 128,
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    }
+  },
+  "optionalRequires": ["ai.routing@1", "auth.admit@1"]
+}

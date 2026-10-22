@@ -1,0 +1,10 @@
+{
+  "name": "@pluhub/plugin-upstream-codex",
+  "version": "0.1.0-alpha.8",
+  "type": "module",
+  "private": true,
+  "files": [
+    "dist",
+    "manifest.json"
+  ]
+}

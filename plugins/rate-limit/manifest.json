@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "id": "official.rate-limit",
+  "category": "traffic",
+  "name": "请求限流",
+  "description": "按规则限制请求频率和 Token 配额。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.6",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "ai.request-limits@1"
+  ],
+  "requires": [],
+  "optionalRequires": [],
+  "permissions": [
+    "api.register",
+    "hooks.register"
+  ],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "user": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rpm": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "tpm": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "concurrency": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          }
+        }
+      },
+      "key": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rpm": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "tpm": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "concurrency": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          }
+        }
+      },
+      "channels": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rpm": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "tpm": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "concurrency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            }
+          }
+        }
+      },
+      "bytesPerSecond": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000000000
+      }
+    }
+  },
+  "ui": {
+    "title": "全局请求限制",
+    "entry": "dist/ui.js",
+    "path": "/rate-limit",
+    "public": false,
+    "group": "channel-settings",
+    "order": 10
+  }
+}

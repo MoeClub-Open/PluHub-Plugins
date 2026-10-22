@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "id": "official.turnstile",
+  "category": "identity",
+  "name": "Turnstile 验证",
+  "description": "校验 Cloudflare Turnstile 人机验证令牌。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.6",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "captcha.options@1",
+    "captcha.verify@1"
+  ],
+  "requires": [
+    "http.transport@1"
+  ],
+  "permissions": [
+    "api.register",
+    "secrets.read"
+  ],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "secretRefs": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        }
+      },
+      "siteKey": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "secretRef": {
+        "type": "string",
+        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+      },
+      "hostnames": {
+        "type": "array",
+        "uniqueItems": true,
+        "maxItems": 32,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[a-zA-Z0-9.-]+$"
+        }
+      }
+    }
+  },
+  "ui": {
+    "entry": "dist/ui.js",
+    "title": "Turnstile 验证码",
+    "path": "/turnstile",
+    "public": false,
+    "group": "verification-services",
+    "order": 30
+  }
+}

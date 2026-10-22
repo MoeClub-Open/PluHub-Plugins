@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "id": "official.token-speed",
+  "category": "traffic",
+  "name": "输出速度控制",
+  "description": "限制单个请求的输出 Token 速度。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.4",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "ai.output-pace@1",
+    "ai.output-pace@2"
+  ],
+  "requires": [],
+  "optionalRequires": [],
+  "permissions": [
+    "api.register"
+  ],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "default": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tokenizer"
+        ],
+        "properties": {
+          "tps": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000
+          },
+          "aggregateTps": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000
+          },
+          "tokenizer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "models": {
+        "type": "array",
+        "maxItems": 512,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tokenizer",
+            "channel",
+            "model"
+          ],
+          "properties": {
+            "tps": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1000000
+            },
+            "aggregateTps": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1000000
+            },
+            "tokenizer": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "channel": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        }
+      },
+      "tokenizers": {
+        "type": "object",
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "encoding"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "tiktoken"
+                },
+                "encoding": {
+                  "enum": [
+                    "cl100k_base",
+                    "o200k_base"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "tokenizerPath",
+                "configPath"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "huggingface"
+                },
+                "tokenizerPath": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "configPath": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      },
+      "maxTrackedChars": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 1000000
+      },
+      "quantumTokens": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 128
+      }
+    }
+  },
+  "ui": {
+    "entry": "dist/ui.js",
+    "title": "默认输出速度",
+    "path": "/token-speed",
+    "public": false,
+    "group": "channel-settings",
+    "order": 20
+  }
+}

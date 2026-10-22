@@ -1,0 +1,145 @@
+import { it, expect } from "vitest";
+import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
+import { compileWorkflow, runWorkflow } from "../lib/ai/channel-graph.js";
+import { redirectModel } from "../plugins/ai-router/redirects.js";
+import { checkProtocolConversion } from "../lib/ai/channel-graph.js";
+const request = {
+  model: "public",
+  messages: [{ role: "user" as const, text: "hello" }],
+  tools: [],
+  stream: false,
+  maxTokens: 12,
+};
+const flow: ChannelWorkflow = {
+  entry: "start",
+  nodes: [
+    { id: "start", type: "start", next: "condition" },
+    {
+      id: "condition",
+      type: "condition",
+      test: "stream",
+      yes: "prompt",
+      no: "plain",
+    },
+    { id: "prompt", type: "prompt", text: "system", next: "budget" },
+    { id: "budget", type: "maxTokens", limit: 8, next: "tps" },
+    {
+      id: "tps",
+      type: "tps",
+      rate: 30,
+      tokenizer: "o200k_base",
+      next: "reasoning",
+    },
+    { id: "reasoning", type: "reasoning", effort: "low", next: "rich" },
+    { id: "rich", type: "upstream", target: "smart", mode: "explicit" },
+    { id: "plain", type: "upstream", target: "fast", mode: "implicit" },
+  ],
+};
+it("executes channel branches, bounded transforms and traces without modifying input", () => {
+  const signal = new AbortController().signal;
+  expect(runWorkflow("p", flow, request, signal).target).toBe("fast");
+  const output = runWorkflow("p", flow, { ...request, stream: true }, signal);
+  expect(output).toMatchObject({
+    target: "smart",
+    mode: "explicit",
+    request: { maxTokens: 8, reasoning: { effort: "low" } },
+    outputPolicy: { tps: 30 },
+  });
+  expect(output.request.messages[0]?.text).toBe("system");
+  expect(output.trace.nodes).toEqual([
+    "start",
+    "condition",
+    "prompt",
+    "budget",
+    "tps",
+    "reasoning",
+    "rich",
+  ]);
+  expect(request.messages).toHaveLength(1);
+  expect(request.maxTokens).toBe(12);
+});
+it("rejects graph cycles, missing edges, unreachable and duplicate nodes", () => {
+  expect(() => compileWorkflow({ ...flow, entry: "absent" })).toThrow();
+  expect(() =>
+    compileWorkflow({ ...flow, nodes: [...flow.nodes, flow.nodes[0]!] }),
+  ).toThrow(/unique/);
+  expect(() =>
+    compileWorkflow({
+      ...flow,
+      nodes: flow.nodes.map((n) =>
+        n.id === "start" ? { id: "start", type: "start", next: "start" } : n,
+      ),
+    }),
+  ).toThrow(/cycles/);
+  expect(() =>
+    compileWorkflow({
+      ...flow,
+      nodes: flow.nodes.filter((n) => n.id !== "budget"),
+    }),
+  ).toThrow(/missing/);
+  expect(() =>
+    compileWorkflow({
+      ...flow,
+      nodes: [
+        ...flow.nodes,
+        { id: "orphan", type: "upstream", target: "x", mode: "implicit" },
+      ],
+    }),
+  ).toThrow(/reachable/);
+});
+it("honors cancellation before a workflow runs", () => {
+  const controller = new AbortController();
+  controller.abort();
+  expect(() => runWorkflow("p", flow, request, controller.signal)).toThrow();
+});
+it("validates protocol gates and maps subscription providers to their wire protocols", () => {
+  const policy = { conversion: "disabled" as const };
+  for (const [ingress, provider] of [
+    ["openai-responses", "codex"],
+    ["anthropic", "claude-subscription"],
+    ["gemini", "antigravity"],
+  ] as const) {
+    expect(() =>
+      checkProtocolConversion(ingress, provider, policy),
+    ).not.toThrow();
+    expect(() =>
+      checkProtocolConversion("openai-chat", provider, policy),
+    ).toThrow(/相同的协议/);
+  }
+  for (const allow of [[], ["invalid"], ["anthropic", "anthropic"]]) {
+    expect(() =>
+      compileWorkflow({
+        entry: "s",
+        nodes: [
+          { id: "s", type: "start", next: "gate" },
+          {
+            id: "gate",
+            type: "protocol",
+            allow,
+            conversion: "auto",
+            next: "p",
+          },
+          { id: "p", type: "provider" },
+        ],
+      } as any),
+    ).toThrow(/协议准入/);
+  }
+});
+it("resolves implicit and explicit redirect chains and rejects loops", () => {
+  expect(
+    redirectModel("a", {
+      a: { target: "b", mode: "implicit" },
+      b: { target: "c", mode: "explicit" },
+    }),
+  ).toEqual({ model: "c", path: ["a", "b", "c"], explicit: true });
+  expect(
+    redirectModel("a", { a: { target: "b", mode: "explicit", enabled: false } })
+      .model,
+  ).toBe("a");
+  expect(() =>
+    redirectModel("a", {
+      a: { target: "b", mode: "implicit" },
+      b: { target: "a", mode: "implicit" },
+    }),
+  ).toThrow(/cycle/);
+});

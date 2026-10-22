@@ -1,0 +1,325 @@
+{
+  "schemaVersion": 1,
+  "id": "official.auto-router",
+  "category": "routing",
+  "name": "智能路由",
+  "description": "根据任务选择模型和思考强度。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.5",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "ai.auto-routing@1",
+    "ai.upstream.auto-router@1"
+  ],
+  "requires": [
+    "ai.targets@1",
+    "http.transport@1"
+  ],
+  "optionalRequires": [
+    "credentials.select@1",
+    "ai.upstream.openai-chat@1",
+    "ai.upstream.openai-responses@1",
+    "ai.upstream.anthropic@1",
+    "ai.upstream.gemini@1",
+    "ai.upstream.codex@1",
+    "ai.upstream.claude-subscription@1",
+    "ai.upstream.antigravity@1"
+  ],
+  "permissions": [
+    "api.register",
+    "secrets.read"
+  ],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "profiles": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "candidates",
+            "decision"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mode": {
+              "enum": [
+                "model",
+                "effort",
+                "both",
+                "manual"
+              ]
+            },
+            "candidates": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "target",
+                  "strength"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "target": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "reasoningEfforts": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "none",
+                        "minimal",
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max"
+                      ]
+                    }
+                  },
+                  "defaultEffort": {
+                    "enum": [
+                      "none",
+                      "minimal",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max"
+                    ]
+                  }
+                }
+              }
+            },
+            "fixedCandidate": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "fixedEffort": {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "preserveClientEffort": {
+              "type": "boolean"
+            },
+            "decision": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "rules",
+                    "luna",
+                    "systemone",
+                    "jev"
+                  ]
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "keyRef": {
+                  "type": "string",
+                  "pattern": "^env:[A-Z][A-Z0-9_]*$"
+                },
+                "timeoutMs": {
+                  "type": "integer",
+                  "minimum": 50,
+                  "maximum": 30000
+                },
+                "maxInputChars": {
+                  "type": "integer",
+                  "minimum": 128,
+                  "maximum": 1000000
+                }
+              }
+            },
+            "minConfidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "onFailure": {
+              "enum": [
+                "fallback",
+                "reject"
+              ]
+            },
+            "fallbackCandidate": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "fallbackEffort": {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "difficultyStrength": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "easy": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "standard": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "hard": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "expert": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              }
+            },
+            "effortByDifficulty": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "easy": {
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ]
+                },
+                "standard": {
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ]
+                },
+                "hard": {
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ]
+                },
+                "expert": {
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ]
+                }
+              }
+            },
+            "strategy": {
+              "enum": [
+                "balanced",
+                "cost",
+                "quality"
+              ]
+            }
+          }
+        }
+      },
+      "secretRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        },
+        "uniqueItems": true
+      },
+      "decisionRpm": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000000
+      },
+      "decisionConcurrency": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1024
+      }
+    }
+  },
+  "ui": {
+    "entry": "dist/ui.js",
+    "title": "路由策略",
+    "path": "/auto-router",
+    "public": false,
+    "group": "channel-settings",
+    "order": 20
+  }
+}

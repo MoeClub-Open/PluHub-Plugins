@@ -1,0 +1,10 @@
+{
+  "name": "@pluhub/plugin-auth",
+  "version": "0.1.0-alpha.10",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "manifest.json"
+  ]
+}

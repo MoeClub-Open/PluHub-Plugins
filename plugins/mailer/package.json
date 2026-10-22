@@ -1,0 +1,10 @@
+{
+  "name": "@pluhub/plugin-mailer",
+  "version": "0.1.0-alpha.5",
+  "type": "module",
+  "private": true,
+  "files": [
+    "dist",
+    "manifest.json"
+  ]
+}

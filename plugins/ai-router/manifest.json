@@ -1,0 +1,887 @@
+{
+  "schemaVersion": 1,
+  "id": "official.ai-router",
+  "category": "routing",
+  "name": "渠道与模型路由",
+  "description": "管理渠道、模型映射和可视化功能组合。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.8",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "ai.routing@1",
+    "ai.execution@1",
+    "ai.catalog@1",
+    "ai.channels@1",
+    "ai.targets@1"
+  ],
+  "requires": [],
+  "permissions": [
+    "api.register",
+    "http.route"
+  ],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "upstreams": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "enum": [
+                "openai-chat",
+                "openai-responses",
+                "anthropic",
+                "gemini",
+                "codex",
+                "claude-subscription",
+                "antigravity",
+                "auto-router",
+                "workflow"
+              ]
+            },
+            "baseUrl": {
+              "type": "string",
+              "pattern": "^https?://"
+            },
+            "keyRef": {
+              "type": "string",
+              "pattern": "^env:[A-Z][A-Z0-9_]*$"
+            },
+            "name": {
+              "maxLength": 128,
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "accountId": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "projectId": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "authMode": {
+              "enum": [
+                "siwc",
+                "cli"
+              ]
+            },
+            "flow": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "entry",
+                "nodes"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "nodes": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 64,
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "next"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "start"
+                          },
+                          "next": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "test",
+                          "yes",
+                          "no"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "condition"
+                          },
+                          "test": {
+                            "enum": [
+                              "hasTools",
+                              "stream",
+                              "textLengthAbove",
+                              "protocol"
+                            ]
+                          },
+                          "value": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000000
+                          },
+                          "yes": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "no": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "protocol": {
+                            "enum": [
+                              "openai-chat",
+                              "openai-responses",
+                              "anthropic",
+                              "gemini"
+                            ]
+                          }
+                        },
+                        "allOf": [
+                          {
+                            "if": {
+                              "properties": {
+                                "test": {
+                                  "const": "protocol"
+                                }
+                              }
+                            },
+                            "then": {
+                              "required": [
+                                "protocol"
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "next",
+                          "text"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "prompt"
+                          },
+                          "next": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16384
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "next",
+                          "effort"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "reasoning"
+                          },
+                          "next": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "effort": {
+                            "enum": [
+                              "none",
+                              "minimal",
+                              "low",
+                              "medium",
+                              "high",
+                              "xhigh",
+                              "max"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "next",
+                          "limit"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "maxTokens"
+                          },
+                          "next": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000000
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "next",
+                          "tokenizer"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "tps"
+                          },
+                          "next": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "rate": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1000000
+                          },
+                          "tokenizer": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+                          },
+                          "aggregateRate": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1000000
+                          },
+                          "model": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "inheritDefault": {
+                            "type": "boolean"
+                          }
+                        },
+                        "anyOf": [
+                          {
+                            "required": [
+                              "rate"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "aggregateRate"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "target",
+                          "mode"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "upstream"
+                          },
+                          "target": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "mode": {
+                            "enum": [
+                              "implicit",
+                              "explicit"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "provider"
+                          },
+                          "upstream": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "protocol"
+                            ],
+                            "properties": {
+                              "protocol": {
+                                "enum": [
+                                  "openai-chat",
+                                  "openai-responses",
+                                  "anthropic",
+                                  "gemini",
+                                  "codex",
+                                  "claude-subscription",
+                                  "antigravity"
+                                ]
+                              },
+                              "baseUrl": {
+                                "type": "string",
+                                "pattern": "^https?://"
+                              },
+                              "keyRef": {
+                                "type": "string",
+                                "pattern": "^env:[A-Z][A-Z0-9_]*$"
+                              },
+                              "accountId": {
+                                "type": "string",
+                                "maxLength": 512
+                              },
+                              "projectId": {
+                                "type": "string",
+                                "maxLength": 512
+                              },
+                              "authMode": {
+                                "enum": [
+                                  "siwc",
+                                  "cli"
+                                ]
+                              },
+                              "subscriptionAccountIds": {
+                                "type": "array",
+                                "minItems": 1,
+                                "maxItems": 100,
+                                "uniqueItems": true,
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                }
+                              }
+                            },
+                            "allOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "required": [
+                                      "baseUrl",
+                                      "keyRef"
+                                    ]
+                                  },
+                                  {
+                                    "required": [
+                                      "subscriptionAccountIds"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "profile"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "routing"
+                          },
+                          "profile": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "next",
+                          "allow",
+                          "conversion"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "protocol"
+                          },
+                          "next": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "allow": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 4,
+                            "uniqueItems": true,
+                            "items": {
+                              "enum": [
+                                "openai-chat",
+                                "openai-responses",
+                                "anthropic",
+                                "gemini"
+                              ]
+                            }
+                          },
+                          "conversion": {
+                            "enum": [
+                              "auto",
+                              "disabled"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "type",
+                          "next",
+                          "rule"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "rateLimit"
+                          },
+                          "next": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "rule": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "rpm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000000000
+                              },
+                              "tpm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000000000
+                              },
+                              "concurrency": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000000000
+                              },
+                              "bytesPerSecond": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000000000
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "consumptionMultiplier": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "subscriptionAccountIds": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "protocol": {
+                    "enum": [
+                      "openai-chat",
+                      "openai-responses",
+                      "anthropic",
+                      "gemini",
+                      "codex",
+                      "claude-subscription",
+                      "antigravity"
+                    ]
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              "then": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "baseUrl",
+                      "keyRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "subscriptionAccountIds"
+                    ]
+                  }
+                ]
+              },
+              "else": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "baseUrl"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "keyRef"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "required": [
+                    "protocol"
+                  ]
+                }
+              },
+              "then": {
+                "required": [
+                  "flow"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "models": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "upstream",
+            "model"
+          ],
+          "properties": {
+            "upstream": {
+              "type": "string",
+              "minLength": 1
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "name": {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            "provider": {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            "description": {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            "contextWindow": {
+              "minimum": 1,
+              "maximum": 100000000,
+              "type": "integer"
+            },
+            "inputPrice": {
+              "minimum": 0,
+              "maximum": 1000000,
+              "type": "number"
+            },
+            "outputPrice": {
+              "minimum": 0,
+              "maximum": 1000000,
+              "type": "number"
+            },
+            "reasoningEfforts": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              }
+            },
+            "pricing": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "tokens",
+                    "request"
+                  ]
+                },
+                "request": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "cacheRead": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "cacheWrite": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "cacheWrite1h": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "tiers": {
+                  "type": "array",
+                  "maxItems": 32,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "above",
+                      "input",
+                      "output"
+                    ],
+                    "properties": {
+                      "above": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100000000
+                      },
+                      "input": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "output": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "cacheRead": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "cacheWrite": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "cacheWrite1h": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "redirects": {
+        "type": "object",
+        "maxProperties": 1024,
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "target",
+            "mode"
+          ],
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mode": {
+              "enum": [
+                "implicit",
+                "explicit"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "entry": "dist/ui.js",
+    "title": "渠道与模型",
+    "path": "/ai-router",
+    "public": false,
+    "group": "routing",
+    "order": 10
+  },
+  "optionalRequires": [
+    "ai.upstream.openai-chat@1",
+    "ai.upstream.openai-responses@1",
+    "ai.upstream.anthropic@1",
+    "ai.upstream.gemini@1",
+    "credentials.select@1",
+    "ai.upstream.codex@1",
+    "ai.upstream.claude-subscription@1",
+    "ai.upstream.antigravity@1",
+    "ai.auto-routing@1",
+    "ai.upstream.auto-router@1",
+    "ai.output-pace@1",
+    "ai.workflow@1",
+    "ai.user-channels@1",
+    "ai.subscription.codex@1",
+    "ai.subscription.claude-subscription@1",
+    "ai.subscription.antigravity@1",
+    "ai.request-limits@1",
+    "ai.output-pace@2"
+  ]
+}

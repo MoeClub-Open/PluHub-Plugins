@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "official.observability",
+  "category": "operations",
+  "name": "调用观测",
+  "description": "记录调用、用量、延迟和错误。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.6",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "entry": "dist/index.js",
+    "kind": "native"
+  },
+  "provides": [
+    "observability.rankings@1"
+  ],
+  "requires": [],
+  "optionalRequires": [
+    "users.log-scope@1"
+  ],
+  "permissions": [
+    "api.register",
+    "hooks.register"
+  ],
+  "configReload": "restart",
+  "configSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "retentionDays": {
+        "minimum": 1,
+        "maximum": 365,
+        "type": "integer"
+      },
+      "maxRows": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 1000000
+      }
+    },
+    "type": "object"
+  },
+  "ui": {
+    "title": "调用记录",
+    "entry": "dist/ui.js",
+    "public": true,
+    "path": "/activity",
+    "pages": [
+      {
+        "title": "全站调用记录",
+        "path": "/admin/activity",
+        "group": "system",
+        "order": 25,
+        "public": false
+      }
+    ]
+  }
+}

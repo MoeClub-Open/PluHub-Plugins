@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "id": "official.billing",
+  "category": "commerce",
+  "name": "计费与余额",
+  "description": "管理余额预留、结算和资金账本。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.10",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "billing.payment-state@1",
+    "billing.credit@1",
+    "billing.balance@1"
+  ],
+  "requires": [],
+  "optionalRequires": ["auth.admin@1", "users.lookup@1", "ai.catalog@1"],
+  "permissions": ["api.register", "hooks.register"],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "groups": {
+        "type": "object",
+        "maxProperties": 128,
+        "propertyNames": {
+          "pattern": "^[a-zA-Z0-9_.-]{1,64}$"
+        },
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "multiplier"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "multiplier": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000
+            }
+          }
+        }
+      },
+      "reserveOutputTokens": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100000000
+      },
+      "outputBudgetMode": {
+        "type": "string",
+        "enum": ["automatic", "bounded", "estimate"]
+      }
+    }
+  },
+  "ui": {
+    "title": "用量与账单",
+    "entry": "dist/ui.js",
+    "path": "/billing",
+    "public": true,
+    "pages": [
+      {
+        "title": "计费设置",
+        "path": "/settings/billing",
+        "group": "payments",
+        "order": 40,
+        "public": false
+      }
+    ]
+  }
+}

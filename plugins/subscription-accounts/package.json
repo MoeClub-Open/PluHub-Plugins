@@ -1,0 +1,10 @@
+{
+  "name": "@pluhub/plugin-subscription-accounts",
+  "version": "0.1.0-alpha.4",
+  "type": "module",
+  "private": true,
+  "files": [
+    "dist",
+    "manifest.json"
+  ]
+}

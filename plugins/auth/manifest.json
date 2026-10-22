@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "id": "official.auth",
+  "category": "identity",
+  "name": "账号认证",
+  "description": "管理密码、会话、API Key 和多因素验证。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.10",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "auth.bootstrap@1",
+    "auth.setup@1",
+    "auth.admit@1",
+    "auth.reset-factors@1",
+    "auth.admin@1",
+    "auth.security-history@1"
+  ],
+  "requires": ["users.lookup@1", "users.manage@1"],
+  "permissions": ["api.register", "identity.provide", "hooks.register"],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "securityHistoryRetentionDays": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3650
+      },
+      "securityHistoryMaxRows": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 1000000
+      },
+      "secureCookie": {
+        "type": "boolean"
+      },
+      "issuer": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "registrationEnabled": {
+        "type": "boolean"
+      },
+      "emailLoginEnabled": {
+        "type": "boolean"
+      },
+      "passwordResetEnabled": {
+        "type": "boolean"
+      },
+      "captcha": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "login": {
+            "type": "boolean"
+          },
+          "register": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "boolean"
+          }
+        }
+      },
+      "webauthn": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "rpID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9.-]+$"
+          },
+          "rpName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "origins": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "entry": "dist/ui.js",
+    "title": "API 密钥",
+    "path": "/auth",
+    "public": true,
+    "pages": [
+      {
+        "title": "账号设置",
+        "path": "/account",
+        "public": true
+      },
+      {
+        "title": "登录与注册",
+        "path": "/settings/auth",
+        "group": "verification-services",
+        "order": 10,
+        "public": false
+      },
+      {
+        "title": "访问密钥管理",
+        "path": "/settings/access-keys",
+        "public": false,
+        "group": "security",
+        "order": 30
+      }
+    ]
+  },
+  "optionalRequires": [
+    "site.branding@1",
+    "mail.send@1",
+    "mail.options@1",
+    "captcha.verify@1",
+    "captcha.options@1",
+    "ai.channels@1",
+    "credentials.select@1"
+  ]
+}

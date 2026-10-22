@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "id": "official.upstream-codex",
+  "category": "upstream",
+  "name": "Codex 订阅接入",
+  "description": "管理 Codex 授权、订阅账号与上游调用。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.8",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "ai.upstream.codex@1",
+    "ai.subscription.codex@1"
+  ],
+  "requires": [
+    "http.transport@1"
+  ],
+  "optionalRequires": [
+    "credentials.resolve@1"
+  ],
+  "permissions": [
+    "secrets.read",
+    "api.register"
+  ],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "masterKeyRef": {
+        "type": "string",
+        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+      },
+      "secretRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        },
+        "uniqueItems": true
+      },
+      "oauth": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "codex": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^env:[A-Z][A-Z0-9_]*$"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "title": "Codex 订阅",
+    "entry": "dist/ui.js",
+    "path": "/settings/subscriptions/codex",
+    "public": false,
+    "group": "routing",
+    "order": 25
+  }
+}

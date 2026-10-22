@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "id": "official.payments-stripe",
+  "category": "commerce",
+  "name": "Stripe 支付",
+  "description": "对接 Stripe 单次支付、订阅和回调验签。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.3",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": ["payments.stripe@1"],
+  "requires": [
+    "commerce.payment-adjustment@1",
+    "commerce.payment@1",
+    "http.transport@1"
+  ],
+  "optionalRequires": [],
+  "permissions": ["api.register", "secrets.read"],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "keyRef": {
+        "type": "string",
+        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+      },
+      "webhookSecretRef": {
+        "type": "string",
+        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+      },
+      "livemode": {
+        "type": "boolean"
+      },
+      "secretRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        },
+        "uniqueItems": true
+      }
+    }
+  },
+  "ui": {
+    "title": "Stripe 支付",
+    "entry": "dist/ui.js",
+    "path": "/payments-stripe",
+    "public": false,
+    "group": "payment-adapters",
+    "order": 10
+  }
+}

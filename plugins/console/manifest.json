@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "id": "official.console",
+  "category": "core",
+  "name": "控制台",
+  "description": "提供站点门户、登录页面及管理界面。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.24",
+  "host": ">=0.1.0-alpha.7 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": ["site.branding@1"],
+  "requires": [],
+  "permissions": ["http.route"],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "branding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaultLanguage": {
+            "type": "string",
+            "enum": ["zh-CN", "en-US"]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "workspaceName": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "logoUrl": {
+            "type": "string",
+            "maxLength": 90000
+          },
+          "faviconUrl": {
+            "type": "string",
+            "maxLength": 90000
+          },
+          "accentColor": {
+            "type": "string",
+            "maxLength": 7
+          },
+          "loginTitle": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "loginDescription": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "footerText": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "supportEmail": {
+            "type": "string",
+            "maxLength": 254
+          },
+          "websiteUrl": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "termsUrl": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "privacyUrl": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        }
+      },
+      "portal": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "showEndpoint": {
+            "type": "boolean"
+          },
+          "eyebrow": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "announcement": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "primaryLabel": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "primaryUrl": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "docsUrl": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "features": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["title", "description"],
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 400
+                }
+              }
+            }
+          },
+          "faqs": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["question", "answer"],
+              "properties": {
+                "question": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "answer": {
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              }
+            }
+          },
+          "pages": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["slug", "title", "body"],
+              "properties": {
+                "slug": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "body": {
+                  "type": "string",
+                  "maxLength": 20000
+                }
+              }
+            }
+          }
+        }
+      },
+      "onboarding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          },
+          "completedAt": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "modelSetupDeferred": {
+            "type": "boolean"
+          },
+          "siteConfiguredAt": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "draftStep": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "entry": "dist/ui.js",
+    "title": "控制台",
+    "path": "/console",
+    "public": true,
+    "pages": [
+      {
+        "title": "品牌与外观",
+        "path": "/settings/branding",
+        "group": "site",
+        "order": 10,
+        "public": false
+      },
+      {
+        "title": "门户与公开内容",
+        "path": "/settings/portal",
+        "group": "site",
+        "order": 20,
+        "public": false
+      }
+    ]
+  }
+}
