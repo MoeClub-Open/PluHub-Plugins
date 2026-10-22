@@ -136,10 +136,10 @@ it("preserves provider cache and reasoning details in stream and non-stream usag
       {
         input_tokens: 10,
         output_tokens: 5,
-        input_tokens_details: { cached_tokens: 6 },
+        input_tokens_details: { cached_tokens: 6, cache_write_tokens: 2 },
         output_tokens_details: { reasoning_tokens: 3 },
       },
-      { input: 10, output: 5, cacheRead: 6, reasoning: 3 },
+      { input: 10, output: 5, cacheRead: 6, cacheWrite: 2, reasoning: 3 },
     ],
     [
       "anthropic",

@@ -18,7 +18,7 @@ export function decodeUsage(protocol: Protocol, raw: any): Usage | undefined {
     const input = raw.prompt_tokens_details ?? raw.input_tokens_details;
     const output = raw.completion_tokens_details ?? raw.output_tokens_details;
     set("cacheRead", input?.cached_tokens);
-    set("cacheWrite", input?.cache_creation_tokens);
+    set("cacheWrite", input?.cache_write_tokens ?? input?.cache_creation_tokens);
     set("reasoning", output?.reasoning_tokens);
   } else if (protocol === "anthropic") {
     set("cacheRead", raw.cache_read_input_tokens);
@@ -68,7 +68,7 @@ export function encodeUsage(protocol: Protocol, usage: Usage): any {
                 ? { cached_tokens: usage.cacheRead }
                 : {}),
               ...(usage.cacheWrite !== undefined
-                ? { cache_creation_tokens: usage.cacheWrite }
+                ? { cache_write_tokens: usage.cacheWrite }
                 : {}),
             },
           }
