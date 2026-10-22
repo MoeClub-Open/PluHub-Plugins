@@ -166,30 +166,8 @@ function Page({ host }: { host: UIHost }) {
         </button>
       </PageHeading>
       <Notice message={error || models.error} />
-      <div className="chat-toolbar">
-        <label>
-          {tr("模型")}
-          <Select
-            aria-label={tr("选择模型")}
-            value={model}
-            disabled={busy}
-            onChange={(e) => {
-              setModel(e.target.value);
-              setMessages([]);
-              setMeta({});
-            }}
-          >
-            <option value="" disabled>
-              {tr("请选择模型")}
-            </option>
-            {models.data?.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        {!!channels.data?.length && (
+      {!!channels.data?.length && (
+        <div className="chat-toolbar">
           <label>
             {tr("模型来源")}
             <Select
@@ -213,8 +191,8 @@ function Page({ host }: { host: UIHost }) {
               ))}
             </Select>
           </label>
-        )}
-      </div>
+        </div>
+      )}
       <div className="playground-grid">
         <section className="chat-panel">
           <div className="chat-messages" ref={transcript} aria-live="polite">
@@ -261,21 +239,42 @@ function Page({ host }: { host: UIHost }) {
             />
             <div className="chat-composer-bottom">
               <kbd aria-hidden="true">Ctrl / ⌘ ↵</kbd>
-              {busy ? (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => controller.current?.abort()}
+              <div className="chat-composer-actions">
+                <Select
+                  aria-label={tr("选择模型")}
+                  value={model}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setModel(e.target.value);
+                    setMessages([]);
+                    setMeta({});
+                  }}
                 >
-                  <Icon name="stop" size={15} />
-                  {tr("停止生成")}
-                </button>
-              ) : (
-                <button disabled={!prompt.trim() || !model}>
-                  {tr("发送消息")}
-                  <Icon name="arrow" size={15} />
-                </button>
-              )}
+                  <option value="" disabled>
+                    {tr("请选择模型")}
+                  </option>
+                  {models.data?.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </Select>
+                {busy ? (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => controller.current?.abort()}
+                  >
+                    <Icon name="stop" size={15} />
+                    {tr("停止生成")}
+                  </button>
+                ) : (
+                  <button type="submit" disabled={!prompt.trim() || !model}>
+                    {tr("发送")}
+                    <Icon name="arrow" size={15} />
+                  </button>
+                )}
+              </div>
             </div>
           </form>
         </section>

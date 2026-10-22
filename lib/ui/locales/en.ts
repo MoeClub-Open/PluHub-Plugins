@@ -1557,7 +1557,7 @@ export const en: Record<string, string> = {
   消息内容: "Message",
   "输入消息，开始探索…": "Enter a message…",
   停止生成: "Stop generation",
-  发送消息: "Send message",
+  发送: "Send",
   模型设置: "Model settings",
   选择模型: "Select model",
   请选择模型: "Choose a model",

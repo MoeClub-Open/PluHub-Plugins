@@ -5,7 +5,7 @@
   "name": "模型试用",
   "description": "提供多轮对话和流式模型试用。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "entry": "dist/index.js",
