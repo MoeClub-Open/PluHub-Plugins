@@ -24,6 +24,10 @@ import {
   subscriptionQuota,
   type SubscriptionKind,
 } from "./subscription-auth.js";
+import {
+  discoverAntigravityProject,
+  antigravityUserAgent,
+} from "./antigravity-control.js";
 export type { SubscriptionKind } from "./subscription-auth.js";
 export function subscriptionRequest(
   kind: SubscriptionKind,
@@ -120,6 +124,7 @@ export function subscriptionRequest(
       },
     };
     delete body.request.model;
+    headers["user-agent"] = antigravityUserAgent;
     if (request.stream) url.searchParams.set("alt", "sse");
   }
   url.pathname = url.pathname.replace(/\/$/, "") + suffix;
@@ -284,6 +289,19 @@ export function createSubscription(kind: SubscriptionKind) {
                       requiredString(upstream.keyRef, "subscription keyRef"),
                     ),
                   });
+            if (
+              kind === "antigravity" &&
+              !credential.projectId &&
+              !upstream.projectId
+            )
+              credential = {
+                ...credential,
+                projectId: await discoverAntigravityProject(
+                  host,
+                  credential.secret,
+                  signal,
+                ),
+              };
             let prepared = subscriptionRequest(
               kind,
               request,

@@ -27,7 +27,8 @@ import {
   type SubscriptionToken,
   type SubscriptionKind,
 } from "../ai/subscription-auth.js";
-import { oauthConfig, tokenRequest, responseObject } from "./oauth.js";
+import { discoverAntigravityProject } from "../ai/antigravity-control.js";
+import { oauthConfig, tokenRequest } from "./oauth.js";
 import { createSubscriptionOAuth } from "./oauth-flow.js";
 import { subscriptionOverview, subscriptionNames } from "./overview.js";
 
@@ -162,7 +163,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       version: r.version,
     };
   }
-  function save(input: any, ownerId = "") {
+  async function save(input: any, ownerId = "", signal?: AbortSignal) {
     const provider = subscriptionKind(input.provider ?? kind);
     if (provider !== kind)
       fail("subscription_provider", "订阅账号与提供商不匹配");
@@ -183,7 +184,27 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       fail("subscription_limit", "最多可保存 64 个订阅账号");
     if (previous && previous.provider !== provider)
       fail("subscription_provider", "无法更改授权提供商");
-    const token = normalizeSubscriptionToken(input.authorization);
+    let token = normalizeSubscriptionToken(input.authorization);
+    if (previous) token = { ...decrypt(previous), ...token };
+    if (
+      provider === "antigravity" &&
+      token.access_token &&
+      !token.project_id
+    ) {
+      const discovery = AbortSignal.any([
+        ...(signal ? [signal] : []),
+        AbortSignal.timeout(15000),
+      ]);
+      try {
+        token.project_id = await discoverAntigravityProject(
+          host,
+          token.access_token!,
+          discovery,
+        );
+      } catch (error) {
+        if (signal?.aborted) throw error;
+      }
+    }
     const requestedName = input.name
       ? requiredString(input.name, "name", 254).trim()
       : "";
@@ -333,6 +354,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         email: overview.email ?? value.email,
         plan_type: overview.plan ?? value.plan_type,
         credits: overview.credits,
+        project_id: overview.projectId ?? value.project_id,
       };
       // Quota metadata does not rotate credentials; refresh merges the latest encrypted metadata.
       db.prepare(
@@ -560,7 +582,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       ),
     );
     api("POST", "/accounts", async (r, ctx) =>
-      json(save(await readObject(r, 262144), owner(ctx))),
+      json(await save(await readObject(r, 262144), owner(ctx), ctx.signal)),
     );
     api("POST", "/account", async (request, ctx) => {
       const b = await readObject(request),
@@ -601,34 +623,16 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           fail("subscription_provider", "仅 Antigravity 支持项目 ID");
         let project = b.projectId;
         if (!project) {
-          const token = await resolve(r.id),
-            signal = AbortSignal.any([stop.signal, AbortSignal.timeout(30000)]);
-          const response = await host.call<Response>(
-            "http.transport@1",
-            {
-              url: "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
-              publicOnly: true,
-              headers: {
-                authorization: "Bearer " + token.secret,
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({ metadata: { ideType: "ANTIGRAVITY" } }),
-            },
-            signal,
+          const token = await resolve(r.id);
+          project = await discoverAntigravityProject(
+            host,
+            token.secret,
+            AbortSignal.any([
+              stop.signal,
+              ctx.signal,
+              AbortSignal.timeout(30000),
+            ]),
           );
-          if (!response.ok) {
-            await response.body?.cancel();
-            fail(
-              "project_discovery",
-              "项目发现失败，请手动填写 Project ID",
-              502,
-            );
-          }
-          const result = await responseObject(response, signal);
-          project =
-            typeof result.cloudaicompanionProject === "string"
-              ? result.cloudaicompanionProject
-              : result.cloudaicompanionProject?.id;
         }
         const current = row(r.id),
           value = decrypt(current);

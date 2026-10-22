@@ -5,6 +5,10 @@ import {
   type SubscriptionKind,
   type SubscriptionToken,
 } from "../ai/subscription-auth.js";
+import {
+  antigravityAvailableModels,
+  discoverAntigravityProject,
+} from "../ai/antigravity-control.js";
 import { responseObject } from "./oauth.js";
 
 export const subscriptionNames: Record<SubscriptionKind, string> = {
@@ -17,6 +21,7 @@ type Overview = {
   email?: string;
   plan?: string;
   credits?: { balance?: string; unlimited?: boolean };
+  projectId?: string;
 };
 const unavailable = () =>
   new HostError(
@@ -132,7 +137,8 @@ export async function subscriptionOverview(
   const quota: SubscriptionQuota[] = [];
   let plan: string | undefined,
     credits: Overview["credits"],
-    email = token.email;
+    email = token.email,
+    projectId: string | undefined;
   const add = (
     window: string,
     used: unknown,
@@ -235,46 +241,38 @@ export async function subscriptionOverview(
             : window.replace(/^seven_day_/, "").replaceAll("_", " "),
         );
   } else {
-    let project = token.project_id;
-    if (!project) {
-      const data = await request(
+    projectId =
+      token.project_id ??
+      (await discoverAntigravityProject(
         host,
-        "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
-        token,
+        token.access_token!,
         signal,
-        { metadata: { ideType: "ANTIGRAVITY" } },
-      );
-      project =
-        typeof data.cloudaicompanionProject === "string"
-          ? data.cloudaicompanionProject
-          : data.cloudaicompanionProject?.id;
-    }
-    if (!project)
-      throw new HostError(
-        "project_discovery",
-        "项目发现失败，请手动填写 Project ID",
-        400,
-      );
-    const data = await request(
+      ));
+    const models = await antigravityAvailableModels(
       host,
-      "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
-      token,
+      token.access_token!,
+      projectId,
       signal,
-      { project },
     );
-    for (const [model, item] of Object.entries(data.models ?? {}) as [
+    for (const [model, item] of Object.entries(models) as [
       string,
       any,
     ][])
       if (
-        typeof item?.quotaInfo?.remainingFraction === "number" &&
-        item.quotaInfo.remainingFraction >= 0 &&
-        item.quotaInfo.remainingFraction <= 1
+        typeof (item?.quotaInfo?.remainingFraction ??
+          item?.quotaInfo?.remaining_fraction) === "number" &&
+        (item.quotaInfo.remainingFraction ??
+          item.quotaInfo.remaining_fraction) >= 0 &&
+        (item.quotaInfo.remainingFraction ??
+          item.quotaInfo.remaining_fraction) <= 1
       )
         add(
           "model:" + model,
-          (1 - item.quotaInfo.remainingFraction) * 100,
-          item.quotaInfo.resetTime,
+          (1 -
+            (item.quotaInfo.remainingFraction ??
+              item.quotaInfo.remaining_fraction)) *
+            100,
+          item.quotaInfo.resetTime ?? item.quotaInfo.reset_time,
           undefined,
           item.displayName ?? model,
         );
@@ -292,5 +290,6 @@ export async function subscriptionOverview(
     ...(email ? { email } : {}),
     ...(plan ? { plan } : {}),
     ...(credits ? { credits } : {}),
+    ...(projectId ? { projectId } : {}),
   };
 }

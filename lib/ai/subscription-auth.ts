@@ -21,7 +21,7 @@ export const subscriptionDefaults = {
       "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload",
   },
   antigravity: {
-    baseUrl: "https://cloudcode-pa.googleapis.com",
+    baseUrl: "https://daily-cloudcode-pa.googleapis.com",
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenUrl: "https://oauth2.googleapis.com/token",
     clientId:

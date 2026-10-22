@@ -37,7 +37,11 @@ const failure = (code: string, message: string, status = 400): never => {
 /** Short-lived OAuth state stays server-side; only the creating session can save an account. */
 export function createSubscriptionOAuth(
   host: Host,
-  save: (input: Record<string, any>, owner: string) => unknown,
+  save: (
+    input: Record<string, any>,
+    owner: string,
+    signal?: AbortSignal,
+  ) => unknown,
   kind: SubscriptionKind,
 ) {
   const callbackPath = `/api/plugins/official.upstream-${kind}/oauth/callback`;
@@ -155,6 +159,7 @@ export function createSubscriptionOAuth(
         authorization: identity,
       },
       flow.owner,
+      signal(flow),
     );
   }
   async function start(
