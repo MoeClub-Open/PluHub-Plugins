@@ -107,9 +107,8 @@ export function subscriptionRequest(
         "project_required",
         "Antigravity requires an authorized project ID",
       );
-    suffix =
-      "/v1internal:" +
-      (request.stream ? "streamGenerateContent" : "generateContent");
+    // Both client modes share the provider's terminal signature and usage frames.
+    suffix = "/v1internal:streamGenerateContent";
     body = {
       project,
       model: request.model,
@@ -125,7 +124,7 @@ export function subscriptionRequest(
     };
     delete body.request.model;
     headers["user-agent"] = antigravityUserAgent;
-    if (request.stream) url.searchParams.set("alt", "sse");
+    url.searchParams.set("alt", "sse");
   }
   url.pathname = url.pathname.replace(/\/$/, "") + suffix;
   return { url: url.href, headers, body, protocol };

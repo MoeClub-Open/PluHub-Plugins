@@ -128,6 +128,18 @@ it("builds explicit Codex, Claude OAuth and Antigravity envelopes without forwar
     request: { contents: [{ role: "user", parts: [{ text: "hello" }] }] },
   });
   expect(google.url).toContain("streamGenerateContent?alt=sse");
+  expect(
+    subscriptionRequest(
+      "antigravity",
+      { ...req, stream: false },
+      {
+        protocol: "antigravity",
+        baseUrl: "https://cloudcode-pa.googleapis.com",
+        keyRef: "env:T",
+      },
+      { secret: "oauth", projectId: "p" },
+    ).url,
+  ).toBe(google.url);
 });
 it("cancels a paced response while waiting and closes its source", async () => {
   let cancelled = false;
