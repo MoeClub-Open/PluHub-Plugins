@@ -2,7 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { HostError, requiredString } from "@pluhub/sdk";
 import type { AIRequest, Upstream, Protocol } from "@pluhub/contracts/ai";
 import { encodeRequest } from "./protocols.js";
-import { supportsOutputLimit } from "./output-budget.js";
+import {
+  normalizeOutputOptions,
+  supportsOutputLimit,
+} from "./output-budget.js";
 import {
   subscriptionDefaults,
   type SubscriptionKind,
@@ -14,6 +17,7 @@ export function subscriptionRequest(
   upstream: Upstream,
   credential: { secret: string; accountId?: string; projectId?: string },
 ) {
+  request = normalizeOutputOptions(request, { ...upstream, protocol: kind });
   const protocol: Protocol =
     kind === "codex"
       ? "openai-responses"
@@ -50,11 +54,6 @@ export function subscriptionRequest(
   if (kind === "codex") {
     suffix = "/responses";
     if (!supportsOutputLimit({ ...upstream, protocol: kind })) {
-      if (request.maxTokens !== undefined || request.temperature !== undefined)
-        throw new HostError(
-          "unsupported_feature",
-          "Codex CLI does not support output-token or temperature overrides; use SIWC or omit them",
-        );
       body.stream = true;
       body.store = false;
       body.input = encodeRequest("openai-responses", {

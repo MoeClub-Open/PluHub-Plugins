@@ -1,9 +1,6 @@
 import { expect, it } from "vitest";
 import type { AIRequest, AIPlan } from "@pluhub/contracts/ai";
-import {
-  outputBudget,
-  validateOutputBudget,
-} from "../lib/ai/output-budget.js";
+import { outputBudget, validateOutputBudget } from "../lib/ai/output-budget.js";
 const request: AIRequest = {
   model: "public",
   messages: [{ role: "user", text: "hello" }],
@@ -74,15 +71,26 @@ it("keeps CLI estimation explicit, supports strict rejection and per-request pri
   expect(() =>
     outputBudget(request, cli, { outputBudgetMode: "bounded" }),
   ).toThrow("cannot enforce");
+  const overrides = { ...request, maxTokens: 64, temperature: 0 };
+  const ignored = outputBudget(overrides, cli, {});
+  expect(ignored.request).toEqual(request);
+  expect(ignored.budget).toEqual(automatic.budget);
+  expect(overrides).toMatchObject({ maxTokens: 64, temperature: 0 });
   cli.pricing = { input: 0, output: 0, mode: "request", request: 0.001 };
   expect(
     outputBudget(request, cli, { outputBudgetMode: "bounded" }).budget.mode,
   ).toBe("fixed");
-  expect(() => outputBudget({ ...request, maxTokens: 64 }, cli, {})).toThrow(
-    "Codex CLI",
-  );
+  expect(outputBudget(overrides, cli, {}).budget).toEqual({
+    mode: "fixed",
+    source: "default",
+    reservedTokens: 0,
+  });
   cli.upstream.authMode = "siwc";
   expect(outputBudget(request, cli, {}).request.maxTokens).toBe(4096);
+  expect(outputBudget(overrides, cli, {}).request).toMatchObject({
+    maxTokens: 64,
+    temperature: 0,
+  });
 });
 it("retains explicitly selected estimation without discarding client caps and rejects invalid policies", () => {
   const config = { outputBudgetMode: "estimate" };

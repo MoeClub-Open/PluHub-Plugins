@@ -5,26 +5,16 @@
   "name": "Codex 订阅接入",
   "description": "管理 Codex 授权、订阅账号与上游调用。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.17",
+  "version": "0.1.0-alpha.18",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "ai.upstream.codex@1",
-    "ai.subscription.codex@1"
-  ],
-  "requires": [
-    "http.transport@1"
-  ],
-  "optionalRequires": [
-    "credentials.resolve@1"
-  ],
-  "permissions": [
-    "secrets.read",
-    "api.register"
-  ],
+  "provides": ["ai.upstream.codex@1", "ai.subscription.codex@1"],
+  "requires": ["http.transport@1"],
+  "optionalRequires": ["credentials.resolve@1"],
+  "permissions": ["secrets.read", "api.register"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",

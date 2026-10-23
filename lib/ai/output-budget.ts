@@ -17,6 +17,18 @@ export const supportsOutputLimit = (upstream: Upstream) =>
     (upstream.authMode === "cli" ||
       (!upstream.authMode && !!upstream.subscriptionAccountIds))
   );
+export function normalizeOutputOptions(
+  request: AIRequest,
+  upstream: Upstream,
+): AIRequest {
+  if (supportsOutputLimit(upstream)) return request;
+  const {
+    maxTokens: _maxTokens,
+    temperature: _temperature,
+    ...supported
+  } = request;
+  return supported;
+}
 export function validateOutputBudget(config: Record<string, unknown>) {
   const mode = config.outputBudgetMode ?? "automatic";
   if (
@@ -43,7 +55,10 @@ export function outputBudget(
   plan: AIPlan,
   config: Record<string, unknown>,
 ): { request: AIRequest; budget: OutputBudget } {
-  const prepared = plan.preparedRequest ?? original;
+  const prepared = normalizeOutputOptions(
+    plan.preparedRequest ?? original,
+    plan.upstream,
+  );
   const reasoning = plan.reasoning ?? prepared.reasoning;
   const protocol = plan.upstream.protocol;
   const anthropic =
@@ -58,11 +73,6 @@ export function outputBudget(
       "output_budget_unsupported",
       "This upstream cannot enforce an output token limit; choose an upstream with output limits or an explicit estimation policy",
       503,
-    );
-  if (cli && prepared.maxTokens !== undefined)
-    throw new HostError(
-      "unsupported_feature",
-      "Codex CLI does not support output-token or temperature overrides; use SIWC or omit them",
     );
   const source = prepared.maxTokens !== undefined ? "explicit" : "default";
   const thinkingTokens = reasoning?.budgetTokens ?? 0;

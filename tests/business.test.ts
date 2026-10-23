@@ -86,19 +86,33 @@ it("builds explicit Codex, Claude OAuth and Antigravity envelopes without forwar
   expect(codex.url).toBe("https://chatgpt.com/backend-api/codex/responses");
   expect(codex.body).toMatchObject({ stream: true, store: false });
   expect(codex.headers["chatgpt-account-id"]).toBe("account");
-  expect(() =>
-    subscriptionRequest(
-      "codex",
-      { ...req, maxTokens: 5 },
-      {
-        protocol: "codex",
-        baseUrl: "https://test",
-        keyRef: "env:T",
-        authMode: "cli",
-      },
-      { secret: "x" },
-    ),
-  ).toThrow("does not support");
+  const overrides = { ...req, maxTokens: 5, temperature: 0 };
+  const ignored = subscriptionRequest(
+    "codex",
+    overrides,
+    {
+      protocol: "codex",
+      baseUrl: "https://test",
+      keyRef: "env:T",
+      authMode: "cli",
+    },
+    { secret: "x" },
+  );
+  expect(ignored.body).not.toHaveProperty("max_output_tokens");
+  expect(ignored.body).not.toHaveProperty("temperature");
+  expect(ignored.body).toMatchObject({
+    stream: true,
+    store: false,
+    input: codex.body.input,
+  });
+  expect(overrides).toMatchObject({ maxTokens: 5, temperature: 0 });
+  const siwc = subscriptionRequest(
+    "codex",
+    overrides,
+    { protocol: "codex", baseUrl: "https://test", authMode: "siwc" },
+    { secret: "x" },
+  );
+  expect(siwc.body).toMatchObject({ max_output_tokens: 5, temperature: 0 });
   const claude = subscriptionRequest(
     "claude-subscription",
     req,
