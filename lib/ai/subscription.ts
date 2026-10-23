@@ -1,3 +1,4 @@
+import { upstreamKey } from "./upstream-key.js";
 import {
   definePlugin,
   HostError,
@@ -126,12 +127,19 @@ async function* execute(
               projectId?: string;
             }>(
               "credentials.resolve@1",
-              { id: upstream.credentialId, userId: upstream.credentialOwner },
+              {
+                id: upstream.credentialId,
+                userId: upstream.credentialOwner,
+                sessionId: request.sessionId,
+              },
               signal,
             )
           : {
-              secret: host.secret(
-                requiredString(upstream.keyRef, "subscription keyRef"),
+              secret: await upstreamKey(
+                host,
+                upstream,
+                signal,
+                request.sessionId,
               ),
             });
       if (

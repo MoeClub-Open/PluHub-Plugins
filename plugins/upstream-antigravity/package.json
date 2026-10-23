@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-upstream-antigravity",
-  "version": "0.1.0-alpha.27",
+  "version": "0.1.0-alpha.28",
   "type": "module",
   "private": true,
   "files": [

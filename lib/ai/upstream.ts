@@ -1,3 +1,4 @@
+import { upstreamKey } from "./upstream-key.js";
 import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
 import type { Protocol, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { encodeRequest, decodeResult, resultEvents } from "./protocols.js";
@@ -30,18 +31,12 @@ export function createUpstream(protocol: Protocol) {
           const { request, upstream } = input;
           if (upstream.protocol !== protocol)
             throw new HostError("adapter_mismatch", "Wrong upstream adapter");
-          const key = upstream.credentialId
-            ? (
-                await host.call<{ secret: string }>(
-                  "credentials.resolve@1",
-                  {
-                    id: upstream.credentialId,
-                    userId: upstream.credentialOwner,
-                  },
-                  signal,
-                )
-              ).secret
-            : host.secret(requiredString(upstream.keyRef, "upstream keyRef"));
+          const key = await upstreamKey(
+            host,
+            upstream,
+            signal,
+            request.sessionId,
+          );
           const body = encodeRequest(protocol, request);
           const url = upstreamUrl(
             requiredString(upstream.baseUrl, "upstream URL", 2048),

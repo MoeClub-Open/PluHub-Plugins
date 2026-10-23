@@ -1,3 +1,4 @@
+import { splitKeys } from "../../lib/ai/upstream-key.js";
 import { modelDefinition } from "../../lib/ai/model-definition.js";
 import { responseObject } from "../../lib/ai/json-response.js";
 import { randomUUID } from "node:crypto";
@@ -53,6 +54,7 @@ type Model = ModelDefinition & {
 type Settings = {
   protocol: Protocol | SubscriptionKind;
   baseUrl: string;
+  priority: number;
   interfaces?: UpstreamInterface[];
   models: Record<string, Model>;
   flow: ChannelWorkflow;
@@ -292,7 +294,11 @@ export function installPersonalChannels(
         pricingSource: model?.pricingSource === "newapi" ? "newapi" : "manual",
       };
     }
+    const priority = body.priority ?? 0;
+    if (!Number.isSafeInteger(priority) || Math.abs(priority) > 1000000)
+      throw new HostError("invalid_priority", "无效的渠道优先级");
     return {
+      priority,
       protocol: body.protocol,
       baseUrl: base.baseUrl,
       interfaces,
@@ -322,6 +328,14 @@ export function installPersonalChannels(
       updatedAt: row.updated_at,
       ...config,
       consumptionMultiplier: 0,
+      keyCount:
+        (
+          db
+            .prepare(
+              "SELECT key_count FROM credentials WHERE id=? AND user_id=?",
+            )
+            .get(row.id, row.user_id) as any
+        )?.key_count ?? 0,
       hasCredential: !!db
         .prepare("SELECT id FROM credentials WHERE id=? AND user_id=?")
         .get(row.id, row.user_id),
@@ -355,6 +369,7 @@ export function installPersonalChannels(
         flow: config.flow,
         credentialId: row.id,
         credentialOwner: row.user_id,
+        priority: config.priority ?? 0,
         consumptionMultiplier: 0,
         ...(config.subscriptionAccountId
           ? {
@@ -520,6 +535,8 @@ export function installPersonalChannels(
           body.key === undefined || body.key === ""
             ? undefined
             : requiredString(body.key, "key", 16384);
+        if (secret && !splitKeys(secret).length)
+          throw new HostError("invalid_credential", "请填写上游密钥");
         if (
           !config.subscriptionAccountId &&
           !secret &&
@@ -568,8 +585,17 @@ export function installPersonalChannels(
             );
           if (encrypted)
             db.prepare(
-              "INSERT INTO credentials VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET cipher=excluded.cipher,name=excluded.name,kind=excluded.kind",
-            ).run(id, userId, id, name, kind, encrypted, Date.now());
+              "INSERT INTO credentials(id,user_id,channel,name,kind,cipher,created_at,key_count) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET cipher=excluded.cipher,name=excluded.name,kind=excluded.kind,key_count=excluded.key_count",
+            ).run(
+              id,
+              userId,
+              id,
+              name,
+              kind,
+              encrypted,
+              Date.now(),
+              secret ? splitKeys(secret).length : 1,
+            );
           db.exec("COMMIT");
         } catch (error) {
           db.exec("ROLLBACK");
@@ -644,7 +670,7 @@ export function installPersonalChannels(
         host,
         { ...base, protocol: body.protocol, interfaces },
         ctx.signal,
-        requiredString(body.key, "key", 16384),
+        splitKeys(requiredString(body.key, "key", 16384))[0],
       );
       if (!result.models.length && result.errors.length)
         throw new HostError(
@@ -732,14 +758,14 @@ export function installPersonalChannels(
       );
       const result = runWorkflow(
         row.id,
-        config.flow,
+        body.flow ? validateFlow(body.flow, config.models) : config.flow,
         body.request,
         ctx.signal,
         { ingressProtocol },
       );
       if (result.provider) {
-        const node = config.flow.nodes.find(
-          (node) => node.id === result.providerId,
+        const node = (body.flow ?? config.flow).nodes.find(
+          (node: any) => node.id === result.providerId,
         );
         const model =
           (node?.type === "provider" ? node.model : undefined) ||

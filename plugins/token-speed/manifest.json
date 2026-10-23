@@ -5,7 +5,7 @@
   "name": "输出速度控制",
   "description": "限制单个请求的输出 Token 速度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.9",
+  "version": "0.1.0-alpha.10",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

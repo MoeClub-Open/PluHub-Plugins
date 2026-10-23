@@ -1,0 +1,141 @@
+.channel-flow-canvas {
+  height: clamp(480px, 70vh, 900px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--subtle);
+  --xy-background-color: var(--subtle);
+  --xy-background-pattern-dots-color: var(--border);
+  --xy-edge-stroke: var(--muted);
+  --xy-edge-stroke-selected: var(--accent);
+  --xy-handle-background-color: var(--surface);
+  --xy-handle-border-color: var(--muted);
+  --xy-controls-button-background-color: var(--surface);
+  --xy-controls-button-background-color-hover: var(--subtle);
+  --xy-controls-button-color: var(--text);
+  --xy-controls-button-border-color: var(--border);
+}
+.channel-flow-canvas .react-flow__node-channel {
+  width: 310px;
+}
+.channel-flow-canvas .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border-width: 2px;
+}
+.flow-node {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  box-shadow: 0 2px 6px #0000000a;
+}
+.flow-node.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.flow-node-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 3px 7px;
+  cursor: grab;
+  border-bottom: 1px solid var(--border);
+}
+.flow-node-header strong {
+  flex: 1;
+  font-size: 12px;
+}
+.flow-node-header .icon-button {
+  width: 24px;
+  height: 24px;
+  padding: 3px;
+  min-height: 0;
+}
+.flow-node-summary {
+  padding: 7px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-node-settings {
+  padding: 0 12px 10px;
+  max-height: 520px;
+  overflow: auto;
+  font-size: 12px;
+}
+.flow-node-settings label {
+  display: block;
+  margin: 8px 0;
+}
+.flow-node-settings input,
+.flow-node-settings textarea,
+.flow-node-settings select {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+.flow-node-settings .checkbox-row,
+.flow-node-settings label:has(> .checkbox-control),
+.flow-node-settings label:has(> [role="switch"]) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-node-settings .form-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.flow-node-settings fieldset {
+  padding: 6px;
+  margin: 8px 0;
+}
+.flow-node-settings .upstream-interfaces {
+  margin: 8px 0;
+}
+.flow-port-label {
+  position: absolute;
+  right: 12px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.flow-add-menu {
+  z-index: 100;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(100px, 1fr));
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #00000018;
+}
+.flow-add-menu button {
+  justify-content: flex-start;
+  font-size: 12px;
+}
+.flow-history {
+  margin-bottom: 6px;
+}
+.channel-flow-canvas .react-flow__controls button {
+  border-radius: 0;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 6px;
+}
+@media (max-width: 640px) {
+  .channel-flow-canvas {
+    height: 66dvh;
+    min-height: 420px;
+  }
+}
+
+.flow-node .react-flow__handle-left {
+  top: 34px;
+}
+.flow-node:has(.flow-port-label) {
+  min-height: 92px;
+}

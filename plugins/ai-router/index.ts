@@ -403,6 +403,8 @@ export default definePlugin({
       for (const model of Object.values(config.models ?? {}) as ModelRoute[]) {
         routePricing(model);
         modelDefinition(model);
+        if (model.publicModel !== undefined)
+          requiredString(model.publicModel, "publicModel", 256);
       }
       const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
       for (const upstream of Object.values(upstreams)) {
@@ -588,13 +590,14 @@ export default definePlugin({
             "invalid_request",
             "Provide a normalized AI request",
           );
-        const flow = upstream.flow ?? {
-          entry: "start",
-          nodes: [
-            { id: "start", type: "start" as const, next: "provider" },
-            { id: "provider", type: "provider" as const },
-          ],
-        };
+        const flow = body.flow ??
+          upstream.flow ?? {
+            entry: "start",
+            nodes: [
+              { id: "start", type: "start" as const, next: "provider" },
+              { id: "provider", type: "provider" as const },
+            ],
+          };
         const ingressProtocol = requireIngressProtocol(
           body.ingressProtocol ?? "openai-chat",
         );
@@ -602,7 +605,7 @@ export default definePlugin({
           ingressProtocol,
         });
         if (result.provider) {
-          const node = flow.nodes.find((n) => n.id === result.providerId);
+          const node = flow.nodes.find((n: any) => n.id === result.providerId);
           const connection =
             node?.type === "provider" && node.upstream
               ? node.upstream

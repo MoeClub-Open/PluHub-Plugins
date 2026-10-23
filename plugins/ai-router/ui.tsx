@@ -190,6 +190,7 @@ function Page({ host }: { host: UIHost }) {
           enabled: existing ? existing.enabled !== false : false,
           flow: existing?.flow ?? defaultChannelFlow(),
           consumptionMultiplier: Number(text("consumptionMultiplier") || 1),
+          priority: Number(text("priority") || 0),
         };
       });
       openGraph(id);
@@ -416,8 +417,11 @@ function Page({ host }: { host: UIHost }) {
                 {filteredModels.map(([id, m]) => (
                   <tr key={id}>
                     <td>
-                      <strong>{m.name || id}</strong>
-                      {m.name && m.name !== id && <small>{id}</small>}
+                      <strong>{m.name || m.publicModel || id}</strong>
+                      {(m.name || m.publicModel || id) !==
+                        (m.publicModel ?? id) && (
+                        <small>{m.publicModel ?? id}</small>
+                      )}
                     </td>
                     <td>
                       {upstreams[m.upstream]?.name || m.upstream}
@@ -547,6 +551,18 @@ function Page({ host }: { host: UIHost }) {
                   defaultValue={existing?.name ?? ""}
                   maxLength={128}
                   placeholder={tr("便于识别的名称（可选）")}
+                />
+              </label>
+              <label>
+                {tr("优先级")}
+                <input
+                  name="priority"
+                  type="number"
+                  min="-1000000"
+                  max="1000000"
+                  step="1"
+                  defaultValue={existing?.priority ?? 0}
+                  required
                 />
               </label>
               <label>

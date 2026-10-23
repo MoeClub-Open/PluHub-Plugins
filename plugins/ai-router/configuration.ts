@@ -1,3 +1,4 @@
+import { keyReferences } from "../../lib/ai/upstream-key.js";
 import {
   HostError,
   json,
@@ -100,9 +101,7 @@ export function installConfiguration(host: Host) {
                 (connection) =>
                   capability === `ai.upstream.${connection.protocol}@1`,
               )
-              .flatMap((connection) =>
-                connection.keyRef ? [connection.keyRef] : [],
-              ),
+              .flatMap((connection) => keyReferences(connection.keyRef)),
           );
         for (const plugin of config.plugins) {
           const capabilities =

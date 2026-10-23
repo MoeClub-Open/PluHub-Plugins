@@ -1,5 +1,6 @@
+import { upstreamKey } from "./upstream-key.js";
 import type { ProviderConnection } from "@pluhub/contracts/ai";
-import { HostError, requiredString, type Host } from "@pluhub/sdk";
+import { HostError, type Host } from "@pluhub/sdk";
 import { responseObject } from "./json-response.js";
 import {
   connectionInterfaces,
@@ -85,25 +86,6 @@ export function directoryModels(
   return [...models.values()].slice(0, 512);
 }
 
-async function upstreamSecret(
-  host: Host,
-  upstream: ProviderConnection,
-  signal: AbortSignal,
-) {
-  if (upstream.credentialId)
-    return (
-      await host.call<{ secret: string }>(
-        "credentials.resolve@1",
-        {
-          id: upstream.credentialId,
-          userId: upstream.credentialOwner,
-        },
-        signal,
-      )
-    ).secret;
-  return host.secret(requiredString(upstream.keyRef, "upstream keyRef"));
-}
-
 export async function discoverApiModels(
   host: Host,
   upstream: ProviderConnection,
@@ -114,8 +96,7 @@ export async function discoverApiModels(
   if (!apiProtocols.has(protocol))
     throw new HostError("unsupported_operation", "该上游不支持模型目录查询");
   const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(15_000)]);
-  const secret =
-    suppliedSecret ?? (await upstreamSecret(host, upstream, signal));
+  const secret = suppliedSecret ?? (await upstreamKey(host, upstream, signal));
   const url = upstreamUrl(
     upstream.baseUrl ?? "",
     upstream.http?.modelsPath ??

@@ -10,21 +10,39 @@ export default definePlugin({
           ? [{ id: m.id, channelId: m.channelId }]
           : [],
       );
-      const metrics: Record<string, ModelMetrics> =
-        pairs.length && host.hasCapability("observability.model-metrics@1")
-          ? await host
-              .call<Record<string, ModelMetrics>>(
-                "observability.model-metrics@1",
-                { models: pairs },
-              )
-              .catch(() => ({}))
-          : {};
-      return models.map(({ channelId, ...model }) => ({
-        ...model,
-        metrics: channelId?.startsWith("personal:")
-          ? undefined
-          : metrics[model.id],
-      }));
+      const metrics = new Map<string, Record<string, ModelMetrics>>();
+      if (host.hasCapability("observability.model-metrics@1")) {
+        await Promise.all(
+          [...new Set(pairs.map((model) => model.channelId!))].map(
+            async (channelId) => {
+              const value = await host
+                .call<Record<string, ModelMetrics>>(
+                  "observability.model-metrics@1",
+                  {
+                    models: pairs.filter(
+                      (model) => model.channelId === channelId,
+                    ),
+                  },
+                )
+                .catch(() => ({}));
+              metrics.set(channelId, value);
+            },
+          ),
+        );
+      }
+      return models.map(
+        ({
+          channelId,
+          routeId: _routeId,
+          channelPriority: _priority,
+          ...model
+        }) => ({
+          ...model,
+          metrics: channelId?.startsWith("personal:")
+            ? undefined
+            : metrics.get(channelId ?? "")?.[model.id],
+        }),
+      );
     }
     host.api({
       method: "GET",

@@ -2346,4 +2346,14 @@ export const en: Record<string, string> = {
   计费状态: "Billing status",
   实际扣费明细: "Charge details",
   "配置已更新，请刷新后重试": "Configuration changed. Refresh and try again.",
+  "每行一个 Key；留空保留现有密钥":
+    "One key per line; leave blank to keep existing keys",
+  添加节点: "Add node",
+  展开设置: "Expand settings",
+  复制节点: "Duplicate node",
+  自动排列: "Auto arrange",
+  "路由 ID": "Route ID",
+  预览完成: "Preview complete",
+  撤销编辑: "Undo edit",
+  重做编辑: "Redo edit",
 };

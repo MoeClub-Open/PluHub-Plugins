@@ -1,3 +1,5 @@
+import { SelectionPool } from "../../lib/ai/selection.js";
+import { splitKeys } from "../../lib/ai/upstream-key.js";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
@@ -39,6 +41,7 @@ export default definePlugin({
            revision=revision+1
        WHERE json_type(settings_json,'$.consumptionMode') IS NOT NULL
           OR json_type(settings_json,'$.consumptionMultiplier') IS NOT NULL;`,
+      "ALTER TABLE credentials ADD COLUMN key_count INTEGER NOT NULL DEFAULT 1;",
     ]);
     host.cleanup(() => {
       db.close();
@@ -85,6 +88,7 @@ export default definePlugin({
         throw new HostError("channel_disabled", "个人渠道不存在或已停用", 403);
       return row;
     }
+    const keys = new SelectionPool();
     installPersonalChannels(host, db, encrypt);
     host.provide("credentials.select@1", async ({ id, userId, channel }) => {
       const row = owned(id, userId);
@@ -114,11 +118,19 @@ export default definePlugin({
       }
       return { id: row.id, kind: row.kind };
     });
-    host.provide("credentials.resolve@1", async ({ id, userId }) => {
+    host.provide("credentials.resolve@1", async ({ id, userId, sessionId }) => {
       const row = owned(id, userId);
       if (row.kind === "subscription")
         throw new HostError("credential_kind", "订阅渠道使用订阅账号授权", 403);
-      return { secret: decrypt(row).key, kind: row.kind };
+      const values = splitKeys(decrypt(row).key);
+      const secret = keys.choose(
+        JSON.stringify([userId, id]),
+        values,
+        (key) => key,
+        sessionId,
+      );
+      if (!secret) throw new HostError("credential_required", "请配置上游密钥");
+      return { secret, kind: row.kind };
     });
   },
 });

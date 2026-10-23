@@ -37,6 +37,7 @@ export function ModelEditor({
       ...model,
       upstream: text("upstream"),
       model: text("model"),
+      publicModel: text("publicModel"),
       enabled,
       operations: form.getAll("operations") as ModelRoute["operations"],
     };
@@ -94,6 +95,15 @@ export function ModelEditor({
               maxLength={128}
             />
           </label>
+          <label className="full">
+            {tr("公开模型名")}
+            <input
+              name="publicModel"
+              required
+              maxLength={256}
+              defaultValue={model.publicModel ?? id ?? suggestedId}
+            />
+          </label>
           <ModelPriceFields model={model} />
           <details className="full" open={!model.model}>
             <summary>{tr("模型映射")}</summary>
@@ -113,7 +123,7 @@ export function ModelEditor({
                 <input name="model" required defaultValue={model.model} />
               </label>
               <label className="full">
-                {tr("公开模型 ID")}
+                {tr("路由 ID")}
                 <input
                   name="id"
                   readOnly={!!id}

@@ -417,6 +417,11 @@ function Page({ host }: { host: UIHost }) {
                           {c.baseUrl}
                         </small>
                         <small>
+                          {tr("优先级")} {c.priority ?? 0}
+                          {!c.subscriptionAccountId &&
+                            ` · ${c.keyCount ?? 1} Key`}
+                        </small>
+                        <small>
                           {c.subscriptionAccountId ? "BYOSUB" : "BYOAPI"} ·{" "}
                           {c.interfaces
                             ? [
@@ -803,10 +808,11 @@ function Page({ host }: { host: UIHost }) {
                   {editing.hasCredential
                     ? tr("更换上游密钥（留空保留）")
                     : tr("上游密钥")}
-                  <input
+                  <textarea
                     name="key"
-                    type="password"
-                    autoComplete="new-password"
+                    rows={3}
+                    autoComplete="off"
+                    placeholder={tr("每行一个 Key；留空保留现有密钥")}
                     required={!editing.hasCredential}
                     maxLength={16384}
                     disabled={busy}
@@ -818,6 +824,20 @@ function Page({ host }: { host: UIHost }) {
                 </label>
               </>
             )}
+            <label>
+              {tr("优先级")}
+              <input
+                type="number"
+                min="-1000000"
+                max="1000000"
+                step="1"
+                value={editing.priority ?? 0}
+                disabled={busy}
+                onChange={(e) =>
+                  setEditing({ ...editing, priority: Number(e.target.value) })
+                }
+              />
+            </label>
             {!subscription && (
               <UpstreamInterfaces
                 protocol={editing.protocol}

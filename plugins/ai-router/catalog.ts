@@ -25,7 +25,7 @@ function catalog(
   for (const [id, rule] of Object.entries(redirects)) {
     if (rule.enabled === false) continue;
     const target = redirectModel(id, redirects).model;
-    if (models[target]) models[id] = models[target]!;
+    if (models[target]) models[id] = { ...models[target]!, publicModel: id };
   }
   return Object.entries(models)
     .filter(
@@ -36,7 +36,9 @@ function catalog(
         upstreams[m.upstream]!.enabled !== false,
     )
     .map(([id, m]) => ({
-      id,
+      id: m.publicModel ?? id,
+      routeId: id,
+      channelPriority: upstreams[m.upstream]?.priority ?? 0,
       channelId: m.upstream,
       channel: {
         id: m.upstream,
@@ -81,7 +83,9 @@ export async function readCatalog(
     !personal?.length &&
     !(input.includePersonal && !input.channelId && !allowed)
   )
-    return models;
+    return models.sort(
+      (a, b) => (b.channelPriority ?? 0) - (a.channelPriority ?? 0),
+    );
   if (!input.principalId)
     throw new HostError("unauthorized", "个人渠道需要用户身份", 401);
   if (!host.hasCapability("ai.user-channels@1")) {
@@ -117,5 +121,7 @@ export async function readCatalog(
       ),
     );
   }
-  return models;
+  return models.sort(
+    (a, b) => (b.channelPriority ?? 0) - (a.channelPriority ?? 0),
+  );
 }

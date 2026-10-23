@@ -1,8 +1,31 @@
 import React from "react";
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Background,
+  Controls,
+  Handle,
+  Position,
+  useReactFlow,
+  useNodesState,
+  useEdgesState,
+  type Node,
+  type NodeProps,
+  type Edge,
+  type Connection,
+} from "@xyflow/react";
 import type { Upstream } from "@pluhub/contracts/ai";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Trash2,
+  Undo2,
+  Redo2,
+  LayoutGrid,
+} from "lucide-react";
 import { t as tr } from "./i18n.js";
-
 export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   get start() {
     return tr("请求入口");
@@ -39,508 +62,475 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   },
 };
 
-type FlowEdgeField = "next" | "yes" | "no";
-type FlowEdge = {
-  field: FlowEdgeField;
-  target: string;
-  y: number;
-  label?: string;
-};
-
-const outgoing = (node: WorkflowNode): FlowEdge[] =>
+type Port = "next" | "yes" | "no";
+const outputs = (node: WorkflowNode): { field: Port; target: string }[] =>
   node.type === "condition"
     ? [
-        {
-          field: "yes",
-          target: node.yes,
-          y: 24,
-          label: tr("是"),
-        },
-        {
-          field: "no",
-          target: node.no,
-          y: 50,
-          label: tr("否"),
-        },
+        { field: "yes", target: node.yes },
+        { field: "no", target: node.no },
       ]
     : "next" in node
-      ? [{ field: "next", target: node.next, y: 35 }]
+      ? [{ field: "next", target: node.next }]
       : [];
 
-export function workflowNodePositions(flow: ChannelWorkflow) {
+export function workflowNodePositions(
+  flow: ChannelWorkflow,
+  sizes?: Map<string, { height?: number }>,
+) {
   const columns = new Map<string, number>();
-  const visit = (key: string, depth: number, seen: Set<string>) => {
-    if (seen.has(key) || depth > 64 || (columns.get(key) ?? -1) >= depth)
-      return;
-    columns.set(key, depth);
-    const node = flow.nodes.find((item) => item.id === key);
+  const visit = (id: string, depth: number, seen: Set<string>) => {
+    if (seen.has(id) || depth > 64 || (columns.get(id) ?? -1) >= depth) return;
+    columns.set(id, depth);
+    const node = flow.nodes.find((item) => item.id === id);
     if (node)
-      for (const edge of outgoing(node))
-        visit(edge.target, depth + 1, new Set([...seen, key]));
+      for (const edge of outputs(node))
+        visit(edge.target, depth + 1, new Set([...seen, id]));
   };
   visit(flow.entry, 0, new Set());
   const rows = new Map<number, number>();
-  const automatic = new Map(
-    flow.nodes.map((node) => {
-      const column = columns.get(node.id) ?? 0;
-      const row = rows.get(column) ?? 0;
-      rows.set(column, row + 1);
-      return [node.id, { x: 20 + column * 205, y: 20 + row * 105 }];
-    }),
-  );
   return new Map(
-    flow.nodes.map((node) => [
-      node.id,
-      flow.layout?.[node.id] ?? automatic.get(node.id)!,
-    ]),
+    flow.nodes.map((node) => {
+      const column = columns.get(node.id) ?? 0,
+        y = rows.get(column) ?? 40;
+      rows.set(column, y + (sizes?.get(node.id)?.height ?? 210) + 50);
+      return [node.id, flow.layout?.[node.id] ?? { x: 40 + column * 370, y }];
+    }),
   );
 }
 
-export function ChannelFlowCanvas({
-  flow,
-  selected,
-  channel,
-  personal,
-  select,
-  update,
-  remove,
-}: {
+export function removeFlowNodes(
+  flow: ChannelWorkflow,
+  ids: readonly string[],
+): ChannelWorkflow {
+  let next = flow;
+  for (const id of ids) {
+    if (id === flow.entry) continue;
+    const target = next.nodes.find((node) => node.id === id);
+    if (!target) continue;
+    const fallback = "next" in target ? target.next : "";
+    next = {
+      ...next,
+      layout: Object.fromEntries(
+        Object.entries(next.layout ?? {}).filter(([key]) => key !== id),
+      ),
+      nodes: next.nodes
+        .filter((node) => node.id !== id)
+        .map((node) =>
+          node.type === "condition"
+            ? {
+                ...node,
+                yes: node.yes === id ? fallback : node.yes,
+                no: node.no === id ? fallback : node.no,
+              }
+            : "next" in node && node.next === id
+              ? { ...node, next: fallback }
+              : node,
+        ),
+    };
+  }
+  return next;
+}
+
+type CanvasProps = {
   flow: ChannelWorkflow;
   selected: string;
   channel?: Upstream;
   personal: boolean;
   select: (id: string) => void;
   update: (flow: ChannelWorkflow) => void;
+  add: (type: WorkflowNode["type"], position: { x: number; y: number }) => void;
+  renderSettings: (id: string) => React.ReactNode;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+};
+type FlowNode = Node<{ node: WorkflowNode; summary: string }, "channel">;
+const NodeContext = React.createContext<{
+  expanded: ReadonlySet<string>;
+  toggle: (id: string) => void;
+  settings: (id: string) => React.ReactNode;
   remove: (id: string) => void;
-}) {
-  const canvas = React.useRef<HTMLElement>(null);
-  const svgCanvas = React.useRef<SVGSVGElement>(null);
-  const [zoom, setZoom] = React.useState(1);
-  const [movingNode, setMovingNode] = React.useState<{
-    id: string;
-    pointerId: number;
-    offsetX: number;
-    offsetY: number;
-  }>();
-  const [linking, setLinking] = React.useState<{
-    from: string;
-    field: FlowEdgeField;
-    pointerId: number;
-    current: { x: number; y: number };
-  }>();
-  const [panning, setPanning] = React.useState<{
-    pointerId: number;
-    clientX: number;
-    clientY: number;
-    scrollLeft: number;
-    scrollTop: number;
-  }>();
-  const [linkTarget, setLinkTarget] = React.useState<string>();
-  const points = workflowNodePositions(flow);
-  const width = Math.max(
-    420,
-    ...[...points.values()].map((point) => point.x + 190),
-  );
-  const height = Math.max(
-    260,
-    ...[...points.values()].map((point) => point.y + 95),
-  );
-  const pointFromEvent = (clientX: number, clientY: number) => {
-    const svg = svgCanvas.current;
-    const matrix = svg?.getScreenCTM();
-    if (!svg || !matrix) return { x: 0, y: 0 };
-    const point = svg.createSVGPoint();
-    point.x = clientX;
-    point.y = clientY;
-    const local = point.matrixTransform(matrix.inverse());
-    return { x: local.x, y: local.y };
-  };
-  const curve = (
-    from: { x: number; y: number },
-    to: { x: number; y: number },
-    fromY: number,
-  ) => {
-    const bend = Math.max(55, Math.abs(to.x - from.x) * 0.45);
-    return `M${from.x + 170},${from.y + fromY} C${from.x + 170 + bend},${from.y + fromY} ${to.x - bend},${to.y + 35} ${to.x},${to.y + 35}`;
-  };
-  React.useLayoutEffect(() => {
-    if (canvas.current)
-      setZoom(
-        Math.max(0.75, Math.min(1, (canvas.current.clientWidth - 32) / width)),
-      );
-  }, [channel?.name, flow.entry, flow.nodes.length]);
-  function startMovingNode(
-    event: React.PointerEvent<SVGGElement>,
-    id: string,
-    point: { x: number; y: number },
-  ) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    select(id);
-    const pointer = pointFromEvent(event.clientX, event.clientY);
-    setMovingNode({
-      id,
-      pointerId: event.pointerId,
-      offsetX: pointer.x - point.x,
-      offsetY: pointer.y - point.y,
-    });
-    svgCanvas.current?.setPointerCapture(event.pointerId);
-  }
-  function startLinking(
-    event: React.PointerEvent<SVGCircleElement>,
-    from: string,
-    field: FlowEdgeField,
-  ) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    select(from);
-    const current = pointFromEvent(event.clientX, event.clientY);
-    setLinking({ from, field, pointerId: event.pointerId, current });
-    svgCanvas.current?.setPointerCapture(event.pointerId);
-  }
-  function startPanning(event: React.PointerEvent<SVGSVGElement>) {
-    if (event.button !== 1 || !canvas.current) return;
-    event.preventDefault();
-    setPanning({
-      pointerId: event.pointerId,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      scrollLeft: canvas.current.scrollLeft,
-      scrollTop: canvas.current.scrollTop,
-    });
-    svgCanvas.current?.setPointerCapture(event.pointerId);
-  }
-  function movePointer(event: React.PointerEvent<SVGSVGElement>) {
-    if (panning?.pointerId === event.pointerId) {
-      canvas.current!.scrollLeft =
-        panning.scrollLeft - (event.clientX - panning.clientX);
-      canvas.current!.scrollTop =
-        panning.scrollTop - (event.clientY - panning.clientY);
-      return;
-    }
-    const pointer = pointFromEvent(event.clientX, event.clientY);
-    if (movingNode?.pointerId === event.pointerId) {
-      update({
-        ...flow,
-        layout: {
-          ...flow.layout,
-          [movingNode.id]: {
-            x: Math.max(0, pointer.x - movingNode.offsetX),
-            y: Math.max(0, pointer.y - movingNode.offsetY),
-          },
-        },
-      });
-    }
-    if (linking?.pointerId === event.pointerId) {
-      setLinkTarget(
-        document
-          .elementFromPoint(event.clientX, event.clientY)
-          ?.closest("[data-input-node]")
-          ?.getAttribute("data-input-node") ?? undefined,
-      );
-      setLinking({ ...linking, current: pointer });
-    }
-  }
-  function endPointer(event: React.PointerEvent<SVGSVGElement>) {
-    if (panning?.pointerId === event.pointerId) {
-      if (svgCanvas.current?.hasPointerCapture(event.pointerId))
-        svgCanvas.current.releasePointerCapture(event.pointerId);
-      setPanning(undefined);
-    }
-    if (movingNode?.pointerId === event.pointerId) {
-      if (svgCanvas.current?.hasPointerCapture(event.pointerId))
-        svgCanvas.current.releasePointerCapture(event.pointerId);
-      setMovingNode(undefined);
-    }
-    if (linking?.pointerId === event.pointerId) {
-      if (svgCanvas.current?.hasPointerCapture(event.pointerId))
-        svgCanvas.current.releasePointerCapture(event.pointerId);
-      const target = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest("[data-input-node]")
-        ?.getAttribute("data-input-node");
-      if (target && target !== linking.from) {
-        update({
-          ...flow,
-          nodes: flow.nodes.map((node) =>
-            node.id === linking.from
-              ? ({ ...node, [linking.field]: target } as WorkflowNode)
-              : node,
-          ),
-        });
-        select(target);
-      }
-      setLinkTarget(undefined);
-      setLinking(undefined);
-    }
-  }
-  const linkingNode = linking
-    ? flow.nodes.find((node) => node.id === linking.from)
-    : undefined;
-  const linkingPoint = linking ? points.get(linking.from) : undefined;
-  const linkingOffset =
-    linking && linkingNode
-      ? (outgoing(linkingNode).find((edge) => edge.field === linking.field)
-          ?.y ?? 35)
-      : 35;
-  const linkingPath =
-    linking && linkingPoint
-      ? (() => {
-          const from = {
-            x: linkingPoint.x + 170,
-            y: linkingPoint.y + linkingOffset,
-          };
-          const bend = Math.max(
-            55,
-            Math.abs(linking.current.x - from.x) * 0.45,
-          );
-          return `M${from.x},${from.y} C${from.x + bend},${from.y} ${linking.current.x - bend},${linking.current.y} ${linking.current.x},${linking.current.y}`;
-        })()
-      : undefined;
+  duplicate: (id: string) => void;
+}>(null!);
+
+function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
+  const context = React.useContext(NodeContext),
+    { node } = data;
+  const expanded = context.expanded.has(id);
   return (
-    <div>
-      <style>{`.workflow-canvas{overflow:auto;min-height:340px}.workflow-canvas svg{display:block;touch-action:none;user-select:none}.workflow-canvas.is-panning svg,.workflow-canvas.is-panning .workflow-node{cursor:grabbing}.workflow-node{cursor:grab;touch-action:none}.workflow-node:active{cursor:grabbing}.workflow-node:focus{outline:2px solid currentColor}.workflow-port{cursor:crosshair;touch-action:none}`}</style>
-      <div className="workflow-tools">
+    <div className={"flow-node" + (selected ? " is-selected" : "")}>
+      {node.type !== "start" && (
+        <Handle type="target" position={Position.Left} id="in" />
+      )}
+      <div
+        className="flow-node-header"
+        onDoubleClick={() => context.toggle(id)}
+      >
         <button
-          className="secondary"
-          aria-label={tr("缩小画布")}
-          onClick={() => setZoom((value) => Math.max(0.3, value - 0.1))}
+          className="ghost icon-button nodrag"
+          type="button"
+          aria-label={tr(expanded ? "收起设置" : "展开设置")}
+          onClick={() => context.toggle(id)}
         >
-          －
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
-        <span>{Math.round(zoom * 100)}%</span>
+        <strong>{workflowNodeLabels[node.type]}</strong>
+        {node.type !== "start" && (
+          <>
+            <button
+              className="ghost icon-button nodrag"
+              type="button"
+              title={tr("复制节点")}
+              aria-label={tr("复制节点")}
+              onClick={() => context.duplicate(id)}
+            >
+              <Copy size={13} />
+            </button>
+            <button
+              className="ghost icon-button nodrag"
+              type="button"
+              title={tr("删除节点")}
+              aria-label={tr("删除节点")}
+              onClick={() => context.remove(id)}
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
+        )}
+      </div>
+      <div className="flow-node-summary">{data.summary}</div>
+      {expanded && (
+        <div className="flow-node-settings nodrag nowheel">
+          {context.settings(id)}
+        </div>
+      )}
+      {outputs(node).map((port, index) => (
+        <React.Fragment key={port.field}>
+          {node.type === "condition" && (
+            <span className="flow-port-label" style={{ top: 42 + index * 24 }}>
+              {tr(port.field === "yes" ? "是" : "否")}
+            </span>
+          )}
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={port.field}
+            style={{ top: node.type === "condition" ? 48 + index * 24 : 34 }}
+          />
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+const nodeTypes = { channel: ChannelNode };
+function summary(node: WorkflowNode, channel?: Upstream) {
+  switch (node.type) {
+    case "provider":
+      return node.upstream?.protocol ?? channel?.protocol ?? tr("尚未配置上游");
+    case "protocol":
+      return (
+        node.allow.length +
+        tr(" 种入口 · ") +
+        tr(node.conversion === "auto" ? "自动转换" : "仅同协议")
+      );
+    case "routing":
+      return node.profile;
+    case "upstream":
+      return node.target || tr("请选择模型");
+    case "reasoning":
+      return node.effort;
+    case "maxTokens":
+      return node.limit + " tokens";
+    case "tps":
+      return (node.rate ?? node.aggregateRate) + " token/s";
+    case "rateLimit":
+      return Object.entries(node.rule)
+        .map(([key, value]) => value + " " + key)
+        .join(" · ");
+    case "prompt":
+      return node.text.slice(0, 60) || tr("系统提示词");
+    case "condition":
+      return tr(
+        {
+          hasTools: "包含工具",
+          stream: "流式请求",
+          textLengthAbove: "任务字符数大于",
+          protocol: "入口协议为",
+        }[node.test],
+      );
+    default:
+      return tr("请求入口");
+  }
+}
+function graphEdges(flow: ChannelWorkflow): Edge[] {
+  return flow.nodes.flatMap((node) =>
+    outputs(node)
+      .filter((port) => flow.nodes.some((item) => item.id === port.target))
+      .map((port) => ({
+        id: node.id + ":" + port.field,
+        source: node.id,
+        target: port.target,
+        sourceHandle: port.field,
+        targetHandle: "in",
+        type: "default",
+      })),
+  );
+}
+function Canvas(props: CanvasProps) {
+  const { flow, channel, update, select } = props;
+  const graph = useReactFlow<FlowNode>();
+  const positions = workflowNodePositions(flow);
+  const makeNodes = (): FlowNode[] =>
+    flow.nodes.map((node) => ({
+      id: node.id,
+      type: "channel",
+      position: positions.get(node.id)!,
+      data: { node, summary: summary(node, channel) },
+      dragHandle: ".flow-node-header",
+      deletable: node.id !== flow.entry,
+      selected: node.id === props.selected,
+    }));
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(makeNodes());
+  const [edges, setEdges, onEdgesChange] = useEdgesState(graphEdges(flow));
+  const [expanded, setExpanded] = React.useState<Set<string>>(
+    () =>
+      new Set(
+        flow.nodes
+          .filter((n) => n.type === "provider")
+          .slice(0, 1)
+          .map((n) => n.id),
+      ),
+  );
+  React.useEffect(() => {
+    setNodes((current) => {
+      const previous = new Map(current.map((node) => [node.id, node]));
+      return makeNodes().map((node) => ({
+        ...node,
+        selected: previous.get(node.id)?.selected ?? node.selected,
+      }));
+    });
+    setEdges(graphEdges(flow));
+  }, [flow, channel]);
+  const connect = (connection: Connection, old?: Edge) => {
+    if (!connection.source || !connection.target || !connection.sourceHandle)
+      return;
+    update({
+      ...flow,
+      layout: Object.fromEntries(positions),
+      nodes: flow.nodes.map((node) => {
+        let next = node;
+        if (old?.source === next.id)
+          next = { ...next, [old.sourceHandle!]: "" } as WorkflowNode;
+        if (connection.source === next.id)
+          next = {
+            ...next,
+            [connection.sourceHandle!]: connection.target,
+          } as WorkflowNode;
+        return next;
+      }),
+    });
+  };
+  const validConnection = (connection: Connection | Edge) => {
+    if (
+      !connection.source ||
+      !connection.target ||
+      connection.source === connection.target ||
+      connection.target === flow.entry
+    )
+      return false;
+    const seen = new Set<string>();
+    const reachesSource = (id: string): boolean => {
+      if (id === connection.source) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      const node = flow.nodes.find((n) => n.id === id);
+      return !!node && outputs(node).some((edge) => reachesSource(edge.target));
+    };
+    return !reachesSource(connection.target);
+  };
+  function duplicate(id: string) {
+    const original = flow.nodes.find((node) => node.id === id);
+    if (!original || original.type === "start" || flow.nodes.length >= 64)
+      return;
+    let copy = original.type,
+      n = 1;
+    while (flow.nodes.some((node) => node.id === copy))
+      copy = (original.type + n++) as typeof copy;
+    const point = positions.get(id)!;
+    update({
+      ...flow,
+      nodes: [...flow.nodes, { ...structuredClone(original), id: copy }],
+      layout: { ...flow.layout, [copy]: { x: point.x + 50, y: point.y + 100 } },
+    });
+    select(copy);
+  }
+  return (
+    <NodeContext.Provider
+      value={{
+        expanded,
+        settings: props.renderSettings,
+        duplicate,
+        remove: (id) => {
+          update(
+            removeFlowNodes(
+              { ...flow, layout: Object.fromEntries(positions) },
+              [id],
+            ),
+          );
+          select(flow.entry);
+        },
+        toggle: (id) =>
+          setExpanded((old) => {
+            const next = new Set(old);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          }),
+      }}
+    >
+      <div className="workflow-tools flow-history">
         <button
-          className="secondary"
-          aria-label={tr("放大画布")}
-          onClick={() => setZoom((value) => Math.min(2, value + 0.1))}
+          className="secondary icon-button"
+          title={tr("撤销编辑")}
+          aria-label={tr("撤销编辑")}
+          disabled={!props.canUndo}
+          onClick={props.undo}
         >
-          ＋
+          <Undo2 size={15} />
+        </button>
+        <button
+          className="secondary icon-button"
+          title={tr("重做编辑")}
+          aria-label={tr("重做编辑")}
+          disabled={!props.canRedo}
+          onClick={props.redo}
+        >
+          <Redo2 size={15} />
         </button>
         <button
           className="secondary"
-          onClick={() =>
-            setZoom(
-              Math.max(
-                0.3,
-                Math.min(
-                  1,
-                  ((canvas.current?.clientWidth ?? width) - 36) / width,
-                ),
+          onClick={() => {
+            const sizes = new Map(
+              graph.getNodes().map((node) => [node.id, node.measured ?? {}]),
+            );
+            update({
+              ...flow,
+              layout: Object.fromEntries(
+                workflowNodePositions({ ...flow, layout: undefined }, sizes),
               ),
-            )
-          }
+            });
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                void graph.fitView({ padding: 0.15 });
+              }),
+            );
+          }}
         >
-          {tr("适应画布")}
+          <LayoutGrid size={14} />
+          {tr("自动排列")}
         </button>
       </div>
-      <section
-        ref={canvas}
-        className={"panel workflow-canvas" + (panning ? " is-panning" : "")}
+      <div
+        className="channel-flow-canvas"
         aria-label={tr("渠道流程画布")}
+        onKeyDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("input, textarea, select, [contenteditable=true]"))
+            return;
+          if (
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "z"
+          ) {
+            event.preventDefault();
+            event.shiftKey ? props.redo() : props.undo();
+          }
+        }}
       >
-        <svg
-          ref={svgCanvas}
-          width={width * zoom}
-          height={height * zoom}
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={tr("渠道功能连接图")}
-          onPointerDown={startPanning}
-          onPointerMove={movePointer}
-          onPointerUp={endPointer}
-          onPointerCancel={endPointer}
-          onAuxClick={(event) => event.preventDefault()}
-        >
-          <defs>
-            <marker
-              id="flow-arrow"
-              markerWidth="8"
-              markerHeight="8"
-              refX="7"
-              refY="3"
-              orient="auto"
-            >
-              <path d="M0,0 L0,6 L7,3 z" fill="currentColor" />
-            </marker>
-          </defs>
-          {flow.nodes.flatMap((node) =>
-            outgoing(node).map((edge) => {
-              const from = points.get(node.id)!;
-              const to = points.get(edge.target);
-              return to ? (
-                <path
-                  key={node.id + "-" + edge.field}
-                  d={curve(from, to, edge.y)}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  opacity=".48"
-                  markerEnd="url(#flow-arrow)"
-                />
-              ) : null;
-            }),
-          )}
-          {linkingPath && (
-            <path
-              d={linkingPath}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeDasharray="6 4"
-              opacity=".75"
-              pointerEvents="none"
-            />
-          )}
-          {flow.nodes.map((node) => {
-            const point = points.get(node.id)!;
-            return (
-              <g
-                key={node.id}
-                className="workflow-node"
-                role="button"
-                tabIndex={0}
-                aria-label={node.id + " " + workflowNodeLabels[node.type]}
-                onClick={() => select(node.id)}
-                onPointerDown={(event) =>
-                  startMovingNode(event, node.id, point)
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    select(node.id);
-                  } else if (
-                    (event.key === "Delete" || event.key === "Backspace") &&
-                    node.id !== flow.entry
-                  ) {
-                    event.preventDefault();
-                    remove(node.id);
-                  }
-                }}
-              >
-                <rect
-                  x={point.x}
-                  y={point.y}
-                  width="170"
-                  height="70"
-                  rx="10"
-                  fill="currentColor"
-                  fillOpacity={node.id === selected ? ".14" : ".05"}
-                  stroke="currentColor"
-                  strokeOpacity={node.id === selected ? ".8" : ".2"}
-                />
-                {node.type !== "start" && (
-                  <>
-                    <circle
-                      className="workflow-port"
-                      data-input-node={node.id}
-                      cx={point.x}
-                      cy={point.y + 35}
-                      r="10"
-                      fill="transparent"
-                    >
-                      <title>{tr("连接到")}</title>
-                    </circle>
-                    <circle
-                      className="workflow-port"
-                      cx={point.x}
-                      cy={point.y + 35}
-                      r={linkTarget === node.id ? "6" : "5"}
-                      fill={
-                        linkTarget === node.id
-                          ? "currentColor"
-                          : "var(--panel, Canvas)"
-                      }
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      pointerEvents="none"
-                    />
-                  </>
-                )}
-                <text
-                  x={point.x + 12}
-                  y={point.y + 27}
-                  fill="currentColor"
-                  fontSize="13"
-                >
-                  {workflowNodeLabels[node.type]}
-                </text>
-                <text
-                  x={point.x + 12}
-                  y={point.y + 48}
-                  fill="currentColor"
-                  opacity=".65"
-                  fontSize="11"
-                >
-                  {node.type === "provider"
-                    ? (node.upstream?.protocol ??
-                      (personal
-                        ? (channel?.protocol ?? tr("渠道上游"))
-                        : tr("尚未配置上游")))
-                    : node.type === "protocol"
-                      ? node.allow.length +
-                        tr(" 种入口 · ") +
-                        (node.conversion === "auto"
-                          ? tr("自动转换")
-                          : tr("仅同协议"))
-                      : node.type === "routing"
-                        ? node.profile
-                        : node.type === "upstream"
-                          ? node.target
-                          : node.type === "reasoning"
-                            ? node.effort
-                            : node.type === "rateLimit"
-                              ? Object.entries(node.rule)
-                                  .map(([key, value]) => value + " " + key)
-                                  .join(" · ")
-                              : node.type === "tps"
-                                ? (node.rate ?? node.aggregateRate) + " token/s"
-                                : node.type === "maxTokens"
-                                  ? node.limit + " tokens"
-                                  : node.id}
-                </text>
-                {outgoing(node).map((edge) => (
-                  <g key={edge.field}>
-                    {node.type === "condition" && (
-                      <text
-                        x={point.x + 154}
-                        y={point.y + edge.y + 4}
-                        textAnchor="end"
-                        fill="currentColor"
-                        opacity=".7"
-                        fontSize="10"
-                      >
-                        {edge.label}
-                      </text>
-                    )}
-                    <circle
-                      className="workflow-port"
-                      cx={point.x + 170}
-                      cy={point.y + edge.y}
-                      r="11"
-                      fill="transparent"
-                      onPointerDown={(event) =>
-                        startLinking(event, node.id, edge.field)
-                      }
-                    />
-                    <circle
-                      className="workflow-port"
-                      cx={point.x + 170}
-                      cy={point.y + edge.y}
-                      r="5"
-                      fill="var(--panel, Canvas)"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      pointerEvents="none"
-                    />
-                  </g>
-                ))}
-              </g>
+        <ReactFlow<FlowNode>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={(_, node) => select(node.id)}
+          onNodeDragStop={(_, node, moved) => {
+            update({
+              ...flow,
+              layout: {
+                ...Object.fromEntries(positions),
+                ...Object.fromEntries(
+                  (moved.length ? moved : [node]).map((item) => [
+                    item.id,
+                    item.position,
+                  ]),
+                ),
+              },
+            });
+          }}
+          onConnect={(connection) => connect(connection)}
+          onReconnect={(edge, connection) => connect(connection, edge)}
+          isValidConnection={validConnection}
+          onDelete={({ nodes: deleted, edges: links }) => {
+            const next = removeFlowNodes(
+              { ...flow, layout: Object.fromEntries(positions) },
+              deleted.map((node) => node.id),
             );
-          })}
-        </svg>
-      </section>
-    </div>
+            const removed = new Set(deleted.map((node) => node.id));
+            const disconnected = links.filter(
+              (edge) => !removed.has(edge.source) && !removed.has(edge.target),
+            );
+            update({
+              ...next,
+              nodes: next.nodes.map((node) => {
+                const patch = Object.fromEntries(
+                  disconnected
+                    .filter((edge) => edge.source === node.id)
+                    .map((edge) => [edge.sourceHandle!, ""]),
+                );
+                return { ...node, ...patch } as WorkflowNode;
+              }),
+            });
+            select(flow.entry);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const type = event.dataTransfer.getData(
+              "application/pluhub-node",
+            ) as WorkflowNode["type"];
+            if (type !== "start" && Object.hasOwn(workflowNodeLabels, type))
+              props.add(
+                type,
+                graph.screenToFlowPosition({
+                  x: event.clientX,
+                  y: event.clientY,
+                }),
+              );
+          }}
+          fitView
+          minZoom={0.2}
+          maxZoom={2}
+          panOnDrag={[0, 1]}
+          deleteKeyCode={["Backspace", "Delete"]}
+          selectionKeyCode="Shift"
+          multiSelectionKeyCode={["Control", "Meta"]}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background gap={20} size={1} />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+      </div>
+    </NodeContext.Provider>
+  );
+}
+export function ChannelFlowCanvas(props: CanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <Canvas {...props} />
+    </ReactFlowProvider>
   );
 }

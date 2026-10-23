@@ -217,6 +217,9 @@ export function ChannelTable({
                   </td>
                   <td>
                     <strong>{channel.name || id}</strong>
+                    <small>
+                      {tr("优先级")} {channel.priority ?? 0}
+                    </small>
                     {channel.name && channel.name !== id && <small>{id}</small>}
                   </td>
                   <td>
@@ -226,6 +229,23 @@ export function ChannelTable({
                         "1": textValue(channelConnections(channel).length),
                       })}
                     </span>
+                    {channelConnections(channel).some(
+                      (connection) => !!connection.keyRef,
+                    ) && (
+                      <small>
+                        {channelConnections(channel).reduce(
+                          (count, connection) =>
+                            count +
+                            (Array.isArray(connection.keyRef)
+                              ? connection.keyRef.length
+                              : connection.keyRef
+                                ? 1
+                                : 0),
+                          0,
+                        )}{" "}
+                        Key
+                      </small>
+                    )}
                     <small className="channel-address">
                       {channelConnections(channel)
                         .map((u) => u.baseUrl)

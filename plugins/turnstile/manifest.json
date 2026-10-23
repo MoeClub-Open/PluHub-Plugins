@@ -5,7 +5,7 @@
   "name": "人机验证",
   "description": "提供 Turnstile、reCAPTCHA 与极验人机验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

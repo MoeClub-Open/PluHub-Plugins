@@ -1,3 +1,4 @@
+import { SelectionPool } from "../../lib/ai/selection.js";
 import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
 import { HostError, type Host } from "@pluhub/sdk";
@@ -25,6 +26,8 @@ import {
   checkProtocolConversion,
 } from "../../lib/ai/channel-graph.js";
 
+const channels = new SelectionPool();
+
 export async function planRoute(
   host: Host,
   input: RoutingRequest,
@@ -36,23 +39,93 @@ export async function planRoute(
     !input.channelIds.includes(input.channelId)
   )
     throw new HostError("channel_forbidden", "渠道不在密钥授权范围内", 403);
-  if (!input.channelId && input.channelIds?.length) {
-    const models = await readCatalog(
-      host,
-      { principalId: input.principalId, channelIds: input.channelIds },
-      signal,
-    );
-    const match = models.find(
-      (model) =>
-        model.id === input.model &&
-        (model.operations ?? ["chat"]).includes(
-          input.request?.operation?.kind ?? "chat",
-        ),
-    );
-    if (!match)
+  const requestedModel = input.model;
+  const catalog = await readCatalog(
+    host,
+    {
+      principalId: input.principalId,
+      channelId: input.channelId,
+      channelIds: input.channelIds,
+    },
+    signal,
+  );
+  const matches = catalog.filter(
+    (model) =>
+      (model.id === input.model || model.routeId === input.model) &&
+      (model.operations ?? ["chat"]).includes(
+        input.request?.operation?.kind ?? "chat",
+      ),
+  );
+  if (!matches.length) {
+    if (input.channelIds?.length)
       throw new HostError("model_not_found", "绑定渠道中没有此模型", 404);
-    input = { ...input, channelId: match.channelId };
+    return resolvePlan(host, input, signal, requestedModel);
   }
+  let unavailable: unknown;
+  for (const priority of [
+    ...new Set(matches.map((model) => model.channelPriority ?? 0)),
+  ].sort((a, b) => b - a)) {
+    const candidates = matches.filter(
+      (model) => (model.channelPriority ?? 0) === priority,
+    );
+    while (candidates.length) {
+      const match = channels.choose(
+        JSON.stringify([
+          input.principalId,
+          requestedModel,
+          input.channelId,
+          [...(input.channelIds ?? [])].sort(),
+        ]),
+        candidates,
+        (model) => JSON.stringify([model.channelId, model.routeId]),
+        input.request?.sessionId,
+      )!;
+      candidates.splice(candidates.indexOf(match), 1);
+      const plan = await resolvePlan(
+        host,
+        {
+          ...input,
+          channelId: match.channelId,
+          model: match.routeId ?? match.id,
+        },
+        signal,
+        requestedModel,
+      );
+      if (plan.upstream.subscriptionAccountIds?.length) {
+        const state = await host.call<{ available: boolean }>(
+          `ai.subscription.${plan.upstream.protocol}@1`,
+          {
+            action: "availability",
+            ids: plan.upstream.subscriptionAccountIds,
+            model: plan.model,
+            ownerId: plan.upstream.credentialOwner,
+            authMode: plan.upstream.authMode,
+          },
+          signal,
+        );
+        if (!state.available) {
+          unavailable = new HostError(
+            "subscription_unavailable",
+            "渠道订阅账号暂不可用",
+            503,
+          );
+          continue;
+        }
+      }
+      return plan;
+    }
+  }
+  throw (
+    unavailable ?? new HostError("upstream_unavailable", "没有可用渠道", 503)
+  );
+}
+
+async function resolvePlan(
+  host: Host,
+  input: RoutingRequest,
+  signal: AbortSignal,
+  requestedModel: string,
+): Promise<AIPlan> {
   let config = host.config();
   let credentialId: string | undefined;
   if (input.channelId?.startsWith("personal:")) {
@@ -81,7 +154,7 @@ export async function planRoute(
     prepared = input.request;
   const path: string[] = [],
     workflows: NonNullable<AIPlan["workflows"]> = [];
-  const responsePath: string[] = [input.model];
+  const responsePath: string[] = [requestedModel];
   let decision: AIPlan["decision"], logicalUpstreamId: string | undefined;
   let outputPolicy: AIPlan["outputPolicy"], resolved: AIPlan | undefined;
   const requestLimits: NonNullable<AIPlan["requestLimits"]> = [];
@@ -441,15 +514,17 @@ export async function planRoute(
         }
       : resolved.upstream,
     credentialId,
+    responseModel: explicit
+      ? (models[responsePath.at(-1)!]?.publicModel ?? responsePath.at(-1)!)
+      : requestedModel,
     ...(requestLimits.length ? { requestLimits } : {}),
     ...(workflows.length
       ? { workflows, preparedRequest: prepared, outputPolicy }
       : {}),
     ...(responsePath.length > 1
       ? {
-          responseModel: explicit ? responsePath.at(-1)! : input.model,
           redirection: {
-            requested: input.model,
+            requested: requestedModel,
             target: responsePath.at(-1)!,
             mode: explicit ? "explicit" : "implicit",
             path: responsePath,

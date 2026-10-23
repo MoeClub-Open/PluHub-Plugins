@@ -1,4 +1,9 @@
-import { UpstreamInterfaces } from "./upstream-interfaces.js";
+import {
+  ChannelNodeSettings,
+  ingressOptions,
+} from "./channel-node-settings.js";
+import { compileWorkflow } from "../ai/channel-graph.js";
+import * as Popover from "@radix-ui/react-popover";
 import { Checkbox } from "./checkbox.js";
 import { listSubscriptionAccounts } from "./subscription-providers.js";
 import { t as tr, textValue } from "./i18n.js";
@@ -6,7 +11,6 @@ import { Select } from "./select.js";
 import { ChannelExtension } from "./channel-extension.js";
 import { Dialog } from "./components.js";
 import React from "react";
-import { subscriptionDefaults } from "../ai/subscription-auth.js";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
 import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
@@ -18,18 +22,6 @@ import {
   workflowNodePositions,
 } from "./channel-flow-canvas.js";
 import { defaultChannelFlow } from "../ai/channel-config.js";
-const ingressOptions: { value: Protocol; label: string }[] = [
-  { value: "openai-chat", label: "OpenAI Chat Completions" },
-  { value: "openai-responses", label: "OpenAI Responses" },
-  { value: "anthropic", label: "Anthropic Messages" },
-  { value: "gemini", label: "Gemini" },
-];
-const subscriptionProtocols = new Set([
-  "codex",
-  "claude-subscription",
-  "antigravity",
-  "grok",
-]);
 export function ChannelGraphEditor({
   host,
   channelId,
@@ -56,9 +48,14 @@ export function ChannelGraphEditor({
   );
   const [channelName, setChannelName] = React.useState("");
   const [enabled, setEnabled] = React.useState(false);
+  const [priority, setPriority] = React.useState(0);
   const [personalInterfaces, setPersonalInterfaces] =
     React.useState<UpstreamInterface[]>();
   const [flow, setFlow] = React.useState<ChannelWorkflow>();
+  const history = React.useRef<{
+    past: ChannelWorkflow[];
+    future: ChannelWorkflow[];
+  }>({ past: [], future: [] });
   const [selected, select] = React.useState("start");
   const [message, setMessage] = React.useState("");
   const [task, setTask] = React.useState("Hello");
@@ -91,71 +88,39 @@ export function ChannelGraphEditor({
     if (channel) {
       setChannelName(channel.name ?? "");
       setEnabled(channel.enabled !== false);
+      setPriority(channel.priority ?? 0);
       setPersonalInterfaces(channel.interfaces);
       const next = structuredClone(channel.flow ?? defaultChannelFlow());
       setFlow(next);
+      history.current = { past: [], future: [] };
       select(next.entry);
     }
   }, [JSON.stringify(channel)]);
   const node = flow?.nodes.find((n) => n.id === selected);
   function update(next: ChannelWorkflow) {
+    if (flow && JSON.stringify(flow) !== JSON.stringify(next)) {
+      history.current.past = [...history.current.past.slice(-49), flow];
+      history.current.future = [];
+    }
     setFlow(next);
     setPreview(undefined);
     setMessage("");
   }
-  const protocols = [
-    "openai-chat",
-    "openai-responses",
-    "anthropic",
-    "gemini",
-    "codex",
-    "claude-subscription",
-    "antigravity",
-    "grok",
-  ];
-  function changeProtocol(protocol: string) {
-    if (node?.type !== "provider") return;
-    const upstream: any = { protocol };
-    if (subscriptionProtocols.has(protocol)) {
-      upstream.subscriptionAccountIds = [];
-      if (protocol === "codex") upstream.authMode = "cli";
-    } else {
-      upstream.baseUrl = node.upstream?.baseUrl ?? "";
-      upstream.keyRef = node.upstream?.keyRef ?? "";
-    }
-    change({ upstream });
-  }
-  function connection(patch: Record<string, unknown>) {
-    if (node?.type !== "provider") return;
-    change({
-      upstream: {
-        ...(node.upstream ?? {
-          protocol: "openai-chat",
-          baseUrl: "",
-          keyRef: "",
-        }),
-        ...patch,
-      },
-    });
-  }
-  function change(patch: any) {
-    if (flow && node)
-      update({
-        ...flow,
-        nodes: flow.nodes.map((n) =>
-          n.id === node.id ? { ...n, ...patch } : n,
-        ),
-      });
-  }
-  function add(type: WorkflowNode["type"]) {
+  function add(
+    type: WorkflowNode["type"],
+    position?: { x: number; y: number },
+  ) {
     if (!flow || flow.nodes.length >= 64) return;
     let key = type;
     let n = 1;
     while (flow.nodes.some((item) => item.id === key))
       key = (type + n++) as typeof key;
-    const anchor = flow.nodes.find((n) => n.id === selected);
-    const next =
-      anchor && "next" in anchor
+    const anchor = position
+      ? undefined
+      : flow.nodes.find((n) => n.id === selected);
+    const next = position
+      ? ""
+      : anchor && "next" in anchor
         ? anchor.next
         : anchor &&
             (anchor.type === "provider" ||
@@ -198,20 +163,21 @@ export function ChannelGraphEditor({
     const anchorPoint = workflowNodePositions(flow).get(selected);
     update({
       ...flow,
-      layout: anchorPoint
-        ? {
-            ...flow.layout,
-            [key]: {
-              x: anchorPoint.x + 210,
-              y: anchorPoint.y,
-            },
-          }
-        : flow.layout,
+      layout:
+        position || anchorPoint
+          ? {
+              ...flow.layout,
+              [key]: {
+                x: position?.x ?? anchorPoint!.x + 360,
+                y: position?.y ?? anchorPoint!.y,
+              },
+            }
+          : flow.layout,
       nodes: [
         ...flow.nodes.map((n) =>
           type === "provider" || type === "routing" || type === "upstream"
             ? n
-            : n.id === selected && "next" in n
+            : !position && n.id === selected && "next" in n
               ? { ...n, next: key }
               : anchor &&
                   (anchor.type === "provider" ||
@@ -233,48 +199,19 @@ export function ChannelGraphEditor({
     });
     select(key);
   }
-  function removeNode(id: string) {
-    if (!flow || id === flow.entry) return;
-    const target = flow.nodes.find((node) => node.id === id);
-    if (!target) return;
-    const fallback = "next" in target ? target.next : "";
-    const hadIncoming = flow.nodes.some((node) =>
-      node.type === "condition"
-        ? node.yes === id || node.no === id
-        : "next" in node && node.next === id,
-    );
-    update({
-      ...flow,
-      layout: Object.fromEntries(
-        Object.entries(flow.layout ?? {}).filter(([nodeId]) => nodeId !== id),
-      ),
-      nodes: flow.nodes
-        .filter((node) => node.id !== id)
-        .map((node) =>
-          "next" in target
-            ? node.type === "condition"
-              ? {
-                  ...node,
-                  yes: node.yes === id ? fallback : node.yes,
-                  no: node.no === id ? fallback : node.no,
-                }
-              : "next" in node && node.next === id
-                ? { ...node, next: fallback }
-                : node
-            : node.type === "condition"
-              ? {
-                  ...node,
-                  yes: node.yes === id ? "" : node.yes,
-                  no: node.no === id ? "" : node.no,
-                }
-              : "next" in node && node.next === id
-                ? { ...node, next: "" }
-                : node,
-        ),
-    });
-    select(flow.entry);
-    if (hadIncoming && !fallback)
-      setMessage(tr("流程节点已删除，请重新连接受影响的出口。"));
+  function undo() {
+    const previous = history.current.past.pop();
+    if (!previous || !flow) return;
+    history.current.future.push(flow);
+    setFlow(previous);
+    setPreview(undefined);
+  }
+  function redo() {
+    const next = history.current.future.pop();
+    if (!next || !flow) return;
+    history.current.past.push(flow);
+    setFlow(next);
+    setPreview(undefined);
   }
   async function save() {
     if (!flow) return false;
@@ -288,6 +225,7 @@ export function ChannelGraphEditor({
     setBusy(true);
     setMessage("");
     try {
+      compileWorkflow(flow);
       if (personal) {
         await host.request("/api/plugins/official.byok/personal-channels", {
           method: "PUT",
@@ -296,6 +234,7 @@ export function ChannelGraphEditor({
             interfaces: personalInterfaces,
             flow,
             name: channelName,
+            priority,
             enabled,
           }),
         });
@@ -310,6 +249,7 @@ export function ChannelGraphEditor({
       current.flow = flow;
       current.name = channelName;
       current.enabled = enabled;
+      current.priority = priority;
       await host.request("/api/plugins/official.ai-router/configuration", {
         method: "PUT",
         body: JSON.stringify({ config: next, revision: loaded.data.revision }),
@@ -338,6 +278,7 @@ export function ChannelGraphEditor({
             body: JSON.stringify({
               ...(personal ? { id: channelId } : { upstream: channelId }),
               ingressProtocol,
+              flow,
               request: {
                 model:
                   (personal
@@ -355,7 +296,7 @@ export function ChannelGraphEditor({
           },
         ),
       );
-      setMessage(tr("已预览保存的渠道流程，没有调用上游。"));
+      setMessage(tr("预览完成"));
     } catch (e) {
       setPreview(undefined);
       setMessage((e as Error).message);
@@ -365,7 +306,7 @@ export function ChannelGraphEditor({
   }
   return (
     <section ref={editor} aria-label={tr("渠道流程编辑器")}>
-      <style>{`.workflow-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,290px);gap:16px;margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-side label{display:block;margin:10px 0}.workflow-side input,.workflow-side select,.workflow-side textarea{width:100%}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}.workflow-panel{margin-top:14px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
+      <style>{`.workflow-grid{margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}.workflow-panel{margin-top:14px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
       <div className="page-heading">
         <div>
           {personal ? (
@@ -394,6 +335,7 @@ export function ChannelGraphEditor({
                 const changed =
                   channelName !== (channel?.name ?? "") ||
                   enabled !== (channel?.enabled !== false) ||
+                  priority !== (channel?.priority ?? 0) ||
                   JSON.stringify(flow) !==
                     JSON.stringify(channel?.flow ?? defaultChannelFlow());
                 if (!changed || (await save())) manageModels();
@@ -441,17 +383,69 @@ export function ChannelGraphEditor({
       {flow && (
         <>
           <div className="workflow-tools">
-            {(Object.keys(labels) as WorkflowNode["type"][])
-              .filter((t) => t !== "start" && (!personal || t !== "routing"))
-              .map((type) => (
-                <button
-                  className="secondary"
-                  key={type}
-                  onClick={() => add(type)}
+            <input
+              aria-label={tr("渠道名称")}
+              value={channelName}
+              maxLength={128}
+              onChange={(e) => setChannelName(e.target.value)}
+            />
+            <label>
+              {tr("优先级")}
+              <input
+                aria-label={tr("优先级")}
+                type="number"
+                min="-1000000"
+                max="1000000"
+                step="1"
+                value={priority}
+                onChange={(e) => setPriority(Number(e.target.value))}
+                style={{ width: 80 }}
+              />
+            </label>
+            <label className="checkbox-row">
+              <Checkbox
+                appearance="switch"
+                checked={enabled}
+                onCheckedChange={(value) => setEnabled(value === true)}
+              />
+              {tr("启用渠道")}
+            </label>
+            <Popover.Root>
+              <Popover.Trigger asChild>
+                <button className="secondary">＋ {tr("添加节点")}</button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  className="flow-add-menu"
+                  sideOffset={6}
+                  align="start"
                 >
-                  ＋ {labels[type]}
-                </button>
-              ))}
+                  {(Object.keys(labels) as WorkflowNode["type"][])
+                    .filter(
+                      (type) =>
+                        type !== "start" && (!personal || type !== "routing"),
+                    )
+                    .map((type) => (
+                      <Popover.Close asChild key={type}>
+                        <button
+                          className="ghost"
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData(
+                              "application/pluhub-node",
+                              type,
+                            );
+                            event.dataTransfer.effectAllowed = "move";
+                          }}
+                          onClick={() => add(type)}
+                        >
+                          {labels[type]}
+                        </button>
+                      </Popover.Close>
+                    ))}
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
           </div>
           <div className="workflow-grid">
             <ChannelFlowCanvas
@@ -461,620 +455,43 @@ export function ChannelGraphEditor({
               personal={personal}
               select={select}
               update={update}
-              remove={removeNode}
-            />
-            <section className="panel workflow-side">
-              <h2>{tr("节点设置")}</h2>
-              <label>
-                {tr("渠道名称")}
-                <input
-                  value={channelName}
-                  maxLength={128}
-                  onChange={(e) => setChannelName(e.target.value)}
-                />
-              </label>
-              <label>
-                <Checkbox
-                  appearance="switch"
-                  checked={enabled}
-                  onCheckedChange={(e) => setEnabled(e === true)}
-                />{" "}
-                {tr("启用渠道")}
-              </label>
-              {node && (
-                <>
-                  <p>
-                    <code>{node.id}</code> · {labels[node.type]}
-                  </p>
-                  {node.type === "start" && !personal && (
-                    <button
-                      className="secondary"
-                      onClick={() => setPanel("limits")}
-                    >
-                      {tr("全局限制")}
-                    </button>
-                  )}
-                  {node.type === "condition" && (
-                    <>
-                      <label>
-                        {tr("判断")}
-                        <Select
-                          value={node.test}
-                          onChange={(e) =>
-                            change({
-                              test: e.target.value,
-                              protocol:
-                                e.target.value === "protocol"
-                                  ? "openai-chat"
-                                  : undefined,
-                            })
-                          }
-                        >
-                          <option value="hasTools">{tr("包含工具")}</option>
-                          <option value="stream">{tr("流式请求")}</option>
-                          <option value="protocol">{tr("入口协议为")}</option>
-                          <option value="textLengthAbove">
-                            {tr("任务字符数大于")}
-                          </option>
-                        </Select>
-                      </label>
-                      {node.test === "protocol" && (
-                        <Select
-                          aria-label={tr("条件入口协议")}
-                          value={node.protocol ?? "openai-chat"}
-                          onChange={(e) => change({ protocol: e.target.value })}
-                        >
-                          {ingressOptions.map((p) => (
-                            <option key={p.value} value={p.value}>
-                              {p.label}
-                            </option>
-                          ))}
-                        </Select>
-                      )}
-                      {node.test === "textLengthAbove" && (
-                        <input
-                          aria-label={tr("字符数阈值")}
-                          type="number"
-                          min="0"
-                          value={node.value ?? 0}
-                          onChange={(e) =>
-                            change({ value: Number(e.target.value) })
-                          }
-                        />
-                      )}
-                    </>
-                  )}
-                  {node.type === "protocol" && (
-                    <fieldset>
-                      <legend>{tr("允许的入口协议")}</legend>
-                      {ingressOptions.map((p) => (
-                        <label key={p.value}>
-                          <Checkbox
-                            checked={node.allow.includes(p.value)}
-                            onCheckedChange={(e) =>
-                              change({
-                                allow:
-                                  e === true
-                                    ? [...node.allow, p.value]
-                                    : node.allow.filter((v) => v !== p.value),
-                              })
-                            }
-                          />{" "}
-                          {p.label}
-                        </label>
-                      ))}
-                      <label>
-                        {tr("协议转换")}
-                        <Select
-                          value={node.conversion}
-                          onChange={(e) =>
-                            change({ conversion: e.target.value })
-                          }
-                        >
-                          <option value="auto">
-                            {tr("自动转换为上游协议")}
-                          </option>
-                          <option value="disabled">
-                            {tr("仅允许与上游相同的协议")}
-                          </option>
-                        </Select>
-                      </label>
-                    </fieldset>
-                  )}
-                  {node.type === "prompt" && (
-                    <label>
-                      {tr("系统提示词")}
-                      <textarea
-                        rows={5}
-                        value={node.text}
-                        onChange={(e) => change({ text: e.target.value })}
-                      />
-                    </label>
-                  )}
-                  {node.type === "reasoning" && (
-                    <label>
-                      {tr("思考强度")}
-                      <Select
-                        value={node.effort}
-                        onChange={(e) => change({ effort: e.target.value })}
-                      >
-                        {[
-                          "none",
-                          "minimal",
-                          "low",
-                          "medium",
-                          "high",
-                          "xhigh",
-                          "max",
-                        ].map((e) => (
-                          <option key={e}>{e}</option>
-                        ))}
-                      </Select>
-                    </label>
-                  )}
-                  {node.type === "maxTokens" && (
-                    <label>
-                      {tr("最大输出 Token")}
-                      <input
-                        type="number"
-                        min="1"
-                        value={node.limit}
-                        onChange={(e) =>
-                          change({ limit: Number(e.target.value) })
-                        }
-                      />
-                    </label>
-                  )}
-                  {node.type === "rateLimit" && (
-                    <fieldset>
-                      <legend>{tr("当前渠道 · 经过此节点的请求")}</legend>
-                      <div className="form-grid">
-                        {[
-                          ["rpm", "每分钟请求"],
-                          ["tpm", "每分钟 Token"],
-                          ["concurrency", "最大并发"],
-                          ["bytesPerSecond", "响应字节 / 秒"],
-                        ].map(([key, title]) => (
-                          <label key={key}>
-                            {tr(title!)}
-                            <input
-                              type="number"
-                              min="0"
-                              max="1000000000"
-                              step="1"
-                              value={
-                                node.rule[key as keyof typeof node.rule] ?? ""
-                              }
-                              onChange={(e) => {
-                                const rule = { ...node.rule };
-                                const value = Number(e.target.value);
-                                if (value > 0)
-                                  rule[key as keyof typeof rule] = value;
-                                else delete rule[key as keyof typeof rule];
-                                change({ rule });
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </fieldset>
-                  )}
-                  {node.type === "tps" && (
-                    <>
-                      <label>
-                        {tr("每请求 TPS")}
-                        <input
-                          type="number"
-                          min="0.1"
-                          step="0.1"
-                          value={node.rate ?? ""}
-                          onChange={(e) =>
-                            change({
-                              rate: Number(e.target.value) || undefined,
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        {tr("分词器")}
-                        <Select
-                          value={node.tokenizer}
-                          onChange={(e) =>
-                            change({ tokenizer: e.target.value })
-                          }
-                        >
-                          <option>o200k_base</option>
-                          <option>cl100k_base</option>
-                          {!personal &&
-                            (loaded.data?.references?.tokenizers ?? []).map(
-                              (name: string) => (
-                                <option key={name}>{name}</option>
-                              ),
-                            )}
-                        </Select>
-                      </label>
-                      {!personal && (
-                        <>
-                          <label>
-                            {tr("共享模型 TPS")}
-                            <input
-                              type="number"
-                              min="0.1"
-                              step="0.1"
-                              value={node.aggregateRate ?? ""}
-                              onChange={(e) =>
-                                change({
-                                  aggregateRate:
-                                    Number(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            {tr("限定上游模型")}
-                            <input
-                              value={node.model ?? ""}
-                              placeholder={tr("全部模型")}
-                              onChange={(e) =>
-                                change({ model: e.target.value || undefined })
-                              }
-                            />
-                          </label>
-                          <label>
-                            <Checkbox
-                              appearance="switch"
-                              checked={node.inheritDefault !== false}
-                              onCheckedChange={(e) =>
-                                change({ inheritDefault: e === true })
-                              }
-                            />{" "}
-                            {tr("同时应用默认 TPS")}
-                          </label>
-                        </>
-                      )}
-                    </>
-                  )}
-                  {node.type === "provider" && (
-                    <>
-                      {!personal && (
-                        <>
-                          <label>
-                            {tr("上游调用协议")}
-                            <Select
-                              aria-label={tr("上游调用协议")}
-                              value={node.upstream?.protocol ?? "openai-chat"}
-                              onChange={(e) => changeProtocol(e.target.value)}
-                            >
-                              {protocols.map((p) => (
-                                <option key={p}>{p}</option>
-                              ))}
-                            </Select>
-                          </label>
-                          {[
-                            "codex",
-                            "claude-subscription",
-                            "antigravity",
-                            "grok",
-                          ].includes(node.upstream?.protocol ?? "") && (
-                            <>
-                              <label>
-                                {tr("授权来源")}
-                                <Select
-                                  value={
-                                    node.upstream?.subscriptionAccountIds
-                                      ? "accounts"
-                                      : "static"
-                                  }
-                                  onChange={(e) => {
-                                    const upstream: any = { ...node.upstream };
-                                    if (e.target.value === "accounts") {
-                                      upstream.subscriptionAccountIds = [];
-                                      delete upstream.keyRef;
-                                      delete upstream.baseUrl;
-                                    } else {
-                                      delete upstream.subscriptionAccountIds;
-                                      upstream.baseUrl = "";
-                                      upstream.keyRef = "";
-                                    }
-                                    change({ upstream });
-                                  }}
-                                >
-                                  <option value="accounts">
-                                    {tr("订阅账号")}
-                                  </option>
-                                  <option value="static">
-                                    {tr("环境变量")}
-                                  </option>
-                                </Select>
-                              </label>
-                              {node.upstream?.subscriptionAccountIds && (
-                                <div className="full">
-                                  <Notice
-                                    message={subscriptionAccounts.error}
-                                  />
-                                  {(subscriptionAccounts.data ?? [])
-                                    .filter(
-                                      (a) =>
-                                        a.provider === node.upstream?.protocol,
-                                    )
-                                    .map((a) => (
-                                      <label
-                                        className="checkbox-row"
-                                        key={a.id}
-                                      >
-                                        <Checkbox
-                                          checked={node.upstream!.subscriptionAccountIds!.includes(
-                                            a.id,
-                                          )}
-                                          onCheckedChange={(e) =>
-                                            connection({
-                                              ...(a.provider === "codex" &&
-                                              e === true
-                                                ? {
-                                                    authMode:
-                                                      a.authMode ?? "cli",
-                                                    baseUrl:
-                                                      a.authMode === "siwc"
-                                                        ? "https://api.openai.com/v1"
-                                                        : subscriptionDefaults
-                                                            .codex.baseUrl,
-                                                  }
-                                                : {}),
-                                              subscriptionAccountIds:
-                                                e === true
-                                                  ? [
-                                                      ...node.upstream!.subscriptionAccountIds!.filter(
-                                                        (id) =>
-                                                          a.provider !==
-                                                            "codex" ||
-                                                          (subscriptionAccounts.data?.find(
-                                                            (item) =>
-                                                              item.id === id,
-                                                          )?.authMode ??
-                                                            "cli") ===
-                                                            (a.authMode ??
-                                                              "cli"),
-                                                      ),
-                                                      a.id,
-                                                    ]
-                                                  : node.upstream!.subscriptionAccountIds!.filter(
-                                                      (id) => id !== a.id,
-                                                    ),
-                                            })
-                                          }
-                                        />
-                                        {a.name}
-                                        {!a.enabled ? " · " + tr("已停用") : ""}
-                                      </label>
-                                    ))}
-                                  {subscriptionAccounts.data &&
-                                    !subscriptionAccounts.data.some(
-                                      (a) =>
-                                        a.provider === node.upstream?.protocol,
-                                    ) && (
-                                      <span className="muted">
-                                        {tr("暂无可用订阅账号")}
-                                      </span>
-                                    )}
-                                  {(node.upstream.subscriptionAccountIds ?? [])
-                                    .filter(
-                                      (id) =>
-                                        !subscriptionAccounts.data?.some(
-                                          (a) => a.id === id,
-                                        ),
-                                    )
-                                    .map((id) => (
-                                      <label className="checkbox-row" key={id}>
-                                        <Checkbox
-                                          checked
-                                          onCheckedChange={() =>
-                                            connection({
-                                              subscriptionAccountIds:
-                                                node.upstream!.subscriptionAccountIds!.filter(
-                                                  (v) => v !== id,
-                                                ),
-                                            })
-                                          }
-                                        />
-                                        {tr("账号已删除")}: {id}
-                                      </label>
-                                    ))}
-                                  <a
-                                    href={
-                                      "#/settings/subscriptions/" +
-                                      node.upstream?.protocol
-                                    }
-                                  >
-                                    {tr("管理订阅账号")}
-                                  </a>
-                                </div>
-                              )}
-                            </>
-                          )}
-                          {!node.upstream?.subscriptionAccountIds && (
-                            <>
-                              <label>
-                                Base URL
-                                <input
-                                  aria-label={tr("上游地址")}
-                                  type="url"
-                                  value={node.upstream?.baseUrl ?? ""}
-                                  onChange={(e) =>
-                                    connection({ baseUrl: e.target.value })
-                                  }
-                                  placeholder="https://api.openai.com/v1"
-                                />
-                              </label>
-                              <label>
-                                {tr("密钥引用")}
-                                <input
-                                  aria-label={tr("上游密钥引用")}
-                                  value={node.upstream?.keyRef ?? ""}
-                                  onChange={(e) =>
-                                    connection({ keyRef: e.target.value })
-                                  }
-                                  placeholder="env:OPENAI_API_KEY"
-                                />
-                              </label>
-                            </>
-                          )}
-                        </>
-                      )}
-                      <UpstreamInterfaces
-                        protocol={
-                          personal
-                            ? channel.protocol
-                            : (node.upstream?.protocol ?? "openai-chat")
-                        }
-                        value={
-                          personal
-                            ? personalInterfaces
-                            : node.upstream?.interfaces
-                        }
-                        onChange={(interfaces) =>
-                          personal
-                            ? setPersonalInterfaces(interfaces)
-                            : connection({ interfaces })
-                        }
-                      />
-                      <label>
-                        {tr("上游模型（可选）")}
-                        <input
-                          value={node.model ?? ""}
-                          onChange={(e) => {
-                            const next = { ...node };
-                            if (e.target.value) next.model = e.target.value;
-                            else delete next.model;
-                            update({
-                              ...flow,
-                              nodes: flow.nodes.map((n) =>
-                                n.id === node.id ? next : n,
-                              ),
-                            });
-                          }}
-                          placeholder={tr("留空使用模型映射中的实际模型")}
-                        />
-                      </label>
-                      {node.upstream?.protocol === "codex" && (
-                        <>
-                          <label>
-                            {tr("Codex 授权模式")}
-                            <Select
-                              value={
-                                node.upstream.authMode ??
-                                (node.upstream.subscriptionAccountIds
-                                  ? "cli"
-                                  : "siwc")
-                              }
-                              onChange={(e) =>
-                                connection({ authMode: e.target.value })
-                              }
-                            >
-                              <option value="siwc">SIWC / Responses</option>
-                              <option value="cli">{tr("CLI 兼容")}</option>
-                            </Select>
-                          </label>
-                          {!node.upstream.subscriptionAccountIds && (
-                            <label>
-                              ChatGPT Account ID
-                              <input
-                                value={node.upstream.accountId ?? ""}
-                                onChange={(e) =>
-                                  connection({ accountId: e.target.value })
-                                }
-                              />
-                            </label>
-                          )}
-                        </>
-                      )}
-                      {node.upstream?.protocol === "antigravity" &&
-                        !node.upstream.subscriptionAccountIds && (
-                          <label>
-                            Project ID
-                            <input
-                              value={node.upstream.projectId ?? ""}
-                              onChange={(e) =>
-                                connection({ projectId: e.target.value })
-                              }
-                            />
-                          </label>
-                        )}
-                    </>
-                  )}
-                  {node.type === "routing" && (
-                    <label>
-                      {tr("自动路由策略")}
-                      <input
-                        list="routing-profiles"
-                        value={node.profile}
-                        onChange={(e) => change({ profile: e.target.value })}
-                      />
-                      <datalist id="routing-profiles">
-                        <option value="$model">
-                          {tr("使用模型映射中的策略 ID")}
-                        </option>
-                        {(loaded.data?.references?.routingProfiles ?? []).map(
-                          (id: string) => (
-                            <option key={id}>{id}</option>
+              add={(type, position) => add(type, position)}
+              undo={undo}
+              redo={redo}
+              canUndo={history.current.past.length > 0}
+              canRedo={history.current.future.length > 0}
+              renderSettings={(id) => {
+                const current = flow.nodes.find((n) => n.id === id);
+                return (
+                  current && (
+                    <ChannelNodeSettings
+                      node={current}
+                      context={{
+                        personal,
+                        channel,
+                        personalInterfaces,
+                        setPersonalInterfaces,
+                        subscriptionAccounts,
+                        targets,
+                        references: loaded.data?.references,
+                        onPanel: setPanel,
+                      }}
+                      change={(patch) =>
+                        update({
+                          ...flow,
+                          nodes: flow.nodes.map((n) =>
+                            n.id === id ? { ...n, ...patch } : n,
                           ),
-                        )}
-                      </datalist>
-                      <span className="muted">
-                        {tr("$model 使用模型映射中的实际模型 ID。")}
-                      </span>
-                      <button
-                        className="secondary"
-                        onClick={() => setPanel("routing")}
-                      >
-                        {tr("编辑路由策略")}
-                      </button>
-                    </label>
-                  )}
-                  {node.type === "upstream" && (
-                    <>
-                      <label>
-                        {tr("目标公开模型")}
-                        <input
-                          list="workflow-models"
-                          value={node.target}
-                          onChange={(e) => change({ target: e.target.value })}
-                        />
-                      </label>
-                      <datalist id="workflow-models">
-                        {targets.map((t) => (
-                          <option key={t} value={t} />
-                        ))}
-                      </datalist>
-                      <label>
-                        {tr("模型重定向")}
-                        <Select
-                          value={node.mode}
-                          onChange={(e) => change({ mode: e.target.value })}
-                        >
-                          <option value="implicit">
-                            {tr("隐式 · 保持请求模型名")}
-                          </option>
-                          <option value="explicit">
-                            {tr("显式 · 显示目标模型名")}
-                          </option>
-                        </Select>
-                      </label>
-                    </>
-                  )}
-                  {node.type !== "start" && (
-                    <button
-                      className="secondary"
-                      onClick={() => removeNode(selected)}
-                    >
-                      {tr("删除节点")}
-                    </button>
-                  )}
-                </>
-              )}
-            </section>
+                        })
+                      }
+                    />
+                  )
+                );
+              }}
+            />
           </div>
-          <section className="panel">
-            <h2>{tr("路径预览")}</h2>
+          <details className="workflow-preview-panel">
+            <summary>{tr("路径预览")}</summary>
 
             <div className="workflow-tools">
               <input
@@ -1113,12 +530,7 @@ export function ChannelGraphEditor({
               </label>
               <button
                 className="secondary"
-                disabled={
-                  busy ||
-                  (!personal && !!router?.upstreams?.[channelId]?.protocol) ||
-                  JSON.stringify(flow) !==
-                    JSON.stringify(channel?.flow ?? defaultChannelFlow())
-                }
+                disabled={busy || !flow}
                 onClick={() => void inspect()}
               >
                 {tr("预览路径")}
@@ -1182,7 +594,7 @@ export function ChannelGraphEditor({
                 </details>
               </>
             )}
-          </section>
+          </details>
         </>
       )}
     </section>

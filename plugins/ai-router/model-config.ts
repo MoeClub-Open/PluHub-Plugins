@@ -28,6 +28,7 @@ export function discoveredModelRoute(
   return {
     upstream: channelId,
     model: model.id,
+    publicModel: model.id,
     ...(model.name && model.name !== model.id ? { name: model.name } : {}),
     ...(model.contextLength ? { contextWindow: model.contextLength } : {}),
     enabled: false,
