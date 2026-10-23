@@ -5,13 +5,13 @@
   "name": "易支付",
   "description": "对接易支付 V1/V2、MD5/RSA 签名。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": ["payments.epay@1"],
+  "provides": ["payments.provider@1"],
   "requires": ["commerce.payment@1", "http.transport@1"],
   "optionalRequires": ["auth.admin@1"],
   "permissions": ["api.register", "secrets.read"],

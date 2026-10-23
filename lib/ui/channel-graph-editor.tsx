@@ -11,17 +11,13 @@ import type { UIHost } from "@pluhub/ui-sdk";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
 import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
 import { useLoad, Notice } from "./mount.js";
-import { syncChannelSecrets } from "../ai/channel-list.js";
 import type { ChannelPanel } from "./channel-location.js";
 import {
   ChannelFlowCanvas,
   workflowNodeLabels as labels,
   workflowNodePositions,
 } from "./channel-flow-canvas.js";
-import {
-  defaultChannelFlow,
-  migrateLegacyChannels,
-} from "../ai/channel-config.js";
+import { defaultChannelFlow } from "../ai/channel-config.js";
 const ingressOptions: { value: Protocol; label: string }[] = [
   { value: "openai-chat", label: "OpenAI Chat Completions" },
   { value: "openai-responses", label: "OpenAI Responses" },
@@ -34,10 +30,6 @@ const subscriptionProtocols = new Set([
   "antigravity",
   "grok",
 ]);
-const routerConfig = (config: any) =>
-  config.plugins.find((p: any) =>
-    /\/(?:official\.)?ai-router$/.test(p.path.replaceAll("\\", "/")),
-  )?.config;
 export function ChannelGraphEditor({
   host,
   channelId,
@@ -59,7 +51,7 @@ export function ChannelGraphEditor({
     host.request(
       personal
         ? "/api/plugins/official.byok/personal-channels"
-        : "/api/host/config",
+        : "/api/plugins/official.ai-router/configuration",
     ),
   );
   const [channelName, setChannelName] = React.useState("");
@@ -84,31 +76,12 @@ export function ChannelGraphEditor({
   const [streamTask, setStreamTask] = React.useState(false);
   const [ingressProtocol, setIngressProtocol] =
     React.useState<Protocol>("openai-chat");
-  const normalized = React.useMemo(() => {
+  const router = React.useMemo(() => {
     if (!loaded.data) return undefined;
-    if (personal) {
-      const own = loaded.data.find((c: any) => c.id === channelId);
-      return {
-        plugins: [
-          {
-            path: "/ai-router",
-            config: {
-              upstreams: { [channelId]: own },
-              models: own?.models ?? {},
-            },
-          },
-        ],
-      };
-    }
-    const config = structuredClone(loaded.data);
-    try {
-      migrateLegacyChannels(config);
-      return config;
-    } catch (error) {
-      return { error: (error as Error).message };
-    }
-  }, [loaded.data]);
-  const router = normalized?.plugins ? routerConfig(normalized) : undefined;
+    if (!personal) return loaded.data.config;
+    const own = loaded.data.find((c: any) => c.id === channelId);
+    return { upstreams: { [channelId]: own }, models: own?.models ?? {} };
+  }, [loaded.data, personal, channelId]);
   const channel = router?.upstreams?.[channelId];
   const targets = [
     ...Object.keys(router?.models ?? {}),
@@ -201,13 +174,7 @@ export function ChannelGraphEditor({
         : type === "routing"
           ? {
               profile:
-                Object.keys(
-                  normalized?.plugins?.find((p: any) =>
-                    /\/(?:official\.)?auto-router$/.test(
-                      p.path.replaceAll("\\", "/"),
-                    ),
-                  )?.config?.profiles ?? {},
-                )[0] ?? "$model",
+                (loaded.data?.references?.routingProfiles ?? [])[0] ?? "$model",
             }
           : type === "protocol"
             ? {
@@ -337,28 +304,15 @@ export function ChannelGraphEditor({
         saved();
         return true;
       }
-      const config: any = await host.request("/api/host/config");
-      migrateLegacyChannels(config);
-      const current = routerConfig(config)?.upstreams?.[channelId];
+      const next = structuredClone(router);
+      const current = next?.upstreams?.[channelId];
       if (!current) throw new Error(tr("渠道已被删除，请刷新。"));
-      if (
-        JSON.stringify(current.flow ?? defaultChannelFlow()) !==
-        JSON.stringify(channel.flow ?? defaultChannelFlow())
-      )
-        throw new Error(tr("渠道流程已被其他操作修改，请关闭并重新打开。"));
-      const previous = structuredClone(routerConfig(config).upstreams);
       current.flow = flow;
       current.name = channelName;
       current.enabled = enabled;
-      syncChannelSecrets(
-        config.plugins,
-        previous,
-        routerConfig(config).upstreams,
-        protocols,
-      );
-      await host.request("/api/host/config", {
+      await host.request("/api/plugins/official.ai-router/configuration", {
         method: "PUT",
-        body: JSON.stringify(config),
+        body: JSON.stringify({ config: next, revision: loaded.data.revision }),
       });
       setMessage(tr("已保存"));
       loaded.reload();
@@ -453,7 +407,7 @@ export function ChannelGraphEditor({
           </button>
         </div>
       </div>
-      <Notice message={message || loaded.error || normalized?.error} />
+      <Notice message={message || loaded.error || ""} />
       {!personal && panel && (
         <Dialog
           title={panel === "limits" ? tr("全局限制") : tr("路由策略")}
@@ -732,13 +686,11 @@ export function ChannelGraphEditor({
                           <option>o200k_base</option>
                           <option>cl100k_base</option>
                           {!personal &&
-                            Object.keys(
-                              normalized?.plugins?.find((p: any) =>
-                                /\/(?:official\.)?token-speed$/.test(
-                                  p.path.replaceAll("\\", "/"),
-                                ),
-                              )?.config?.tokenizers ?? {},
-                            ).map((name) => <option key={name}>{name}</option>)}
+                            (loaded.data?.references?.tokenizers ?? []).map(
+                              (name: string) => (
+                                <option key={name}>{name}</option>
+                              ),
+                            )}
                         </Select>
                       </label>
                       {!personal && (
@@ -1061,15 +1013,11 @@ export function ChannelGraphEditor({
                         <option value="$model">
                           {tr("使用模型映射中的策略 ID")}
                         </option>
-                        {Object.keys(
-                          normalized?.plugins?.find((p: any) =>
-                            /\/(?:official\.)?auto-router$/.test(
-                              p.path.replaceAll("\\", "/"),
-                            ),
-                          )?.config?.profiles ?? {},
-                        ).map((id) => (
-                          <option key={id}>{id}</option>
-                        ))}
+                        {(loaded.data?.references?.routingProfiles ?? []).map(
+                          (id: string) => (
+                            <option key={id}>{id}</option>
+                          ),
+                        )}
                       </datalist>
                       <span className="muted">
                         {tr("$model 使用模型映射中的实际模型 ID。")}
@@ -1167,9 +1115,7 @@ export function ChannelGraphEditor({
                 className="secondary"
                 disabled={
                   busy ||
-                  (!personal &&
-                    !!routerConfig(normalized)?.upstreams?.[channelId]
-                      ?.protocol) ||
+                  (!personal && !!router?.upstreams?.[channelId]?.protocol) ||
                   JSON.stringify(flow) !==
                     JSON.stringify(channel?.flow ?? defaultChannelFlow())
                 }

@@ -12,18 +12,33 @@ export interface CheckoutMethod {
   id?: string;
   name: string;
   type?: string;
+  currencies: PaymentProviderStatus["currencies"];
+  modes: PaymentProviderStatus["modes"];
+  renewal: PaymentProviderStatus["renewal"];
 }
 export function checkoutMethods(
   provider: string,
   status: PaymentProviderStatus,
 ): CheckoutMethod[] {
   if (!status.enabled) return [];
-  return status.methods
-    ? status.methods.map((method) => ({ ...method, provider }))
-    : [{ provider, name: provider }];
+  return status.methods.map((method) => ({
+    ...method,
+    provider,
+    currencies: status.currencies,
+    modes: status.modes,
+    renewal: status.renewal,
+  }));
 }
 export const checkoutMethodKey = (method: CheckoutMethod) =>
   JSON.stringify([method.provider, method.id ?? null]);
-export function supportsCheckout(provider: string, currency: string) {
-  return provider === "stripe" || (provider === "epay" && currency === "cny");
+export function supportsCheckout(
+  status: Pick<PaymentProviderStatus, "currencies" | "modes"> | undefined,
+  currency: string,
+  mode: "payment" | "subscription",
+) {
+  return (
+    !!status &&
+    status.modes.includes(mode) &&
+    (status.currencies === "*" || status.currencies.includes(currency))
+  );
 }

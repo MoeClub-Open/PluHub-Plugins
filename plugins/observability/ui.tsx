@@ -31,6 +31,21 @@ const names: Record<string, string> = {
     return tr("已取消");
   },
 };
+const billingStatus = (status: string) =>
+  tr(
+    (
+      {
+        settled: "已扣费",
+        review: "待核账",
+        reserved: "预留中",
+        released: "已释放",
+        personal: "个人渠道",
+        disabled: "未启用计费",
+        unavailable: "计费记录不可用",
+        unknown: "无结算记录",
+      } as Record<string, string>
+    )[status] ?? "无结算记录",
+  );
 function localDate(value: string) {
   const date = new Date(Number(value));
   return Number.isFinite(date.getTime())
@@ -468,7 +483,7 @@ function Page({ host }: { host: UIHost }) {
                 <th>{tr("状态")}</th>
                 <th>{tr("耗时 / 首 Token")}</th>
                 <th>Token</th>
-                <th>{tr("估算成本")}</th>
+                <th>{tr("实际扣费")}</th>
                 <th>{tr("详情")}</th>
               </tr>
             </thead>
@@ -518,10 +533,11 @@ function Page({ host }: { host: UIHost }) {
                   </td>
                   <td>
                     {money(
-                      r.cost_micro_usd == null
+                      r.charged_micro_usd == null
                         ? null
-                        : r.cost_micro_usd / 1000000,
+                        : r.charged_micro_usd / 1000000,
                     )}
+                    <small>{billingStatus(r.billing_status)}</small>
                   </td>
                   <td>
                     <button
@@ -585,6 +601,17 @@ function Page({ host }: { host: UIHost }) {
                   ? null
                   : selected.cost_micro_usd / 1000000,
               ),
+              "实际扣费 (USD)": money(
+                selected.charged_micro_usd == null
+                  ? null
+                  : selected.charged_micro_usd / 1000000,
+              ),
+              "预留金额 (USD)": money(
+                selected.held_micro_usd == null
+                  ? null
+                  : selected.held_micro_usd / 1000000,
+              ),
+              计费状态: billingStatus(selected.billing_status),
               错误代码: selected.error_code || "—",
             }).map(([k, v]) => (
               <div key={k}>
@@ -593,6 +620,12 @@ function Page({ host }: { host: UIHost }) {
               </div>
             ))}
           </dl>
+          {selected.billing_receipt && (
+            <PriceReceiptView
+              value={selected.billing_receipt}
+              title={tr("实际扣费明细")}
+            />
+          )}
           <PriceReceiptView
             value={estimateReceipt(selected)}
             title={tr("费用估算明细")}

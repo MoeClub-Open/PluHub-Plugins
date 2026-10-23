@@ -1,3 +1,4 @@
+import { attachCharges } from "./charges.js";
 import { join } from "node:path";
 import { definePlugin, HostError, json } from "@pluhub/sdk";
 import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
@@ -26,6 +27,7 @@ export default definePlugin({
       "ALTER TABLE requests ADD COLUMN usage_json TEXT; ALTER TABLE requests ADD COLUMN pricing_json TEXT;",
       "ALTER TABLE requests ADD COLUMN generation_ms INTEGER; CREATE INDEX requests_model_upstream_time ON requests(model,upstream,created_at);",
       retirePricingFactors("requests", "pricing_json"),
+      "ALTER TABLE requests ADD COLUMN billing_mode TEXT;",
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -230,7 +232,7 @@ export default definePlugin({
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -254,6 +256,7 @@ export default definePlugin({
               usageDetails,
               prices,
               state.generationMs ?? null,
+              (ctx.state.get("billing.mode") as string | undefined) ?? null,
             );
             recordRanking(db, {
               at: state.startedAt,
@@ -409,13 +412,16 @@ export default definePlugin({
           "input_tokens",
           "output_tokens",
           "estimated_cost_micro_usd",
+          "charged_micro_usd",
+          "held_micro_usd",
+          "billing_status",
           "stream",
           "error_code",
         ];
         return csvResponse(
           "pluhub-requests.csv",
           columns,
-          rows.map((row) =>
+          (await attachCharges(host, rows, ctx.signal)).map((row) =>
             columns.map(
               (key) =>
                 row[
@@ -455,7 +461,16 @@ export default definePlugin({
               " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
           )
           .all(...f.params, limit, offset);
-        return json({ data: rows, total, limit, offset });
+        return json({
+          data: await attachCharges(
+            host,
+            rows as Record<string, any>[],
+            ctx.signal,
+          ),
+          total,
+          limit,
+          offset,
+        });
       },
     });
     host.api({

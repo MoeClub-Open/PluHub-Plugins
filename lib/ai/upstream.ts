@@ -1,10 +1,5 @@
 import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
-import type {
-  Protocol,
-  AIRequest,
-  Upstream,
-  AIResult,
-} from "@pluhub/contracts/ai";
+import type { Protocol, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { encodeRequest, decodeResult, resultEvents } from "./protocols.js";
 import { discoverApiModels } from "./model-directory.js";
 import { upstreamEvents } from "./streams.js";
@@ -47,13 +42,7 @@ export function createUpstream(protocol: Protocol) {
                 )
               ).secret
             : host.secret(requiredString(upstream.keyRef, "upstream keyRef"));
-          const body = host.hasCapability("ai.converter@1")
-            ? await host.call(
-                "ai.converter@1",
-                { action: "encode", protocol, input: request },
-                signal,
-              )
-            : encodeRequest(protocol, request);
+          const body = encodeRequest(protocol, request);
           const url = upstreamUrl(
             requiredString(upstream.baseUrl, "upstream URL", 2048),
             requestPath(protocol, upstream.http, request.stream),
@@ -106,13 +95,7 @@ export function createUpstream(protocol: Protocol) {
             request.stream &&
             response.headers.get("content-type")?.includes("text/event-stream")
           )
-            return host.hasCapability("ai.converter@1")
-              ? host.call(
-                  "ai.converter@1",
-                  { action: "decodeStream", protocol, input: response.body },
-                  signal,
-                )
-              : upstreamEvents(protocol, response.body);
+            return upstreamEvents(protocol, response.body);
           const reader = response.body.getReader();
           const chunks: Uint8Array[] = [];
           let size = 0;
@@ -148,18 +131,7 @@ export function createUpstream(protocol: Protocol) {
             (field) =>
               Number.isSafeInteger(rawUsage?.[field]) && rawUsage[field] >= 0,
           );
-          const decoded = host.hasCapability("ai.converter@1")
-            ? await host.call<AIResult>(
-                "ai.converter@1",
-                {
-                  action: "decodeResult",
-                  protocol,
-                  input: data,
-                  model: request.model,
-                },
-                signal,
-              )
-            : decodeResult(protocol, data, request.model);
+          const decoded = decodeResult(protocol, data, request.model);
           const events = resultEvents(decoded);
           return (async function* () {
             for await (const event of events)

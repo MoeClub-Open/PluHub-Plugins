@@ -1,3 +1,5 @@
+import { modelDefinition } from "../../lib/ai/model-definition.js";
+import { installConfiguration } from "./configuration.js";
 import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
 import {
   definePlugin,
@@ -38,10 +40,9 @@ import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
-import { validateOperations } from "../../lib/ai/media.js";
-export { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 export default definePlugin({
   setup(host) {
+    installConfiguration(host);
     const getCatalog = (input?: CatalogScope) => readCatalog(host, input);
     host.provide("ai.catalog@2", getCatalog);
     async function channels(input?: { userId?: string }) {
@@ -261,10 +262,7 @@ export default definePlugin({
           node?.type === "provider" && node.upstream ? node.upstream : channel;
         if (node?.type === "provider" && node.model) providerModel = node.model;
       }
-      if (
-        !upstream.protocol ||
-        ["auto-router", "workflow"].includes(upstream.protocol)
-      )
+      if (!upstream.protocol || upstream.protocol === "auto-router")
         throw new HostError(
           "routing_cycle",
           "Automatic router candidates must resolve to provider nodes",
@@ -404,7 +402,7 @@ export default definePlugin({
     host.validateConfig((config) => {
       for (const model of Object.values(config.models ?? {}) as ModelRoute[]) {
         routePricing(model);
-        validateOperations(model.operations);
+        modelDefinition(model);
       }
       const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
       for (const upstream of Object.values(upstreams)) {
@@ -460,14 +458,6 @@ export default definePlugin({
             throw new HostError(
               "invalid_config",
               "Channel needs a provider or a graph",
-            );
-          continue;
-        }
-        if (upstream.protocol === "workflow") {
-          if (!host.hasCapability("ai.workflow@1"))
-            throw new HostError(
-              "invalid_config",
-              "Channel workflow plugin is not installed",
             );
           continue;
         }
@@ -679,8 +669,7 @@ export default definePlugin({
           throw new HostError("not_found", "Channel not found", 404);
         if (
           !publicModel &&
-          (!upstream.protocol ||
-            ["auto-router", "workflow"].includes(upstream.protocol))
+          (!upstream.protocol || upstream.protocol === "auto-router")
         )
           throw new HostError(
             "unsupported_operation",

@@ -10,31 +10,10 @@ import { ModelEditor } from "./model-editor.js";
 import { availableModelId, discoveredModelRoute } from "./model-config.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { channelEditorTarget } from "../../lib/ui/channel-location.js";
-import {
-  defaultChannelFlow,
-  migrateLegacyChannels,
-} from "../../lib/ai/channel-config.js";
-import {
-  setChannelState,
-  syncChannelSecrets,
-} from "../../lib/ai/channel-list.js";
+import { defaultChannelFlow } from "../../lib/ai/channel-config.js";
+import { setChannelState } from "../../lib/ai/channel-list.js";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, Icon, Empty, Dialog } from "../../lib/ui/components.js";
-const protocols = [
-  "openai-chat",
-  "openai-responses",
-  "anthropic",
-  "gemini",
-  "codex",
-  "claude-subscription",
-  "antigravity",
-  "grok",
-  "auto-router",
-];
-const routerIndex = (config: any) =>
-  config.plugins.findIndex((p: any) =>
-    /\/(?:official\.)?ai-router$/.test(p.path.replace(/\\/g, "/")),
-  );
 type Router = {
   upstreams: Record<string, Upstream>;
   models: Record<string, ModelRoute>;
@@ -42,7 +21,9 @@ type Router = {
   nextChannelId?: string;
 };
 function Page({ host }: { host: UIHost }) {
-  const loaded = useLoad<any>(() => host.request("/api/host/config"));
+  const loaded = useLoad<any>(() =>
+    host.request("/api/plugins/official.ai-router/configuration"),
+  );
   const [page, setPage] = React.useState(location.hash);
   const requestedTab = new URLSearchParams(page.split("?")[1]).get("tab");
   const [tab, setTab] = React.useState(
@@ -75,21 +56,7 @@ function Page({ host }: { host: UIHost }) {
     suggestedId: string;
     model: ModelRoute;
   }>();
-  const normalized = React.useMemo(() => {
-    if (!loaded.data) return undefined;
-    const copy = structuredClone(loaded.data);
-    try {
-      migrateLegacyChannels(copy);
-    } catch {
-      /* Preserve legacy settings for repair. */
-    }
-    return copy;
-  }, [loaded.data]);
-  const index = normalized ? routerIndex(normalized) : -1;
-  const router: Router =
-    index >= 0
-      ? normalized.plugins[index].config
-      : { upstreams: {}, models: {} };
+  const router: Router = loaded.data?.config ?? { upstreams: {}, models: {} };
   const upstreams = router.upstreams ?? {};
   const models = router.models ?? {};
   const filteredModels = Object.entries(models).filter(
@@ -111,19 +78,14 @@ function Page({ host }: { host: UIHost }) {
     setBusy(true);
     setMessage("");
     try {
-      const config: any = await host.request("/api/host/config");
-      migrateLegacyChannels(config);
-      const i = routerIndex(config);
-      if (i < 0) throw new Error(tr("渠道插件配置不存在"));
-      const next = config.plugins[i].config;
+      if (!loaded.data) throw new Error(tr("渠道插件配置不存在"));
+      const next: Router = structuredClone(router);
       next.upstreams ??= {};
       next.models ??= {};
-      const previous = structuredClone(next.upstreams);
       update(next);
-      syncChannelSecrets(config.plugins, previous, next.upstreams, protocols);
-      await host.request("/api/host/config", {
+      await host.request("/api/plugins/official.ai-router/configuration", {
         method: "PUT",
-        body: JSON.stringify(config),
+        body: JSON.stringify({ config: next, revision: loaded.data.revision }),
       });
       setMessage(tr("已保存"));
       setDialog(undefined);

@@ -1,3 +1,4 @@
+import { installRequestCharges } from "./request-charges.js";
 import { join } from "node:path";
 import {
   definePlugin,
@@ -96,6 +97,7 @@ export default definePlugin({
     }
     installBillingAdmin(host, db, wallet);
     installBillingHistory(host, db);
+    installRequestCharges(host, db);
     installPriceQuote(host);
     host.validateConfig(validateOutputBudget);
     function post(userId: string, amount: number, source: string) {
@@ -139,10 +141,18 @@ export default definePlugin({
       id: "reserve",
       phase: "Admission",
       handle(ctx) {
-        if (!host.config().enabled) return;
         const request = ctx.state.get("ai.request") as AIRequest | undefined;
         const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
-        if (!request || !plan || plan.credentialId) return;
+        if (!request || !plan) return;
+        ctx.state.set(
+          "billing.mode",
+          plan.credentialId
+            ? "personal"
+            : host.config().enabled
+              ? "platform"
+              : "disabled",
+        );
+        if (!host.config().enabled || plan.credentialId) return;
         if (!plan.pricing)
           throw new HostError(
             "price_unavailable",

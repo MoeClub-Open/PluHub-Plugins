@@ -2,7 +2,6 @@ import { t as tr } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
-import { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 function Page({ host }: { host: UIHost }) {
   const data = useLoad<any>(() =>
     host.request("/api/plugins/official.rate-limit/status"),
@@ -15,7 +14,6 @@ function Page({ host }: { host: UIHost }) {
     const f = new FormData(e.currentTarget);
     try {
       const config = await host.request<any>("/api/host/config");
-      migrateLegacyChannels(config);
       const plugin = config.plugins.find((p: any) =>
         /\/(?:official\.)?rate-limit$/.test(p.path.replaceAll("\\", "/")),
       );

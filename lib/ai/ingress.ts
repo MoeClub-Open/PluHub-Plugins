@@ -52,13 +52,7 @@ export function createIngress(protocol: Protocol) {
             stream = match[2] === "streamGenerateContent";
           }
           const input = await readObject(request, 16 * 1024 * 1024);
-          const decoded = host.hasCapability("ai.converter@1")
-            ? await host.call<AIRequest>(
-                "ai.converter@1",
-                { action: "decode", protocol, input, model },
-                ctx.signal,
-              )
-            : decode(protocol, input, model);
+          const decoded = decode(protocol, input, model);
           if (protocol === "gemini") decoded.stream = stream;
           decoded.sessionId = clientSession(
             request,
@@ -145,13 +139,7 @@ export function createIngress(protocol: Protocol) {
               observeEvents(events, ctx),
               responseModel,
             );
-            const result = host.hasCapability("ai.converter@1")
-              ? await host.call<Record<string, any>>(
-                  "ai.converter@1",
-                  { action: "encodeResult", protocol, input: collected },
-                  ctx.signal,
-                )
-              : encodeResult(protocol, collected);
+            const result = encodeResult(protocol, collected);
             if (!observation(ctx)?.usage) {
               delete result.usage;
               delete result.usageMetadata;
@@ -171,25 +159,13 @@ export function createIngress(protocol: Protocol) {
             },
             onCancel: (reason: unknown) => execution.abort(reason),
           };
-          const body = host.hasCapability("ai.converter@1")
-            ? await host.call<ReadableStream<Uint8Array>>(
-                "ai.converter@1",
-                {
-                  action: "encodeStream",
-                  protocol,
-                  input: observed,
-                  model: responseModel,
-                  streamOptions,
-                },
-                ctx.signal,
-              )
-            : encodeStream(
-                protocol,
-                observed,
-                responseModel,
-                ctx.signal,
-                streamOptions,
-              );
+          const body = encodeStream(
+            protocol,
+            observed,
+            responseModel,
+            ctx.signal,
+            streamOptions,
+          );
           return new Response(body, {
             headers: {
               "content-type": "text/event-stream; charset=utf-8",

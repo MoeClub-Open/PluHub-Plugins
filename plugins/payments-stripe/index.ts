@@ -66,7 +66,7 @@ export default definePlugin({
     const adjustments = installStripeAdjustments(host, api);
     const customers = stripeCustomers(host, api);
     host.provide(
-      "payments.stripe@1",
+      "payments.provider@1",
       async (
         input: PaymentCheckout & {
           action: string;
@@ -80,6 +80,14 @@ export default definePlugin({
       ) => {
         if (input.action === "status")
           return {
+            id: "stripe",
+            name: "Stripe",
+            methods: [{ name: "Stripe" }],
+            currencies: "*",
+            modes: ["payment", "subscription"],
+            renewal: "automatic",
+            cancelSubscription: true,
+            recheckAdjustments: true,
             enabled: host.config().enabled === true,
             customerPortal: host.config().portalEnabled === true,
           };

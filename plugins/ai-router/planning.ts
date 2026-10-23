@@ -1,3 +1,4 @@
+import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
 import { HostError, type Host } from "@pluhub/sdk";
 import type {
@@ -8,7 +9,6 @@ import type {
   Upstream,
   PersonalChannel,
 } from "@pluhub/contracts/ai";
-import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { providerSession } from "../../lib/ai/session.js";
@@ -147,23 +147,19 @@ export async function planRoute(
     providerNodeId = undefined;
     let providerModel = route.model;
     let profile = upstream.protocol === "auto-router" ? route.model : undefined;
-    if (upstream.flow || upstream.protocol === "workflow") {
+    if (upstream.flow) {
       if (!prepared)
         throw new HostError(
           "task_required",
           "Channel workflows require a decoded task",
         );
-      const result = upstream.flow
-        ? runWorkflow(route.upstream, upstream.flow, prepared, signal, input)
-        : await host.call<WorkflowResult>(
-            "ai.workflow@1",
-            {
-              profile: route.model,
-              request: prepared,
-              ingressProtocol: input.ingressProtocol,
-            },
-            signal,
-          );
+      const result = runWorkflow(
+        route.upstream,
+        upstream.flow,
+        prepared,
+        signal,
+        input,
+      );
       workflows.push(result.trace);
       requestLimits.push(...(result.requestLimits ?? []));
       outputPolicies.push(
@@ -203,10 +199,7 @@ export async function planRoute(
         continue;
       }
     }
-    if (
-      !profile &&
-      (!connection.protocol || connection.protocol === "workflow")
-    )
+    if (!profile && !connection.protocol)
       throw new HostError(
         "invalid_route",
         "Channel graph has no provider",

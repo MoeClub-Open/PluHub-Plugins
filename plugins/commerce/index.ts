@@ -1,3 +1,4 @@
+import { paymentProviders } from "./providers.js";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import {
@@ -11,7 +12,6 @@ import type {
   Product,
   PaymentCheckout,
   PaymentEvent,
-  PaymentProviderStatus,
 } from "@pluhub/contracts/commerce";
 import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
 import { integer } from "../../lib/commerce/money.js";
@@ -21,7 +21,6 @@ import { nextPeriod } from "./period.js";
 import {
   supportsCheckout,
   checkoutMethods,
-  type CheckoutMethod,
 } from "../../lib/commerce/checkout.js";
 import { installOrderHistory } from "./history.js";
 import {
@@ -30,6 +29,7 @@ import {
 } from "./adjustments.js";
 export default definePlugin({
   async setup(host) {
+    const providers = paymentProviders(host);
     const db = openDatabase(join(host.dataDir, "commerce.sqlite"), [
       `
     CREATE TABLE orders(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,provider TEXT NOT NULL,product TEXT NOT NULL,status TEXT NOT NULL,created_at INTEGER NOT NULL,checkout_url TEXT);
@@ -41,6 +41,7 @@ export default definePlugin({
       adjustmentMigration,
       "ALTER TABLE orders ADD COLUMN payment_method TEXT; ALTER TABLE orders ADD COLUMN payment_method_name TEXT;",
       "ALTER TABLE subscriptions ADD COLUMN observed_at INTEGER NOT NULL DEFAULT 0;",
+      "ALTER TABLE orders ADD COLUMN renewal TEXT NOT NULL DEFAULT 'manual'; UPDATE orders SET renewal='automatic' WHERE provider='stripe';",
     ]);
     host.cleanup(() => db.close());
     const products = () => (host.config().products ?? []) as Product[];
@@ -148,7 +149,8 @@ export default definePlugin({
         requiredString(e[field], field, 512);
       integer(e.amount);
       if (
-        !["stripe", "epay"].includes(e.provider) ||
+        typeof e.provider !== "string" ||
+        !e.provider ||
         typeof e.currency !== "string" ||
         ![
           "paid",
@@ -181,13 +183,13 @@ export default definePlugin({
           return;
         }
         if (
-          e.provider === "epay" &&
+          order.renewal === "manual" &&
           p.mode === "subscription" &&
           e.kind === "paid"
         ) {
           e = {
             ...e,
-            subscriptionId: "epay-prepaid:" + order.id,
+            subscriptionId: "prepaid:" + order.id,
             periodEnd: nextPeriod(Date.now(), p.interval!),
           };
         }
@@ -295,7 +297,8 @@ export default definePlugin({
       const existing = cancelling.get(sub.id);
       if (existing) return existing;
       const work = (async () => {
-        if (sub.provider !== "stripe")
+        const provider = await providers.get(sub.provider, signal);
+        if (!provider.cancelSubscription)
           throw new HostError(
             "manual_renewal",
             "Prepaid plan has no automatic renewal to cancel",
@@ -307,8 +310,8 @@ export default definePlugin({
             "This subscription cannot be cancelled in its current state",
             409,
           );
-        await host.call(
-          "payments.stripe@1",
+        await providers.call(
+          sub.provider,
           { action: "cancel", subscriptionId: sub.id },
           signal,
         );
@@ -325,7 +328,7 @@ export default definePlugin({
       method: "POST",
       path: "/customer-portal",
       access: "authenticated",
-      handle: async (_request, ctx) => {
+      handle: async (request, ctx) => {
         if (!ctx.principal?.session)
           throw new HostError(
             "session_required",
@@ -337,14 +340,24 @@ export default definePlugin({
             /\/$/,
             "",
           ) + "/#/commerce";
+        const body = await readObject(request);
+        const provider = await providers.get(
+          requiredString(body.provider, "provider"),
+          ctx.signal,
+        );
+        if (!provider.customerPortal)
+          throw new HostError(
+            "unsupported_operation",
+            "Customer portal is unavailable",
+          );
         const subscriptions = db
           .prepare(
-            "SELECT s.id,s.order_id AS orderId FROM subscriptions s JOIN orders o ON o.id=s.order_id WHERE o.user_id=? AND o.provider='stripe' ORDER BY s.period_end DESC LIMIT 10",
+            "SELECT s.id,s.order_id AS orderId FROM subscriptions s JOIN orders o ON o.id=s.order_id WHERE o.user_id=? AND o.provider=? ORDER BY s.period_end DESC LIMIT 10",
           )
-          .all(ctx.principal.id);
+          .all(ctx.principal.id, provider.id);
         return json(
-          await host.call(
-            "payments.stripe@1",
+          await providers.call(
+            provider.id,
             {
               action: "portal",
               userId: ctx.principal.id,
@@ -362,28 +375,19 @@ export default definePlugin({
       path: "/catalog",
       access: "authenticated",
       handle: async () => {
-        const paymentMethods: CheckoutMethod[] = [];
-        for (const p of ["stripe", "epay"])
-          if (host.hasCapability("payments." + p + "@1"))
-            paymentMethods.push(
-              ...checkoutMethods(
-                p,
-                await host.call<PaymentProviderStatus>("payments." + p + "@1", {
-                  action: "status",
-                }),
-              ),
-            );
+        const available = await providers.list();
+        const paymentMethods = available.flatMap((provider) =>
+          checkoutMethods(provider.id, provider),
+        );
         return json({
           products: products(),
-          providers: [...new Set(paymentMethods.map((m) => m.provider))],
           paymentMethods,
-          customerPortal:
-            host.hasCapability("payments.stripe@1") &&
-            (
-              await host.call<PaymentProviderStatus>("payments.stripe@1", {
-                action: "status",
-              })
-            ).customerPortal === true,
+          providers: available.map(
+            ({ pluginId: _pluginId, ...status }) => status,
+          ),
+          customerPortals: available
+            .filter((provider) => provider.customerPortal)
+            .map((provider) => ({ id: provider.id, name: provider.name })),
         });
       },
     });
@@ -409,7 +413,7 @@ export default definePlugin({
         json(
           db
             .prepare(
-              "SELECT s.*,o.product,o.provider FROM subscriptions s JOIN orders o ON o.id=s.order_id WHERE o.user_id=?",
+              "SELECT s.*,o.product,o.provider,o.renewal FROM subscriptions s JOIN orders o ON o.id=s.order_id WHERE o.user_id=?",
             )
             .all(ctx.principal!.id)
             .map((r: any) => ({ ...r, product: JSON.parse(r.product) })),
@@ -430,17 +434,8 @@ export default definePlugin({
         let product = products().find((p) => p.id === b.productId);
         if (!product)
           throw new HostError("not_found", "Product not found", 404);
-        if (!["stripe", "epay"].includes(b.provider))
-          throw new HostError("invalid_request", "Unknown payment provider");
-        if (!host.hasCapability("payments." + b.provider + "@1"))
-          throw new HostError(
-            "payment_unavailable",
-            "This payment method is unavailable",
-            409,
-          );
-        const status = await host.call<PaymentProviderStatus>(
-          "payments." + b.provider + "@1",
-          { action: "status" },
+        const status = await providers.get(
+          requiredString(b.provider, "provider"),
           ctx.signal,
         );
         const methods = checkoutMethods(b.provider, status);
@@ -456,7 +451,7 @@ export default definePlugin({
             "This payment method is unavailable",
             409,
           );
-        if (!supportsCheckout(b.provider, product.currency))
+        if (!supportsCheckout(status, product.currency, product.mode))
           throw new HostError(
             "unsupported_currency",
             "This payment method does not support the product currency",
@@ -497,7 +492,7 @@ export default definePlugin({
         if (prior) product = JSON.parse(prior.product);
         else
           db.prepare(
-            "INSERT INTO orders(id,user_id,provider,product,status,created_at,checkout_url,request_key,payment_method,payment_method_name) VALUES(?,?,?,?,'pending',?,NULL,?,?,?)",
+            "INSERT INTO orders(id,user_id,provider,product,status,created_at,checkout_url,request_key,payment_method,payment_method_name,renewal) VALUES(?,?,?,?,'pending',?,NULL,?,?,?,?)",
           ).run(
             id,
             ctx.principal.id,
@@ -507,13 +502,14 @@ export default definePlugin({
             nonce,
             method.id ?? null,
             method.name,
+            status.renewal,
           );
         const existing = checkouts.get(id);
         if (existing) return json(await existing);
         const work = (async () => {
           try {
-            const result = await host.call<{ url: string }>(
-              "payments." + b.provider + "@1",
+            const result = await providers.call<{ url: string }>(
+              b.provider,
               {
                 action: "checkout",
                 orderId: id,

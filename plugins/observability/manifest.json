@@ -5,7 +5,7 @@
   "name": "调用观测",
   "description": "记录调用、用量、延迟和错误。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.16",
+  "version": "0.1.0-alpha.17",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "entry": "dist/index.js",
@@ -13,7 +13,7 @@
   },
   "provides": ["observability.rankings@1", "observability.model-metrics@1"],
   "requires": [],
-  "optionalRequires": ["users.log-scope@1"],
+  "optionalRequires": ["users.log-scope@1", "billing.request-charges@1"],
   "permissions": ["api.register", "hooks.register"],
   "configReload": "restart",
   "configSchema": {

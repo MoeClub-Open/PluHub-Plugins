@@ -49,7 +49,7 @@ export default definePlugin({
       return secrets.read(c[kind]!, kind);
     };
     host.provide(
-      "payments.epay@1",
+      "payments.provider@1",
       async (input: PaymentCheckout & { action: string }, signal) => {
         if (input.action === "status") {
           const config = host.config() as EpayConfig;
@@ -61,6 +61,11 @@ export default definePlugin({
               type: m.paymentType,
             }));
           return {
+            id: "epay",
+            name: "易支付",
+            currencies: ["cny"],
+            modes: ["payment", "subscription"],
+            renewal: "manual",
             enabled: config.enabled === true && methods.length > 0,
             methods,
           };

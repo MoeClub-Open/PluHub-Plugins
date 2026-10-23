@@ -5,8 +5,8 @@
   "name": "商品与订阅",
   "description": "管理商品、订单、订阅和支付入账。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.15",
-  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "version": "0.1.0-alpha.16",
+  "host": ">=0.1.0-alpha.15 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
@@ -17,7 +17,7 @@
     "commerce.entitlements@1"
   ],
   "requires": ["billing.payment-state@1"],
-  "optionalRequires": ["payments.stripe@1", "payments.epay@1", "auth.admin@1"],
+  "optionalRequires": ["auth.admin@1", "payments.provider@1"],
   "permissions": ["api.register"],
   "configReload": "snapshot",
   "configSchema": {

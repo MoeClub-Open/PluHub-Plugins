@@ -5,7 +5,7 @@
   "name": "OpenAI Chat Completions 上游",
   "description": "调用 OpenAI Chat Completions 兼容服务并解析结果。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.13",
+  "version": "0.1.0-alpha.14",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -29,5 +29,5 @@
       }
     }
   },
-  "optionalRequires": ["ai.converter@1", "credentials.resolve@1"]
+  "optionalRequires": ["credentials.resolve@1"]
 }

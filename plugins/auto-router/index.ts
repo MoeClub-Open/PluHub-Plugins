@@ -213,11 +213,7 @@ export default definePlugin({
               : protocol === "antigravity"
                 ? "gemini"
                 : protocol;
-        if (
-          !wireProtocol ||
-          wireProtocol === "auto-router" ||
-          wireProtocol === "workflow"
-        )
+        if (!wireProtocol || wireProtocol === "auto-router")
           throw new HostError(
             "routing_cycle",
             "Automatic router targets must be physical providers",

@@ -30,6 +30,6 @@ export function discoveredModelRoute(
     model: model.id,
     ...(model.name && model.name !== model.id ? { name: model.name } : {}),
     ...(model.contextLength ? { contextWindow: model.contextLength } : {}),
-    enabled: true,
+    enabled: false,
   };
 }

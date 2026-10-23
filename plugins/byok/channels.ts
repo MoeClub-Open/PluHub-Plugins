@@ -1,3 +1,4 @@
+import { modelDefinition } from "../../lib/ai/model-definition.js";
 import { responseObject } from "../../lib/ai/json-response.js";
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
@@ -15,6 +16,7 @@ import type {
   Protocol,
   UpstreamInterface,
   ModelRoute,
+  ModelDefinition,
 } from "@pluhub/contracts/ai";
 import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { channelPresets } from "../../lib/ai/channel-presets.js";
@@ -43,7 +45,7 @@ import {
   resolveInterface,
 } from "../../lib/ai/upstream-interfaces.js";
 
-type Model = {
+type Model = ModelDefinition & {
   model: string;
   operations?: ModelRoute["operations"];
   inputPrice?: number;
@@ -286,6 +288,7 @@ export function installPersonalChannels(
       const model = raw as any;
       validateOperations(model?.operations);
       models[alias] = {
+        ...modelDefinition(model),
         model: requiredString(model?.model, "model", 256),
         ...(model?.operations ? { operations: model.operations } : {}),
         inputPrice: tokenPrice(model?.inputPrice),
@@ -394,6 +397,10 @@ export function installPersonalChannels(
         flow: config.flow,
         credentialId: row.id,
         credentialOwner: row.user_id,
+        consumptionMultiplier:
+          config.consumptionMode === "manual"
+            ? config.consumptionMultiplier
+            : 1,
         ...(config.subscriptionAccountId
           ? {
               subscriptionAccountIds: [config.subscriptionAccountId],
@@ -413,8 +420,14 @@ export function installPersonalChannels(
             {
               ...m,
               upstream: row.id,
-              effectiveInputPrice: effective.effectiveInputPrice,
-              effectiveOutputPrice: effective.effectiveOutputPrice,
+              effectiveInputPrice:
+                config.consumptionMode === "manual"
+                  ? m.inputPrice
+                  : effective.effectiveInputPrice,
+              effectiveOutputPrice:
+                config.consumptionMode === "manual"
+                  ? m.outputPrice
+                  : effective.effectiveOutputPrice,
             },
           ];
         }),

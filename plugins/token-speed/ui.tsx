@@ -4,7 +4,6 @@ import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
-import { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 function Page({ host }: { host: UIHost }) {
   const status = useLoad<any>(() =>
     host.request("/api/plugins/official.token-speed/status"),
@@ -29,7 +28,6 @@ function Page({ host }: { host: UIHost }) {
     setBusy(true);
     try {
       const c = await host.request<any>("/api/host/config");
-      migrateLegacyChannels(c);
       const p = c.plugins.find((p: any) =>
         /\/(?:official\.)?token-speed$/.test(p.path.replaceAll("\\", "/")),
       );

@@ -1,3 +1,4 @@
+import { paymentProviders } from "./providers.js";
 import type { DatabaseSync } from "node:sqlite";
 import type { PaymentAdjustment, Product } from "@pluhub/contracts/commerce";
 import {
@@ -142,7 +143,6 @@ export function installPaymentAdjustments(
         eventId = requiredString(input.eventId, "eventId", 512),
         objectId = identifier(input.objectId, "objectId");
       if (
-        !["stripe", "epay"].includes(provider) ||
         !["refund", "dispute"].includes(input.kind) ||
         !/^[a-z]{3}$/.test(input.currency)
       )
@@ -334,14 +334,15 @@ export function installPaymentAdjustments(
         .get(body.provider, objectId) as any;
       if (!item)
         throw new HostError("not_found", "Payment adjustment not found", 404);
-      if (item.provider !== "stripe")
+      const providers = paymentProviders(host);
+      if (!(await providers.get(item.provider, ctx.signal)).recheckAdjustments)
         throw new HostError(
           "unsupported_operation",
           "Recheck this payment with the merchant before adjusting the user balance",
         );
       adminTarget(ctx, item.user_id ?? "unmatched", objectId, reason);
-      await host.call(
-        "payments.stripe@1",
+      await providers.call(
+        item.provider,
         { action: "recheck", kind: item.kind, objectId },
         ctx.signal,
       );

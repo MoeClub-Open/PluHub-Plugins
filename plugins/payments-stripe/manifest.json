@@ -5,13 +5,13 @@
   "name": "Stripe 支付",
   "description": "对接 Stripe 单次支付、订阅和回调验签。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": ["payments.stripe@1"],
+  "provides": ["payments.provider@1"],
   "requires": [
     "commerce.payment-adjustment@1",
     "commerce.payment@1",

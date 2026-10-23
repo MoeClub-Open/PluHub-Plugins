@@ -5,15 +5,13 @@
   "name": "HTTP 传输",
   "description": "向上游发送请求并管理响应流。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "http.transport@1"
-  ],
+  "provides": ["http.transport@1"],
   "requires": [],
   "permissions": [],
   "configReload": "restart",

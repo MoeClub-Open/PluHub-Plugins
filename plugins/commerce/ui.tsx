@@ -68,12 +68,7 @@ function Page({ host }: { host: UIHost }) {
     [status, setStatus] = React.useState("all"),
     [page, setPage] = React.useState(1),
     [size, setSize] = React.useState(10);
-  const methods: CheckoutMethod[] =
-    catalog.data?.paymentMethods ??
-    (catalog.data?.providers ?? []).map((provider: string) => ({
-      provider,
-      name: provider,
-    }));
+  const methods: CheckoutMethod[] = catalog.data?.paymentMethods ?? [];
   const method = methods.find((m) => checkoutMethodKey(m) === methodKey);
   const provider = method?.provider ?? "";
   const methodLabel = method
@@ -84,7 +79,7 @@ function Page({ host }: { host: UIHost }) {
       setMethodKey(methods.length ? checkoutMethodKey(methods[0]!) : "");
   }, [catalog.data, methodKey]);
   const products = (catalog.data?.products ?? []).filter((p: any) =>
-    supportsCheckout(provider, p.currency),
+    supportsCheckout(method, p.currency, p.mode),
   );
   const [appliedQuery, setAppliedQuery] = React.useState("");
   React.useEffect(() => {
@@ -111,27 +106,33 @@ function Page({ host }: { host: UIHost }) {
   return (
     <>
       <PageHeading title={tr("充值与订阅")}>
-        {catalog.data?.customerPortal && (
-          <button
-            className="secondary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const result = await host.request<{ url: string }>(
-                  api + "/customer-portal",
-                  { method: "POST", body: "{}" },
-                );
-                location.assign(result.url);
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {tr("管理付款方式与账单")}
-          </button>
+        {catalog.data?.customerPortals?.map(
+          (portal: { id: string; name: string }) => (
+            <button
+              key={portal.id}
+              className="secondary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const result = await host.request<{ url: string }>(
+                    api + "/customer-portal",
+                    {
+                      method: "POST",
+                      body: JSON.stringify({ provider: portal.id }),
+                    },
+                  );
+                  location.assign(result.url);
+                } catch (error) {
+                  setMessage((error as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {portal.name} · {tr("管理付款方式与账单")}
+            </button>
+          ),
         )}
         <button
           className="secondary"
@@ -213,7 +214,7 @@ function Page({ host }: { host: UIHost }) {
                   <article className="card plan-card" key={p.id}>
                     <span className="badge">
                       {p.mode === "subscription"
-                        ? provider === "stripe"
+                        ? method?.renewal === "automatic"
                           ? tr("自动续订")
                           : tr("预付周期")
                         : tr("单次支付")}
@@ -278,7 +279,9 @@ function Page({ host }: { host: UIHost }) {
                 <tr key={s.id}>
                   <td>{s.product.name}</td>
                   <td>
-                    {s.provider === "stripe" ? tr("自动续订") : tr("手动续费")}
+                    {s.renewal === "automatic"
+                      ? tr("自动续订")
+                      : tr("手动续费")}
                     <small>
                       {price(s.product)} /{" "}
                       {s.product.interval === "year" ? tr("年") : tr("月")}
@@ -291,7 +294,7 @@ function Page({ host }: { host: UIHost }) {
                   </td>
                   <td>{new Date(s.period_end).toLocaleString(getLocale())}</td>
                   <td>
-                    {s.provider === "stripe" &&
+                    {s.renewal === "automatic" &&
                     ["active", "past_due"].includes(s.status) ? (
                       <button
                         className="ghost danger"
@@ -462,7 +465,7 @@ function Page({ host }: { host: UIHost }) {
           </dl>
           <p>
             {selected.mode === "subscription"
-              ? provider === "stripe"
+              ? method?.renewal === "automatic"
                 ? tr("按{0}自动续费，可在「我的订阅」中取消。", {
                     "0": textValue(
                       selected.interval === "year" ? tr("年") : tr("月"),

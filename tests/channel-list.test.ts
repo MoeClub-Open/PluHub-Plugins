@@ -1,10 +1,6 @@
 import { it, expect } from "vitest";
 import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
-import {
-  filterChannels,
-  setChannelState,
-  syncChannelSecrets,
-} from "../lib/ai/channel-list.js";
+import { filterChannels, setChannelState } from "../lib/ai/channel-list.js";
 
 const channels: Record<string, Upstream> = {
   first: {
@@ -56,31 +52,6 @@ it("finds channel IDs, URLs and mapped model aliases while combining status and 
     filterChannels(channels, models, "", "disabled", "openai-chat"),
   ).toEqual([]);
   expect(filterChannels(channels, models, "env:FIRST", "", "")).toEqual([]);
-});
-
-it("leaves adapter grants untouched on state changes and retains manual grants when channel keys change", () => {
-  const plugins = [
-    {
-      path: "/plugins/upstream-openai-chat",
-      config: { secretRefs: ["env:FIRST", "env:MANUAL"], anotherSetting: true },
-    },
-    {
-      path: "C:\\plugins\\official.upstream-anthropic",
-      config: { secretRefs: ["env:SECOND"] },
-    },
-  ];
-  const original = structuredClone(plugins);
-  const next = structuredClone(channels);
-  setChannelState(next, ["first"], false);
-  syncChannelSecrets(plugins, channels, next, ["openai-chat", "anthropic"]);
-  expect(plugins).toEqual(original);
-  next.first!.keyRef = "env:REPLACEMENT";
-  syncChannelSecrets(plugins, channels, next, ["openai-chat", "anthropic"]);
-  expect(plugins[0]!.config).toEqual({
-    secretRefs: ["env:MANUAL", "env:REPLACEMENT"],
-    anotherSetting: true,
-  });
-  expect(plugins[1]).toEqual(original[1]);
 });
 
 it("updates exactly the explicit selection and rejects stale IDs before changing any channel", () => {

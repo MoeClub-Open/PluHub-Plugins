@@ -18,10 +18,11 @@ import { parseApiConnection } from "../../lib/ai/personal-api.js";
 import { listSubscriptionAccounts } from "../../lib/ui/subscription-providers.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
-import type { ModelRoute } from "@pluhub/contracts/ai";
+import type { ModelRoute, ModelDefinition } from "@pluhub/contracts/ai";
 import type { SubscriptionModel } from "../../lib/ai/subscription-models.js";
 const api = "/api/plugins/official.byok";
 type Model = {
+  definition?: ModelDefinition;
   alias: string;
   model: string;
   inputPrice: string;
@@ -162,6 +163,14 @@ function Page({ host }: { host: UIHost }) {
         ? Object.entries(channel.models).map(
             ([alias, value]: [string, any]) => ({
               alias,
+              definition: {
+                name: value.name,
+                provider: value.provider,
+                description: value.description,
+                contextWindow: value.contextWindow,
+                reasoningEfforts: value.reasoningEfforts,
+                pricing: value.pricing,
+              },
               model: value.model,
               operations: value.operations,
               inputPrice:
@@ -584,6 +593,7 @@ function Page({ host }: { host: UIHost }) {
                       models.map((m) => [
                         m.alias.trim(),
                         {
+                          ...m.definition,
                           model: m.model.trim(),
                           operations: m.operations,
                           inputPrice:

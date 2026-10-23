@@ -5,8 +5,8 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.31",
-  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "version": "0.1.0-alpha.32",
+  "host": ">=0.1.0-alpha.15 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
@@ -19,7 +19,7 @@
     "ai.targets@1"
   ],
   "requires": [],
-  "permissions": ["api.register", "http.route"],
+  "permissions": ["api.register", "http.route", "http.dispatch"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -45,7 +45,6 @@
                 "claude-subscription",
                 "antigravity",
                 "auto-router",
-                "workflow",
                 "grok"
               ]
             },
@@ -1033,7 +1032,6 @@
     "ai.auto-routing@1",
     "ai.upstream.auto-router@1",
     "ai.output-pace@1",
-    "ai.workflow@1",
     "ai.user-channels@1",
     "ai.subscription.codex@1",
     "ai.subscription.claude-subscription@1",
@@ -1047,6 +1045,7 @@
     "ai.media.openai-chat@1",
     "ai.media.openai-responses@1",
     "ai.upstream.grok@1",
-    "ai.subscription.grok@1"
+    "ai.subscription.grok@1",
+    "auth.admin@1"
   ]
 }
