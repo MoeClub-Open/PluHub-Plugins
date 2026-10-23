@@ -1,3 +1,4 @@
+import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
 import {
   definePlugin,
   HostError,
@@ -265,6 +266,7 @@ export default definePlugin({
           "Automatic router candidates must resolve to provider nodes",
         );
       upstream = resolveInterface(upstream, ingressProtocol, providerModel);
+      if (request) validateWebSearchTarget(request, upstream.protocol);
       checkProtocolConversion(
         ingressProtocol,
         upstream.protocol,

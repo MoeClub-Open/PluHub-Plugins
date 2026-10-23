@@ -101,7 +101,9 @@ export function createIngress(protocol: Protocol) {
                 features: [
                   "text",
                   "usage",
-                  ...(decoded.tools.length ? ["tools"] : []),
+                  ...(decoded.tools.length || decoded.webSearch
+                    ? ["tools"]
+                    : []),
                   ...(decoded.stream ? ["stream"] : []),
                 ],
                 principalId: ctx.principal?.id,

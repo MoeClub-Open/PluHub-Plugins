@@ -1,3 +1,4 @@
+import { writeCitations } from "./web-search.js";
 import { randomUUID } from "node:crypto";
 import { HostError } from "@pluhub/sdk";
 import type { AIEvent, AIResult, Protocol } from "@pluhub/contracts/ai";
@@ -77,6 +78,7 @@ export async function* wire(
   let blockCount = 0,
     block: { key: string; index: number; kind: string } | undefined;
   const closedReasoning = new Set<string>();
+  const completedSearches = new Set<string>();
   function* closeBlock(): Generator<string> {
     if (!block) return;
     if (block.kind === "thinking") {
@@ -304,7 +306,56 @@ export async function* wire(
           502,
         );
       appendEvent(r, e);
-      if (e.type === "text" || e.type === "refusal") {
+      if (e.type === "search") {
+        if (protocol === "openai-responses") {
+          const key = "search:" + e.call.id;
+          yield* item(key, { ...e.call, status: "in_progress" });
+          const entry = items.find((item) => item.key === key)!;
+          entry.item = { ...entry.item, ...e.call };
+          if (e.phase)
+            yield response("response.web_search_call." + e.phase, {
+              item_id: entry.item.id,
+              output_index: entry.index,
+            });
+          if (
+            !e.phase &&
+            ["completed", "failed", "incomplete"].includes(
+              String(e.call.status),
+            ) &&
+            !completedSearches.has(key)
+          ) {
+            completedSearches.add(key);
+            yield response("response.output_item.done", {
+              output_index: entry.index,
+              item: entry.item,
+            });
+          }
+        } else if (protocol === "openai-chat")
+          yield chat({ extra_content: { web_search_calls: [e.call] } });
+        else unsupported("web search output in " + protocol);
+      } else if (e.type === "citation") {
+        if (protocol === "openai-chat")
+          yield chat({ annotations: writeCitations([e.citation], true) });
+        else if (protocol === "openai-responses") {
+          const entry = items.find((item) => item.key === "text");
+          if (!entry)
+            throw new HostError(
+              "upstream_protocol",
+              "Citation before response text",
+              502,
+            );
+          yield response("response.output_text.annotation.added", {
+            item_id: entry.item.id,
+            output_index: entry.index,
+            content_index: 0,
+            annotation_index: r.citations!.findIndex(
+              (citation) =>
+                JSON.stringify(citation) === JSON.stringify(e.citation),
+            ),
+            annotation: writeCitations([e.citation])[0],
+          });
+        } else unsupported("citations in " + protocol);
+      } else if (e.type === "text" || e.type === "refusal") {
         const refusal = e.type === "refusal",
           key = refusal ? "refusal" : "text";
         if (protocol === "openai-chat")
@@ -453,7 +504,8 @@ export async function* wire(
       yield "data: [DONE]\n\n";
     } else if (protocol === "openai-responses") {
       for (const entry of items) {
-        if (entry.key.startsWith("tool:")) continue;
+        if (entry.key.startsWith("tool:") || entry.key.startsWith("search:"))
+          continue;
         if (entry.key.startsWith("reason:")) {
           const b = r.reasoning![Number(entry.key.slice(7))]!;
           entry.item = { ...reasoningPart(protocol, b), id: entry.item.id };
@@ -474,7 +526,11 @@ export async function* wire(
             text = refusal ? r.refusal! : r.text;
           const part = refusal
             ? { type: "refusal", refusal: text }
-            : { type: "output_text", text, annotations: [] };
+            : {
+                type: "output_text",
+                text,
+                annotations: writeCitations(r.citations),
+              };
           entry.item = { ...entry.item, status: "completed", content: [part] };
           yield response(
             refusal ? "response.refusal.done" : "response.output_text.done",

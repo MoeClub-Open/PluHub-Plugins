@@ -139,7 +139,7 @@ export function rulesDecision(request: AIRequest): DifficultyDecision {
   let score = 0;
   if (text.length > 1500) score++;
   if (text.length > 8000) score++;
-  if (request.tools.length) score++;
+  if (request.tools.length || request.webSearch) score++;
   if (request.messages.some((m) => m.calls?.length || m.role === "tool"))
     score++;
   if (

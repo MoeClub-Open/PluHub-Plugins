@@ -194,7 +194,7 @@ export function runWorkflow(
     if (node.type === "condition") {
       const yes =
         node.test === "hasTools"
-          ? request.tools.length > 0
+          ? request.tools.length > 0 || !!request.webSearch
           : node.test === "protocol"
             ? requireIngressProtocol(context.ingressProtocol) === node.protocol
             : node.test === "stream"

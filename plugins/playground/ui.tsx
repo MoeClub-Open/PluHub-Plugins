@@ -2,7 +2,7 @@ import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import type { CatalogModel } from "@pluhub/contracts/ai";
+import type { CatalogModel, UrlCitation } from "@pluhub/contracts/ai";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import {
   PageHeading,
@@ -16,7 +16,40 @@ type Message = {
   role: "user" | "assistant";
   content: string;
   incomplete?: boolean;
+  citations?: UrlCitation[];
 };
+function Answer({ message }: { message: Message }) {
+  const citations = [...(message.citations ?? [])].sort(
+    (a, b) => a.startIndex - b.startIndex,
+  );
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  for (const citation of citations) {
+    if (
+      citation.startIndex < cursor ||
+      citation.endIndex > message.content.length ||
+      !/^https?:\/\//i.test(citation.url)
+    )
+      continue;
+    parts.push(message.content.slice(cursor, citation.startIndex));
+    parts.push(
+      <a
+        key={JSON.stringify(citation)}
+        className="text-link"
+        href={citation.url}
+        title={citation.title}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {message.content.slice(citation.startIndex, citation.endIndex) ||
+          citation.title}
+      </a>,
+    );
+    cursor = citation.endIndex;
+  }
+  parts.push(message.content.slice(cursor));
+  return <p>{message.content ? parts : tr("正在等待模型响应…")}</p>;
+}
 function Page({ host }: { host: UIHost }) {
   const [channel, setChannel] = React.useState(
     new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "",
@@ -89,6 +122,7 @@ function Page({ host }: { host: UIHost }) {
     const abort = new AbortController();
     controller.current = abort;
     let text = "";
+    const citations: UrlCitation[] = [];
     let first: number | undefined;
     const started = performance.now();
     try {
@@ -128,7 +162,36 @@ function Page({ host }: { host: UIHost }) {
             setMeta((m) => ({ ...m, first }));
           }
           text += delta;
-          setMessages([...history, { role: "assistant", content: text }]);
+          setMessages([
+            ...history,
+            { role: "assistant", content: text, citations: [...citations] },
+          ]);
+        }
+        for (const annotation of event.choices?.[0]?.delta?.annotations ?? []) {
+          const value = annotation.url_citation;
+          if (
+            annotation.type !== "url_citation" ||
+            !value ||
+            typeof value.url !== "string" ||
+            !/^https?:\/\//i.test(value.url)
+          )
+            continue;
+          const citation: UrlCitation = {
+            url: value.url,
+            title: value.title ?? value.url,
+            startIndex: value.start_index,
+            endIndex: value.end_index,
+          };
+          if (
+            !citations.some(
+              (item) => JSON.stringify(item) === JSON.stringify(citation),
+            )
+          )
+            citations.push(citation);
+          setMessages([
+            ...history,
+            { role: "assistant", content: text, citations: [...citations] },
+          ]);
         }
         if (event.usage)
           setMeta((m) => ({
@@ -148,6 +211,7 @@ function Page({ host }: { host: UIHost }) {
             text ||
             (abort.signal.aborted ? tr("已停止生成") : tr("调用未完成")),
           incomplete: true,
+          citations: [...citations],
         },
       ]);
     } finally {
@@ -220,7 +284,7 @@ function Page({ host }: { host: UIHost }) {
                       {m.role === "user" ? tr("你") : model}
                       {m.incomplete ? tr(" · 未完成") : ""}
                     </strong>
-                    <p>{m.content || tr("正在等待模型响应…")}</p>
+                    <Answer message={m} />
                   </div>
                 </article>
               ))

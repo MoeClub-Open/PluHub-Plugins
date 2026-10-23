@@ -1,3 +1,4 @@
+import { readCitations, writeCitations } from "./web-search.js";
 import { HostError, requiredString } from "@pluhub/sdk";
 import type {
   ContentPart,
@@ -78,7 +79,11 @@ export function readContent(protocol: Protocol, value: unknown): ContentPart[] {
     object(part, "content part");
     if (["text", "input_text", "output_text"].includes(part.type)) {
       keys(part, ["type", "text", "annotations"], "text part");
-      if (part.annotations?.length) unsupported("input annotations");
+      if (part.annotations?.length) {
+        if (!["openai-chat", "openai-responses"].includes(protocol))
+          unsupported("input annotations in " + protocol);
+        readCitations(part.annotations);
+      }
       return { type: "text", text: string(part.text, "text") };
     }
     if (protocol === "openai-chat" && part.type === "image_url") {
@@ -155,6 +160,18 @@ export function contentMessage(
   };
 }
 export function writeContent(protocol: Protocol, m: Message): any {
+  if (
+    protocol === "openai-responses" &&
+    m.role === "assistant" &&
+    m.citations?.length
+  )
+    return [
+      {
+        type: "output_text",
+        text: m.text,
+        annotations: writeCitations(m.citations),
+      },
+    ];
   const parts = m.content ?? [{ type: "text", text: m.text }];
   if (!m.content && protocol !== "gemini") return m.text;
   return parts.map((p) => {

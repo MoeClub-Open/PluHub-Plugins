@@ -1,3 +1,12 @@
+import {
+  isSearchTool,
+  readWebSearch,
+  readSearchCall,
+  readCitations,
+  writeCitations,
+  messageCitations,
+  validateWebSearchTarget,
+} from "./web-search.js";
 import { randomUUID } from "node:crypto";
 import { HostError, requiredString } from "@pluhub/sdk";
 import { decodeReasoning, encodeReasoning } from "./reasoning.js";
@@ -154,6 +163,7 @@ export function decode(
 ): AIRequest {
   body = sessionPayload(body);
   const messages: Message[] = [];
+  const webSearch = readWebSearch(protocol, body);
   let tools: Tool[] = [];
   let maxTokens: number | undefined;
   let temperature: number | undefined;
@@ -180,6 +190,7 @@ export function decode(
       "tool_choice",
       "parallel_tool_calls",
       "response_format",
+      "web_search_options",
     ]);
     if (body.n !== undefined && body.n !== 1) unsupported("n");
     if (body.stream_options) {
@@ -204,12 +215,16 @@ export function decode(
           "reasoning_content",
           "reasoning_details",
           "refusal",
+          "annotations",
+          "extra_content",
         ],
         "message",
       );
       if (m.tool_calls !== undefined && !Array.isArray(m.tool_calls))
         throw new HostError("invalid_request", "tool_calls must be an array");
       if (m.role === "tool") requiredString(m.tool_call_id, "tool_call_id");
+      if (m.extra_content)
+        fields(m.extra_content, ["web_search_calls"], "message extra_content");
       messages.push({
         ...contentMessage(role(m.role), readContent(protocol, m.content)),
         ...(m.reasoning_details
@@ -218,29 +233,39 @@ export function decode(
             ? { reasoning: [readReasoning(protocol, m.reasoning_content)] }
             : {}),
         ...(m.tool_calls ? { calls: m.tool_calls.map(call) } : {}),
+        ...(m.annotations?.length
+          ? { citations: readCitations(m.annotations) }
+          : {}),
+        ...(m.extra_content?.web_search_calls
+          ? {
+              searchCalls: m.extra_content.web_search_calls.map(readSearchCall),
+            }
+          : {}),
         ...(m.tool_call_id ? { callId: m.tool_call_id, toolName: m.name } : {}),
         ...(m.refusal !== undefined && m.refusal !== null
           ? { refusal: string(m.refusal, "refusal") }
           : {}),
       });
     }
-    tools = (body.tools ?? []).map((t: any) => {
-      fields(t, ["type", "function"], "tool");
-      if (t.type !== "function") unsupported("tool type");
-      fields(
-        t.function,
-        ["name", "description", "parameters", "strict"],
-        "function",
-      );
-      return {
-        name: requiredString(t.function.name, "tool name"),
-        description: t.function.description,
-        parameters: t.function.parameters ?? { type: "object" },
-        ...(t.function.strict !== undefined
-          ? { strict: t.function.strict }
-          : {}),
-      };
-    });
+    tools = (body.tools ?? [])
+      .filter((t: any) => !isSearchTool(t))
+      .map((t: any) => {
+        fields(t, ["type", "function"], "tool");
+        if (t.type !== "function") unsupported("tool type");
+        fields(
+          t.function,
+          ["name", "description", "parameters", "strict"],
+          "function",
+        );
+        return {
+          name: requiredString(t.function.name, "tool name"),
+          description: t.function.description,
+          parameters: t.function.parameters ?? { type: "object" },
+          ...(t.function.strict !== undefined
+            ? { strict: t.function.strict }
+            : {}),
+        };
+      });
     maxTokens = body.max_completion_tokens ?? body.max_tokens;
     if (
       body.max_completion_tokens !== undefined &&
@@ -272,7 +297,13 @@ export function decode(
     if (
       body.include !== undefined &&
       (!Array.isArray(body.include) ||
-        body.include.some((v: any) => v !== "reasoning.encrypted_content"))
+        body.include.some(
+          (v: any) =>
+            ![
+              "reasoning.encrypted_content",
+              "web_search_call.action.sources",
+            ].includes(v),
+        ))
     )
       unsupported("Responses include");
     if (body.instructions)
@@ -309,6 +340,12 @@ export function decode(
             delete block.signature;
           }
           messages.push({ role: "assistant", text: "", reasoning: [block] });
+        } else if (item.type === "web_search_call") {
+          messages.push({
+            role: "assistant",
+            text: "",
+            searchCalls: [readSearchCall(item)],
+          });
         } else if (item.type === "function_call") {
           fields(
             item,
@@ -357,26 +394,31 @@ export function decode(
             : "";
           messages.push({
             ...contentMessage(role(item.role), readContent(protocol, parts)),
+            ...(messageCitations(parts).length
+              ? { citations: messageCitations(parts) }
+              : {}),
             ...(refusals ? { refusal: refusals } : {}),
           });
         }
       }
     else
       throw new HostError("invalid_request", "input must be text or messages");
-    tools = (body.tools ?? []).map((t: any) => {
-      fields(
-        t,
-        ["type", "name", "description", "parameters", "strict"],
-        "tool",
-      );
-      if (t.type !== "function") unsupported("tool type");
-      return {
-        name: requiredString(t.name, "tool name"),
-        description: t.description,
-        parameters: t.parameters ?? { type: "object" },
-        ...(t.strict !== undefined ? { strict: t.strict } : {}),
-      };
-    });
+    tools = (body.tools ?? [])
+      .filter((t: any) => !isSearchTool(t))
+      .map((t: any) => {
+        fields(
+          t,
+          ["type", "name", "description", "parameters", "strict"],
+          "tool",
+        );
+        if (t.type !== "function") unsupported("tool type");
+        return {
+          name: requiredString(t.name, "tool name"),
+          description: t.description,
+          parameters: t.parameters ?? { type: "object" },
+          ...(t.strict !== undefined ? { strict: t.strict } : {}),
+        };
+      });
     maxTokens = body.max_output_tokens;
     temperature = body.temperature;
   } else if (protocol === "anthropic") {
@@ -687,7 +729,11 @@ export function decode(
     if (m.content && !m.content.some((p) => p.type === "image"))
       delete m.content;
     if (
-      (m.calls?.length || m.reasoning?.length || m.refusal) &&
+      (m.calls?.length ||
+        m.reasoning?.length ||
+        m.refusal ||
+        m.citations?.length ||
+        m.searchCalls?.length) &&
       m.role !== "assistant"
     )
       throw new HostError(
@@ -718,6 +764,7 @@ export function decode(
     model,
     messages,
     tools,
+    ...(webSearch ? { webSearch } : {}),
     stream,
     maxTokens,
     temperature,
@@ -746,6 +793,7 @@ function mergeMessages(items: any[], field: "content" | "parts") {
   }, []);
 }
 export function encodeRequest(protocol: Protocol, request: AIRequest): any {
+  validateWebSearchTarget(request, protocol);
   const { messages, tools, model, stream, maxTokens, temperature } = request;
   const options: Record<string, any> = {
     ...(temperature !== undefined ? { temperature } : {}),
@@ -831,6 +879,9 @@ export function encodeRequest(protocol: Protocol, request: AIRequest): any {
       })),
       stream,
       ...(stream ? { stream_options: { include_usage: true } } : {}),
+      ...(request.webSearch
+        ? { web_search_options: request.webSearch.options }
+        : {}),
       ...(tools.length
         ? { tools: tools.map((t) => ({ type: "function", function: t })) }
         : {}),
@@ -856,6 +907,7 @@ export function encodeRequest(protocol: Protocol, request: AIRequest): any {
               },
             ]
           : [
+              ...(m.searchCalls ?? []),
               ...reasoningHistory(protocol, m),
               ...(m.text || m.content
                 ? [{ role: m.role, content: writeContent(protocol, m) }]
@@ -884,12 +936,35 @@ export function encodeRequest(protocol: Protocol, request: AIRequest): any {
             ],
       ),
       stream,
-      ...(tools.length
-        ? { tools: tools.map((t) => ({ type: "function", ...t })) }
+      ...(tools.length || request.webSearch
+        ? {
+            tools: [
+              ...tools.map((t) => ({ type: "function", ...t })),
+              ...(request.webSearch
+                ? [
+                    {
+                      type: request.webSearch.type,
+                      ...request.webSearch.options,
+                    },
+                  ]
+                : []),
+            ],
+          }
         : {}),
       ...(maxTokens ? { max_output_tokens: maxTokens } : {}),
       ...options,
       ...extra,
+      ...(request.webSearch?.choice
+        ? { tool_choice: { type: request.webSearch.choice } }
+        : {}),
+      ...(request.webSearch?.includeSources
+        ? {
+            include: [
+              ...(options.include ?? []),
+              "web_search_call.action.sources",
+            ],
+          }
+        : {}),
     };
   if (protocol === "anthropic")
     return {
@@ -1076,6 +1151,11 @@ export function decodeResult(
         502,
       );
     result.text = text(c.message?.content);
+    if (c.message?.annotations?.length)
+      result.citations = readCitations(c.message.annotations);
+    if (c.message?.extra_content?.web_search_calls)
+      result.searchCalls =
+        c.message.extra_content.web_search_calls.map(readSearchCall);
     if (c.message?.refusal)
       result.refusal = string(c.message.refusal, "refusal");
     if (c.message?.reasoning_details)
@@ -1103,8 +1183,19 @@ export function decodeResult(
           if (part.type === "refusal")
             result.refusal =
               (result.refusal ?? "") + string(part.refusal, "refusal");
-          else result.text += text([part]);
+          else {
+            const offset = result.text.length;
+            result.text += text([part]);
+            if (part.annotations?.length)
+              (result.citations ??= []).push(
+                ...readCitations(part.annotations, offset),
+              );
+          }
         }
+      else if (item.type === "web_search_call")
+        (result.searchCalls ??= []).push(
+          readSearchCall({ ...item, status: item.status ?? "completed" }),
+        );
       else if (item.type === "function_call") result.calls.push(call(item));
       else if (item.type === "reasoning") {
         const block = readReasoning(
@@ -1256,8 +1347,11 @@ export function reason(value: any): AIResult["reason"] {
 export async function* resultEvents(result: AIResult): AsyncGenerator<AIEvent> {
   for (const [index, block] of (result.reasoning ?? []).entries())
     yield { type: "reasoning", index, ...block };
+  for (const call of result.searchCalls ?? []) yield { type: "search", call };
   if (result.refusal) yield { type: "refusal", text: result.refusal };
   if (result.text) yield { type: "text", text: result.text };
+  for (const citation of result.citations ?? [])
+    yield { type: "citation", citation };
   for (const [index, c] of result.calls.entries())
     yield { type: "tool", index, ...c, done: true };
   yield { type: "usage", usage: result.usage };
@@ -1297,6 +1391,19 @@ export function appendEvent(out: AIResult, e: AIEvent) {
     if (e.thoughtSignature) c.thoughtSignature = e.thoughtSignature;
     if (e.done && !c.arguments) c.arguments = "{}";
     out.calls[e.index] = c;
+  } else if (e.type === "search") {
+    const calls = (out.searchCalls ??= []);
+    const index = calls.findIndex((call) => call.id === e.call.id);
+    if (index < 0) calls.push(e.call);
+    else calls[index] = { ...calls[index], ...e.call };
+  } else if (e.type === "citation") {
+    const citations = (out.citations ??= []);
+    if (
+      !citations.some(
+        (citation) => JSON.stringify(citation) === JSON.stringify(e.citation),
+      )
+    )
+      citations.push(e.citation);
   } else if (e.type === "usage") out.usage = e.usage;
   else {
     out.reason = e.reason;
@@ -1304,6 +1411,8 @@ export function appendEvent(out: AIResult, e: AIEvent) {
   }
   const size =
     out.text.length +
+    (out.searchCalls ? JSON.stringify(out.searchCalls).length : 0) +
+    (out.citations ? JSON.stringify(out.citations).length : 0) +
     (out.refusal?.length ?? 0) +
     out.calls.reduce((n, c) => n + c.arguments.length + c.name.length, 0) +
     (out.reasoning ?? []).reduce(
@@ -1356,6 +1465,11 @@ export async function collect(
   return out;
 }
 export function encodeResult(protocol: Protocol, r: AIResult): any {
+  if (
+    !["openai-chat", "openai-responses"].includes(protocol) &&
+    (r.searchCalls?.length || r.citations?.length)
+  )
+    unsupported("web search results in " + protocol);
   r = {
     ...r,
     calls: r.calls.filter(Boolean),
@@ -1375,6 +1489,12 @@ export function encodeResult(protocol: Protocol, r: AIResult): any {
           message: {
             role: "assistant",
             content: r.text || null,
+            ...(r.citations?.length
+              ? { annotations: writeCitations(r.citations, true) }
+              : {}),
+            ...(r.searchCalls?.length
+              ? { extra_content: { web_search_calls: r.searchCalls } }
+              : {}),
             ...(r.reasoning?.length
               ? {
                   reasoning_content: r.reasoning.map((b) => b.text).join(""),
@@ -1429,6 +1549,7 @@ export function encodeResult(protocol: Protocol, r: AIResult): any {
       model: r.model,
       output: [
         ...(r.reasoning ?? []).map((b) => reasoningPart(protocol, b)),
+        ...(r.searchCalls ?? []),
         ...(r.text
           ? [
               {
@@ -1437,7 +1558,11 @@ export function encodeResult(protocol: Protocol, r: AIResult): any {
                 status: "completed",
                 role: "assistant",
                 content: [
-                  { type: "output_text", text: r.text, annotations: [] },
+                  {
+                    type: "output_text",
+                    text: r.text,
+                    annotations: writeCitations(r.citations),
+                  },
                 ],
               },
             ]

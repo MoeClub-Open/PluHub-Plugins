@@ -1,3 +1,4 @@
+import { readSearchCall, readCitations } from "./web-search.js";
 import { randomUUID } from "node:crypto";
 import { HostError } from "@pluhub/sdk";
 import type {
@@ -6,6 +7,8 @@ import type {
   ReasoningContent,
   FinishReason,
   Usage,
+  UrlCitation,
+  WebSearchCall,
 } from "@pluhub/contracts/ai";
 import { parseSSE, reason } from "./protocols.js";
 import { readReasoning } from "./content.js";
@@ -45,6 +48,67 @@ export async function* decodeEvents(
   let geminiReason: string | undefined;
   let geminiUsage: Usage | undefined;
   const initialInputs = new Map<any, any>();
+  const searches = new Map<string, WebSearchCall>();
+  const searchSnapshots = new Map<string, string>();
+  const citationParts = new Map<any, UrlCitation[]>();
+  const emittedCitations = new Set<string>();
+  const textSpans = new Map<
+    any,
+    { local: number; global: number; length: number }[]
+  >();
+  let textLength = 0;
+  function* search(
+    value: any,
+    phase?: "in_progress" | "searching" | "completed",
+  ): Generator<AIEvent> {
+    const call = { ...searches.get(value.id), ...readSearchCall(value) };
+    const key = call.id + ":" + (phase ?? "snapshot");
+    const snapshot = JSON.stringify(call);
+    if (searchSnapshots.get(key) === snapshot) return;
+    searchSnapshots.set(key, snapshot);
+    searches.set(call.id, call);
+    yield { type: "search", call, ...(phase ? { phase } : {}) };
+  }
+  function* emitCitations(key: any): Generator<AIEvent> {
+    const spans = textSpans.get(key) ?? [];
+    const position = (offset: number, end: boolean) => {
+      const span = spans.find(
+        (span) =>
+          offset >= span.local &&
+          (end
+            ? offset <= span.local + span.length
+            : offset < span.local + span.length),
+      );
+      if (span) return span.global + offset - span.local;
+      const tail = spans.at(-1);
+      return tail && offset === tail.local + tail.length
+        ? tail.global + tail.length
+        : undefined;
+    };
+    for (const citation of citationParts.get(key) ?? []) {
+      const id = JSON.stringify([key, citation]);
+      if (emittedCitations.has(id)) continue;
+      const startIndex = position(citation.startIndex, false);
+      const endIndex = position(citation.endIndex, true);
+      if (startIndex === undefined || endIndex === undefined) continue;
+      emittedCitations.add(id);
+      yield {
+        type: "citation",
+        citation: { ...citation, startIndex, endIndex },
+      };
+    }
+  }
+  function* citations(key: any, value: any): Generator<AIEvent> {
+    if (value === undefined || value === null) return;
+    const parts = citationParts.get(key) ?? [];
+    for (const citation of readCitations(value))
+      if (
+        !parts.some((part) => JSON.stringify(part) === JSON.stringify(citation))
+      )
+        parts.push(citation);
+    citationParts.set(key, parts);
+    yield* emitCitations(key);
+  }
   function toolIndex(key: any) {
     if (!toolKeys.has(key)) {
       if (toolKeys.size >= 1024) bad("Too many upstream tools");
@@ -153,11 +217,31 @@ export async function* decodeEvents(
   ): Generator<AIEvent> {
     const value = str(delta, "text delta"),
       map = refusal ? sentRefusal : sentText;
-    map.set(key, (map.get(key) ?? "") + value);
+    const previous = map.get(key) ?? "";
+    map.set(key, previous + value);
+    if (!refusal && value) {
+      const spans = textSpans.get(key) ?? [];
+      const tail = spans.at(-1);
+      if (
+        tail &&
+        tail.local + tail.length === previous.length &&
+        tail.global + tail.length === textLength
+      )
+        tail.length += value.length;
+      else
+        spans.push({
+          local: previous.length,
+          global: textLength,
+          length: value.length,
+        });
+      textSpans.set(key, spans);
+      textLength += value.length;
+    }
     if (value)
       yield refusal
         ? { type: "refusal", text: value }
         : { type: "text", text: value };
+    if (!refusal) yield* emitCitations(key);
   }
   function* textDone(key: any, full: any, refusal = false): Generator<AIEvent> {
     if (full === undefined) return;
@@ -172,7 +256,12 @@ export async function* decodeEvents(
   function* responseItem(item: any, done: boolean): Generator<AIEvent> {
     if (!item || typeof item !== "object") return bad("Missing Responses item");
     const key = item.id ?? item.call_id;
-    if (item.type === "function_call") {
+    if (item.type === "web_search_call") {
+      yield* search({
+        ...item,
+        status: item.status ?? (done ? "completed" : "in_progress"),
+      });
+    } else if (item.type === "function_call") {
       const index = toolIndex(key),
         current = tools.get(index);
       if (!current)
@@ -223,9 +312,10 @@ export async function* decodeEvents(
         for (const [i, part] of (item.content ?? []).entries()) {
           if (part.type === "refusal")
             yield* textDone(key + ":" + i, part.refusal, true);
-          else if (part.type === "output_text")
+          else if (part.type === "output_text") {
             yield* textDone(key + ":" + i, part.text);
-          else bad("Unsupported Responses content part");
+            yield* citations(key + ":" + i, part.annotations);
+          } else bad("Unsupported Responses content part");
         }
     } else bad("Unsupported Responses output item");
   }
@@ -257,6 +347,9 @@ export async function* decodeEvents(
         if (delta.content !== undefined && delta.content !== null)
           yield* textDelta("text", delta.content);
         if (delta.refusal) yield* textDelta("refusal", delta.refusal, true);
+        if (delta.annotations) yield* citations("text", delta.annotations);
+        for (const call of delta.extra_content?.web_search_calls ?? [])
+          yield* search(call);
         if (delta.reasoning_details) {
           for (const detail of delta.reasoning_details) {
             const index = reasonIndex(detail.index ?? 0);
@@ -319,6 +412,23 @@ export async function* decodeEvents(
         yield* textDelta(d.item_id + ":" + (d.content_index ?? 0), d.delta);
       else if (d.type === "response.output_text.done")
         yield* textDone(d.item_id + ":" + (d.content_index ?? 0), d.text);
+      else if (d.type === "response.output_text.annotation.added")
+        yield* citations(d.item_id + ":" + (d.content_index ?? 0), [
+          d.annotation,
+        ]);
+      else if (
+        /^response\.web_search_call\.(in_progress|searching|completed)$/.test(
+          d.type,
+        )
+      )
+        yield* search(
+          searches.get(d.item_id) ?? {
+            type: "web_search_call",
+            id: d.item_id,
+            status: "in_progress",
+          },
+          d.type.split(".").at(-1),
+        );
       else if (d.type === "response.refusal.delta")
         yield* textDelta(
           d.item_id + ":" + (d.content_index ?? 0),
@@ -500,6 +610,10 @@ export async function* decodeEvents(
       "Upstream stream ended before completion",
       502,
     );
+  for (const [key, citations] of citationParts)
+    for (const citation of citations)
+      if (!emittedCitations.has(JSON.stringify([key, citation])))
+        bad("Citation points outside completed text");
   for (const key of toolKeys.keys()) yield* doneTool(key);
   for (const key of reasonKeys.keys()) yield* doneReason(key);
   if (geminiUsage) yield { type: "usage", usage: geminiUsage };

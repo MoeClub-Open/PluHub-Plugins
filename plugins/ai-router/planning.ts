@@ -1,3 +1,4 @@
+import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
 import { HostError, type Host } from "@pluhub/sdk";
 import type {
   AIPlan,
@@ -335,6 +336,16 @@ export async function planRoute(
     );
   if (outputPolicy && !host.hasCapability("ai.output-pace@2"))
     throw new HostError("limiter_unavailable", "TPS 插件未安装或已停用", 503);
+  if (prepared) validateWebSearchTarget(prepared, resolved.upstream.protocol);
+  if (
+    prepared?.webSearch &&
+    input.ingressProtocol &&
+    !["openai-chat", "openai-responses"].includes(input.ingressProtocol)
+  )
+    throw new HostError(
+      "unsupported_feature",
+      "Web search output requires a Responses or Chat ingress",
+    );
   checkProtocolConversion(
     input.ingressProtocol,
     resolved.upstream.protocol,

@@ -1,3 +1,4 @@
+import { isSearchTool } from "./web-search.js";
 import { HostError, requiredString } from "@pluhub/sdk";
 import type { AIRequest, Protocol } from "@pluhub/contracts/ai";
 import { object, keys, unsupported, string } from "./content.js";
@@ -36,7 +37,7 @@ export function readOptions(protocol: Protocol, body: any): Partial<AIRequest> {
       throw new HostError("invalid_request", "Invalid stop sequences");
     out.stop = stop;
   }
-  let choice = body.tool_choice;
+  let choice = isSearchTool(body.tool_choice) ? undefined : body.tool_choice;
   if (protocol === "gemini" && body.toolConfig !== undefined) {
     keys(body.toolConfig, ["functionCallingConfig"], "toolConfig");
     const config = object(body.toolConfig.functionCallingConfig);
@@ -192,8 +193,13 @@ export function validateOptions(request: AIRequest) {
     !names.includes(request.toolChoice.name)
   )
     throw new HostError("invalid_request", "Selected tool is not declared");
-  if (request.toolChoice === "required" && !names.length)
+  if (request.toolChoice === "required" && !names.length && !request.webSearch)
     throw new HostError("invalid_request", "Required tool choice needs tools");
+  if (
+    request.webSearch?.choice &&
+    !isSearchTool({ type: request.webSearch.choice })
+  )
+    throw new HostError("invalid_request", "Invalid web search tool choice");
   for (const t of request.tools) {
     object(t.parameters, "tool parameters");
     if (t.strict !== undefined) bool(t.strict, "strict");
@@ -280,7 +286,14 @@ export function writeOptions(
       if (format.type === "json_schema") out.responseJsonSchema = format.schema;
     }
   } else {
-    if (choice !== undefined)
+    if (
+      choice !== undefined &&
+      !(
+        protocol === "openai-chat" &&
+        request.webSearch &&
+        !request.tools.length
+      )
+    )
       out.tool_choice =
         typeof choice === "object"
           ? protocol === "openai-chat"

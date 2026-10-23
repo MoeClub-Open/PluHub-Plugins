@@ -188,6 +188,8 @@ export default definePlugin({
               "subscription_unavailable",
               "protocol_not_allowed",
               "protocol_conversion_forbidden",
+              "web_search_unsupported",
+              "interface_not_supported",
             ].includes((e as HostError).code)
           )
             continue;

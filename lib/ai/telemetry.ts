@@ -22,6 +22,7 @@ export interface AIObservation {
     redirection?: AIPlan["redirection"];
     workflows?: AIPlan["workflows"];
     outputBudget?: OutputBudget;
+    webSearchCalls?: number;
   };
 }
 export function observation(ctx: RequestContext): AIObservation | undefined {
@@ -64,6 +65,7 @@ export async function* observeEvents(
 ) {
   const state = observation(ctx)!;
   let contentEvents = 0;
+  const searchCalls = new Set<string>();
   let firstOutputMs: number | undefined;
   try {
     for await (const event of events) {
@@ -99,6 +101,10 @@ export async function* observeEvents(
             "Upstream usage exceeded the output token limit",
             502,
           );
+      }
+      if (event.type === "search" && event.call.action?.type === "search") {
+        searchCalls.add(event.call.id);
+        state.routing = { ...state.routing, webSearchCalls: searchCalls.size };
       }
       if (event.type === "finish") state.finished = true;
       yield event;
