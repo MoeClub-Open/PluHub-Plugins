@@ -5,6 +5,7 @@ import type {
   UrlCitation,
   WebSearch,
   WebSearchCall,
+  Upstream,
 } from "@pluhub/contracts/ai";
 
 export const searchTypes = [
@@ -82,9 +83,20 @@ export function readWebSearch(
 
 export function validateWebSearchTarget(
   request: AIRequest,
-  protocol: string | undefined,
+  target: string | Upstream | undefined,
 ) {
+  const protocol = typeof target === "string" ? target : target?.protocol;
   const search = request.webSearch;
+  if (
+    search?.maxCalls !== undefined &&
+    protocol === "codex" &&
+    typeof target === "object" &&
+    (target.authMode === "cli" ||
+      (!target.authMode && !!target.subscriptionAccountIds))
+  )
+    unsupported(
+      "Codex CLI cannot enforce max_tool_calls; omit this parameter or choose a Responses API upstream",
+    );
   if (
     !search &&
     !request.messages.some((message) => message.searchCalls?.length)

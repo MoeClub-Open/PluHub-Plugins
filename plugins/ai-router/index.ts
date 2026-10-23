@@ -278,7 +278,7 @@ export default definePlugin({
           "Automatic router candidates must resolve to provider nodes",
         );
       upstream = resolveInterface(upstream, ingressProtocol, providerModel);
-      if (request) validateWebSearchTarget(request, upstream.protocol);
+      if (request) validateWebSearchTarget(request, upstream);
       checkProtocolConversion(
         ingressProtocol,
         upstream.protocol,

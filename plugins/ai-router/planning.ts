@@ -368,7 +368,7 @@ export async function planRoute(
       "This upstream does not provide OpenAI media endpoints",
       400,
     );
-  if (prepared) validateWebSearchTarget(prepared, resolved.upstream.protocol);
+  if (prepared) validateWebSearchTarget(prepared, resolved.upstream);
   if (
     prepared?.webSearch &&
     resolved.upstream.protocol === "openai-chat" &&

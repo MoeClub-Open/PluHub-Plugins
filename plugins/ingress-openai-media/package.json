@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-ingress-openai-media",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "type": "module",
   "license": "Apache-2.0",
   "files": [

@@ -233,6 +233,18 @@ it("retains the Responses hosted-tool call bound and rejects conversions that lo
   });
   expect(request.webSearch?.maxCalls).toBe(1);
   expect(encodeRequest("openai-responses", request).max_tool_calls).toBe(1);
+  expect(() =>
+    validateWebSearchTarget(request, { protocol: "codex", authMode: "cli" }),
+  ).toThrow("max_tool_calls");
+  expect(() =>
+    validateWebSearchTarget(request, {
+      protocol: "codex",
+      subscriptionAccountIds: ["account"],
+    }),
+  ).toThrow("max_tool_calls");
+  expect(() =>
+    validateWebSearchTarget(request, { protocol: "codex", authMode: "siwc" }),
+  ).not.toThrow();
   expect(() => validateWebSearchTarget(request, "openai-chat")).toThrow();
   expect(() =>
     decode("openai-responses", {

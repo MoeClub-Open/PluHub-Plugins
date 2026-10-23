@@ -11,6 +11,7 @@ import {
   type SubscriptionKind,
 } from "./subscription-auth.js";
 import { antigravityUserAgent } from "./antigravity-control.js";
+import { validateWebSearchTarget } from "./web-search.js";
 export function subscriptionRequest(
   kind: SubscriptionKind,
   request: AIRequest,
@@ -18,6 +19,7 @@ export function subscriptionRequest(
   credential: { secret: string; accountId?: string; projectId?: string },
 ) {
   request = normalizeOutputOptions(request, { ...upstream, protocol: kind });
+  validateWebSearchTarget(request, { ...upstream, protocol: kind });
   const protocol: Protocol =
     kind === "codex"
       ? "openai-responses"

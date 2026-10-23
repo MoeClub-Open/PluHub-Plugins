@@ -5,7 +5,7 @@
   "name": "OpenAI 媒体入口",
   "description": "图片、向量和音频接口。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
