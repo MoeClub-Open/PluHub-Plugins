@@ -11,6 +11,7 @@ import {
   Empty,
   Dialog,
   number,
+  latency,
 } from "../../lib/ui/components.js";
 
 const price = (value?: number) =>
@@ -289,6 +290,60 @@ function Page({ host }: { host: UIHost }) {
                   <dd>{number(selected.contextWindow)}</dd>
                 </div>
               )}
+            </dl>
+            <h3>{tr("近 24 小时")}</h3>
+            <dl className="catalog-detail-facts">
+              <div>
+                <dt>{tr("平均延迟")}</dt>
+                <dd>{latency(selected.metrics?.avgLatencyMs)}</dd>
+              </div>
+              <div>
+                <dt>{tr("首 Token 延迟")}</dt>
+                <dd>{latency(selected.metrics?.avgFirstTokenMs)}</dd>
+              </div>
+              <div
+                title={tr("成功流式请求的输出 Token / 生成时间；{0} 个样本", {
+                  "0": textValue(selected.metrics?.streamSamples ?? 0),
+                })}
+              >
+                <dt>{tr("输出速度")}</dt>
+                <dd>
+                  {selected.metrics?.outputTps === undefined
+                    ? "—"
+                    : number(selected.metrics.outputTps) + " TPS"}
+                </dd>
+              </div>
+              <div
+                title={tr(
+                  "已报告缓存用量的成功请求中，发生缓存命中的比例；{0} 个样本",
+                  { "0": textValue(selected.metrics?.cacheSamples ?? 0) },
+                )}
+              >
+                <dt>{tr("缓存命中率")}</dt>
+                <dd>
+                  {selected.metrics?.cacheHitRate === undefined
+                    ? "—"
+                    : number(selected.metrics.cacheHitRate * 100) + "%"}
+                </dd>
+              </div>
+              <div>
+                <dt>{tr("成功率")}</dt>
+                <dd>
+                  {selected.metrics?.requests
+                    ? number(
+                        (selected.metrics.successes /
+                          selected.metrics.requests) *
+                          100,
+                      ) + "%"
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>{tr("请求数")}</dt>
+                <dd>
+                  {selected.metrics ? number(selected.metrics.requests) : "—"}
+                </dd>
+              </div>
             </dl>
             {selected.pricing && (
               <div className="table-wrap">

@@ -3,6 +3,7 @@ import { definePlugin, HostError, json } from "@pluhub/sdk";
 import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
 import { beginObservation, observation } from "../../lib/ai/telemetry.js";
 import { rankingMigration, readRankings, recordRanking } from "./rankings.js";
+import { readModelMetrics } from "./model-metrics.js";
 import { costMicros } from "../../lib/commerce/money.js";
 import { csvResponse, exportGuard } from "../../lib/export/csv.js";
 import { validateUsage, validatePricing } from "../../lib/commerce/pricing.js";
@@ -18,10 +19,14 @@ export default definePlugin({
       "ALTER TABLE requests ADD COLUMN routing TEXT;",
       rankingMigration,
       "ALTER TABLE requests ADD COLUMN usage_json TEXT; ALTER TABLE requests ADD COLUMN pricing_json TEXT;",
+      "ALTER TABLE requests ADD COLUMN generation_ms INTEGER; CREATE INDEX requests_model_upstream_time ON requests(model,upstream,created_at);",
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
       readRankings(db, input),
+    );
+    host.provide("observability.model-metrics@1", (input) =>
+      readModelMetrics(db, input),
     );
     const retentionDays = Number(host.config().retentionDays ?? 30);
     const maxRows = Number(host.config().maxRows ?? 100000);
@@ -210,7 +215,7 @@ export default definePlugin({
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -233,6 +238,7 @@ export default definePlugin({
               state.routing ? JSON.stringify(state.routing) : null,
               usageDetails,
               prices && prices.length <= 16384 ? prices : null,
+              state.generationMs ?? null,
             );
             recordRanking(db, {
               at: state.startedAt,

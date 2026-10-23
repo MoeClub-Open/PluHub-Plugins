@@ -1,5 +1,11 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "平均延迟": "Average latency",
+  "近 24 小时": "Last 24 hours",
+  "输出速度": "Output speed",
+  "缓存命中率": "Cache hit rate",
+  "成功流式请求的输出 Token / 生成时间；{0} 个样本": "Output tokens / generation time for successful streams; {0} samples",
+  "已报告缓存用量的成功请求中，发生缓存命中的比例；{0} 个样本": "Successful cache-reporting requests with a cache hit; {0} samples",
   "24 小时": "24 hours",
   "7 天": "7 days",
   "30 天": "30 days",

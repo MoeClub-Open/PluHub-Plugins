@@ -61,6 +61,7 @@ export default definePlugin({
         )
         .map(([id, m]) => ({
           id,
+          channelId: m.upstream,
           name: m.name || id,
           provider: m.provider || upstreams[m.upstream]?.protocol || "Custom",
           description: m.description ?? "",

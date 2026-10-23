@@ -9,6 +9,7 @@ export interface AIObservation {
   upstream?: string;
   stream?: boolean;
   firstTokenMs?: number;
+  generationMs?: number;
   usage?: Usage;
   pricing?: RequestPricing;
   finished?: boolean;
@@ -62,16 +63,20 @@ export async function* observeEvents(
   ctx: RequestContext,
 ) {
   const state = observation(ctx)!;
+  let contentEvents = 0;
   try {
     for await (const event of events) {
       if (
-        (event.type === "text" ||
-          event.type === "tool" ||
-          event.type === "reasoning" ||
-          event.type === "refusal") &&
-        state.firstTokenMs === undefined
-      )
-        state.firstTokenMs = Date.now() - state.startedAt;
+        event.type === "text" ||
+        event.type === "tool" ||
+        event.type === "reasoning" ||
+        event.type === "refusal"
+      ) {
+        const elapsed = Date.now() - state.startedAt;
+        state.firstTokenMs ??= elapsed;
+        if (state.stream && ++contentEvents > 1 && elapsed > state.firstTokenMs)
+          state.generationMs = elapsed - state.firstTokenMs;
+      }
       if (
         event.type === "usage" &&
         [event.usage.input, event.usage.output].every(
