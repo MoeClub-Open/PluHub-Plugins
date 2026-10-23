@@ -45,12 +45,18 @@ export function planObservation(
   request: AIRequest,
   plan: AIPlan,
 ) {
+  const source = consumptionSource(plan);
+  // Personal routes are free to the wallet; observation retains their upstream cost.
+  const pricing =
+    source !== "platform" && plan.pricing
+      ? { ...plan.pricing, multiplier: 1 }
+      : plan.pricing;
   Object.assign(observation(ctx)!, {
     model: request.model,
     stream: request.stream,
     upstream: plan.upstreamId,
-    pricing: plan.pricing,
-    consumptionSource: consumptionSource(plan),
+    pricing,
+    consumptionSource: source,
     ...(plan.decision || plan.reasoning || plan.redirection || plan.workflows
       ? {
           routing: {

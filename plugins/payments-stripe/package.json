@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-payments-stripe",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.9",
   "type": "module",
   "private": true,
   "files": [

@@ -34,6 +34,11 @@ export default definePlugin({
       channelMigration,
       moderationMigration,
       "DELETE FROM credentials WHERE channel NOT LIKE 'personal:%';",
+      `UPDATE personal_channels
+       SET settings_json=json_remove(settings_json,'$.consumptionMode','$.consumptionMultiplier'),
+           revision=revision+1
+       WHERE json_type(settings_json,'$.consumptionMode') IS NOT NULL
+          OR json_type(settings_json,'$.consumptionMultiplier') IS NOT NULL;`,
     ]);
     host.cleanup(() => {
       db.close();

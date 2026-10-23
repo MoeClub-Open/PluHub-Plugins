@@ -5,7 +5,7 @@
   "name": "Stripe 支付",
   "description": "对接 Stripe 单次支付、订阅和回调验签。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

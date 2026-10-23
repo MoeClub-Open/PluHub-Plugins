@@ -3,9 +3,11 @@ import type { PriceReceipt } from "../commerce/pricing.js";
 export function PriceReceiptView({
   value,
   title,
+  showMultiplier = true,
 }: {
   value?: string | null;
   title?: string;
+  showMultiplier?: boolean;
 }) {
   let receipt: PriceReceipt;
   try {
@@ -56,9 +58,11 @@ export function PriceReceiptView({
           </tbody>
         </table>
       </div>
-      <p>
-        {tr("消耗倍率")} ×{Number(multiplier.toPrecision(12))}
-      </p>
+      {showMultiplier && (
+        <p>
+          {tr("消耗倍率")} ×{Number(multiplier.toPrecision(12))}
+        </p>
+      )}
       {receipt.tierAbove !== undefined && (
         <p>
           {tr("输入 Token 超过")} {receipt.tierAbove}

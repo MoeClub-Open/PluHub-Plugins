@@ -1,51 +1,7 @@
 import { it, expect } from "vitest";
-import {
-  consumptionPrices,
-  newApiPrices,
-  tokenPrice,
-} from "../lib/ai/channel-pricing.js";
+import { newApiPrices, tokenPrice } from "../lib/ai/channel-pricing.js";
 import { isPublicAddress, publicLookup } from "../lib/ai/public-network.js";
-it("keeps original prices independent and derives consumption rates from upstream quotes or a manual factor", () => {
-  const original = {
-    inputPrice: 10,
-    outputPrice: 40,
-    upstreamInputPrice: 2.5,
-    upstreamOutputPrice: 8,
-  };
-  expect(consumptionPrices(original)).toMatchObject({
-    inputMultiplier: 0.25,
-    outputMultiplier: 0.2,
-    effectiveInputPrice: 2.5,
-    effectiveOutputPrice: 8,
-    multiplierSource: "upstream",
-  });
-  expect(original.inputPrice).toBe(10);
-  expect(consumptionPrices(original, "manual", 0.3)).toMatchObject({
-    effectiveInputPrice: 3,
-    effectiveOutputPrice: 12,
-    inputMultiplier: 0.3,
-    outputMultiplier: 0.3,
-  });
-  expect(consumptionPrices(original, "manual", 0)).toMatchObject({
-    effectiveInputPrice: 0,
-    effectiveOutputPrice: 0,
-  });
-  expect(consumptionPrices({ inputPrice: 10 })).toMatchObject({
-    inputMultiplier: 1,
-    outputMultiplier: null,
-    multiplierSource: "original",
-  });
-  expect(
-    consumptionPrices({ inputPrice: 0, upstreamInputPrice: 2.5 }),
-  ).toMatchObject({ inputMultiplier: null, effectiveInputPrice: 2.5 });
-  expect(consumptionPrices({ upstreamOutputPrice: 2 })).toMatchObject({
-    outputMultiplier: null,
-    effectiveOutputPrice: 2,
-  });
-  expect(consumptionPrices({ inputPrice: 0, outputPrice: 0 })).toMatchObject({
-    inputMultiplier: 1,
-    outputMultiplier: 1,
-  });
+it("reads token prices from New API and validates price bounds", () => {
   const prices = newApiPrices({
     data: {
       model_ratio: { m: 1.25, fixed: 2, missing: 2 },

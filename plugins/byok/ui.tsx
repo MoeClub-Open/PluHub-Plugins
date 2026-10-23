@@ -12,7 +12,6 @@ import {
   ListPagination,
 } from "../../lib/ui/components.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
-import { consumptionPrices } from "../../lib/ai/channel-pricing.js";
 import { ChannelAdmin } from "./admin-ui.js";
 import { SubscriptionAccounts } from "../../lib/ui/subscription-accounts.js";
 import { parseApiConnection } from "../../lib/ai/personal-api.js";
@@ -45,8 +44,6 @@ const emptyModel = (): Model => ({
   upstreamInputPrice: "",
   upstreamOutputPrice: "",
 });
-const displayRatio = (n: number | null) =>
-  n === null ? "—" : Number(n.toFixed(6)).toString() + "×";
 function Page({ host }: { host: UIHost }) {
   const channels = useLoad<any[]>(() =>
     host.request(api + "/personal-channels"),
@@ -159,8 +156,6 @@ function Page({ host }: { host: UIHost }) {
             protocol: "openai-chat",
             baseUrl: "",
             enabled: true,
-            consumptionMode: "auto",
-            consumptionMultiplier: 1,
           },
     );
     setModels(
@@ -322,7 +317,7 @@ function Page({ host }: { host: UIHost }) {
     );
   return (
     <>
-      <style>{`.modal:has(.personal-models){width:min(1150px,calc(100vw - 32px));max-width:1150px}.modal:has(.personal-models.is-sub){width:min(760px,calc(100vw - 32px))}.personal-models.is-sub table{min-width:420px}.personal-models{overflow-x:auto;margin:10px 0}.personal-models table{min-width:1040px}.personal-models input{min-width:92px;width:100%}.personal-models td{padding:7px}.personal-models th{white-space:nowrap}.personal-models small{white-space:nowrap}.subscription-model-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 14px;max-height:280px;margin:8px 0;overflow:auto}.subscription-model-option{min-width:0;padding:3px 4px}.subscription-model-option span{display:flex;min-width:0;flex-direction:column}.subscription-model-option small{overflow:hidden;text-overflow:ellipsis}.channel-meta{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:640px){.subscription-model-options{grid-template-columns:minmax(0,1fr)}}`}</style>
+      <style>{`.modal:has(.personal-models){width:min(1150px,calc(100vw - 32px));max-width:1150px}.modal:has(.personal-models.is-sub){width:min(760px,calc(100vw - 32px))}.personal-models.is-sub table{min-width:420px}.personal-models{overflow-x:auto;margin:10px 0}.personal-models table{min-width:840px}.personal-models input{min-width:92px;width:100%}.personal-models td{padding:7px}.personal-models th{white-space:nowrap}.personal-models small{white-space:nowrap}.subscription-model-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 14px;max-height:280px;margin:8px 0;overflow:auto}.subscription-model-option{min-width:0;padding:3px 4px}.subscription-model-option span{display:flex;min-width:0;flex-direction:column}.subscription-model-option small{overflow:hidden;text-overflow:ellipsis}.channel-meta{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:640px){.subscription-model-options{grid-template-columns:minmax(0,1fr)}}`}</style>
       <div className="tabs" role="tablist" aria-label={tr("个人上游管理")}>
         <button
           role="tab"
@@ -364,8 +359,6 @@ function Page({ host }: { host: UIHost }) {
                   ? (account.authMode ?? "cli")
                   : undefined,
               enabled: true,
-              consumptionMode: "auto",
-              consumptionMultiplier: 1,
             });
           }}
         />
@@ -443,11 +436,7 @@ function Page({ host }: { host: UIHost }) {
                             ? (subscriptions.data?.find(
                                 (a) => a.id === c.subscriptionAccountId,
                               )?.name ?? tr("自带订阅"))
-                            : c.consumptionMode === "manual"
-                              ? tr("消耗 {0}×", {
-                                  "0": textValue(c.consumptionMultiplier),
-                                })
-                              : tr("自动计算消耗倍率")}
+                            : "×0"}
                         </small>
                         <small>
                           {Object.keys(c.models).slice(0, 3).join(", ")}
@@ -838,47 +827,6 @@ function Page({ host }: { host: UIHost }) {
                 }
               />
             )}
-            {!subscription && (
-              <>
-                <label>
-                  {tr("消耗倍率模式")}
-                  <Select
-                    value={editing.consumptionMode ?? "auto"}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        consumptionMode: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="auto">
-                      {tr("自动 · 上游报价 ÷ 模型原价")}
-                    </option>
-                    <option value="manual">{tr("手动 · 统一消耗倍率")}</option>
-                  </Select>
-                </label>
-                {editing.consumptionMode === "manual" && (
-                  <label>
-                    {tr("消耗倍率")}
-                    <input
-                      type="number"
-                      min="0"
-                      max="10000"
-                      step="any"
-                      value={editing.consumptionMultiplier ?? 1}
-                      disabled={busy}
-                      onChange={(e) =>
-                        setEditing({
-                          ...editing,
-                          consumptionMultiplier: Number(e.target.value),
-                        })
-                      }
-                    />
-                  </label>
-                )}
-              </>
-            )}
             <div className="section-heading">
               <strong>
                 {subscription ? tr("模型映射") : tr("模型映射与原价")}
@@ -1022,13 +970,6 @@ function Page({ host }: { host: UIHost }) {
                 </div>
               </div>
             )}
-            {!subscription && (
-              <p className="field-note">
-                {tr(
-                  "USD / 百万 Token；无上游报价时按原价 1× 估算，费用由上游结算。",
-                )}
-              </p>
-            )}
             <div
               className={"personal-models" + (subscription ? " is-sub" : "")}
             >
@@ -1043,7 +984,6 @@ function Page({ host }: { host: UIHost }) {
                         <th>{tr("输出原价 $")}</th>
                         <th>{tr("上游输入报价 $")}</th>
                         <th>{tr("上游输出报价 $")}</th>
-                        <th>{tr("输入 / 输出消耗倍率")}</th>
                       </>
                     )}
                     <th />
@@ -1051,28 +991,6 @@ function Page({ host }: { host: UIHost }) {
                 </thead>
                 <tbody>
                   {models.map((m, i) => {
-                    const ratios = consumptionPrices(
-                      {
-                        inputPrice:
-                          m.inputPrice === ""
-                            ? undefined
-                            : Number(m.inputPrice),
-                        outputPrice:
-                          m.outputPrice === ""
-                            ? undefined
-                            : Number(m.outputPrice),
-                        upstreamInputPrice:
-                          m.upstreamInputPrice === ""
-                            ? undefined
-                            : Number(m.upstreamInputPrice),
-                        upstreamOutputPrice:
-                          m.upstreamOutputPrice === ""
-                            ? undefined
-                            : Number(m.upstreamOutputPrice),
-                      },
-                      editing.consumptionMode,
-                      editing.consumptionMultiplier,
-                    );
                     return (
                       <tr key={i}>
                         <td>
@@ -1160,19 +1078,6 @@ function Page({ host }: { host: UIHost }) {
                                 />
                               </td>
                             ))}
-                            <td>
-                              <small>
-                                {displayRatio(ratios.inputMultiplier)} /{" "}
-                                {displayRatio(ratios.outputMultiplier)}
-                              </small>
-                              <small>
-                                {ratios.multiplierSource === "original"
-                                  ? tr("原价估算")
-                                  : ratios.multiplierSource === "manual"
-                                    ? tr("手动倍率")
-                                    : tr("上游报价")}
-                              </small>
-                            </td>
                           </>
                         )}
                         <td>
@@ -1223,7 +1128,7 @@ function Page({ host }: { host: UIHost }) {
                       disabled={busy}
                       onClick={() => void sync("prices")}
                     >
-                      {tr("获取公开倍率")}
+                      {tr("同步上游报价")}
                     </button>
                   )}
                 </div>

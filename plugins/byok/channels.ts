@@ -20,11 +20,7 @@ import type {
 } from "@pluhub/contracts/ai";
 import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { channelPresets } from "../../lib/ai/channel-presets.js";
-import {
-  tokenPrice,
-  consumptionPrices,
-  newApiPrices,
-} from "../../lib/ai/channel-pricing.js";
+import { tokenPrice, newApiPrices } from "../../lib/ai/channel-pricing.js";
 import { defaultChannelFlow } from "../../lib/ai/channel-config.js";
 import {
   compileWorkflow,
@@ -60,8 +56,6 @@ type Settings = {
   interfaces?: UpstreamInterface[];
   models: Record<string, Model>;
   flow: ChannelWorkflow;
-  consumptionMode: "auto" | "manual";
-  consumptionMultiplier: number;
   subscriptionAccountId?: string;
   authMode?: "cli" | "siwc";
 };
@@ -298,36 +292,12 @@ export function installPersonalChannels(
         pricingSource: model?.pricingSource === "newapi" ? "newapi" : "manual",
       };
     }
-    const consumptionMode = body.consumptionMode ?? "auto",
-      consumptionMultiplier = body.consumptionMultiplier ?? 1;
-    if (
-      !["auto", "manual"].includes(consumptionMode) ||
-      typeof consumptionMultiplier !== "number" ||
-      !Number.isFinite(consumptionMultiplier) ||
-      consumptionMultiplier < 0 ||
-      consumptionMultiplier > 10000
-    )
-      throw new HostError(
-        "invalid_multiplier",
-        "消耗倍率必须是 0 到 10000 的有限数字",
-      );
-    for (const model of Object.values(models)) {
-      const effective = consumptionPrices(
-        model,
-        consumptionMode,
-        consumptionMultiplier,
-      );
-      tokenPrice(effective.effectiveInputPrice);
-      tokenPrice(effective.effectiveOutputPrice);
-    }
     return {
       protocol: body.protocol,
       baseUrl: base.baseUrl,
       interfaces,
       models,
       flow: validateFlow(body.flow, models),
-      consumptionMode,
-      consumptionMultiplier,
       ...(subscription
         ? {
             subscriptionAccountId: requiredString(
@@ -351,24 +321,12 @@ export function installPersonalChannels(
       revision: row.revision,
       updatedAt: row.updated_at,
       ...config,
+      consumptionMultiplier: 0,
       hasCredential: !!db
         .prepare("SELECT id FROM credentials WHERE id=? AND user_id=?")
         .get(row.id, row.user_id),
       blocked: !!row.admin_blocked,
       blockReason: row.admin_note,
-      models: Object.fromEntries(
-        Object.entries(config.models).map(([alias, m]) => [
-          alias,
-          {
-            ...m,
-            ...consumptionPrices(
-              m,
-              config.consumptionMode,
-              config.consumptionMultiplier,
-            ),
-          },
-        ]),
-      ),
     };
   }
   function runtime(row: any): PersonalChannel {
@@ -397,10 +355,7 @@ export function installPersonalChannels(
         flow: config.flow,
         credentialId: row.id,
         credentialOwner: row.user_id,
-        consumptionMultiplier:
-          config.consumptionMode === "manual"
-            ? config.consumptionMultiplier
-            : 1,
+        consumptionMultiplier: 0,
         ...(config.subscriptionAccountId
           ? {
               subscriptionAccountIds: [config.subscriptionAccountId],
@@ -409,28 +364,15 @@ export function installPersonalChannels(
           : {}),
       },
       models: Object.fromEntries(
-        Object.entries(config.models).map(([alias, m]) => {
-          const effective = consumptionPrices(
-            m,
-            config.consumptionMode,
-            config.consumptionMultiplier,
-          );
-          return [
-            alias,
-            {
-              ...m,
-              upstream: row.id,
-              effectiveInputPrice:
-                config.consumptionMode === "manual"
-                  ? m.inputPrice
-                  : effective.effectiveInputPrice,
-              effectiveOutputPrice:
-                config.consumptionMode === "manual"
-                  ? m.outputPrice
-                  : effective.effectiveOutputPrice,
-            },
-          ];
-        }),
+        Object.entries(config.models).map(([alias, m]) => [
+          alias,
+          {
+            ...m,
+            upstream: row.id,
+            effectiveInputPrice: m.upstreamInputPrice ?? m.inputPrice,
+            effectiveOutputPrice: m.upstreamOutputPrice ?? m.outputPrice,
+          },
+        ]),
       ),
     };
   }

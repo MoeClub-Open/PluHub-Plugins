@@ -5,7 +5,7 @@
   "name": "易支付",
   "description": "对接易支付 V1/V2、MD5/RSA 签名。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.10",
+  "version": "0.1.0-alpha.11",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

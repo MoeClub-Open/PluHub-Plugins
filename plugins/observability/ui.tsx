@@ -667,6 +667,11 @@ function Page({ host }: { host: UIHost }) {
           <PriceReceiptView
             value={estimateReceipt(selected)}
             title={tr("费用估算明细")}
+            showMultiplier={
+              !["byoapi", "byosub", "personal"].includes(
+                selected.consumption_source,
+              )
+            }
           />
           {selected.routing && <RoutingDetails value={selected.routing} />}
           {scope.data?.scope === "all" && (

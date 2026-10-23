@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-billing",
-  "version": "0.1.0-alpha.22",
+  "version": "0.1.0-alpha.24",
   "type": "module",
   "private": true,
   "files": [
