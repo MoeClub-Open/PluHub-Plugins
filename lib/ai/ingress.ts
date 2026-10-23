@@ -92,7 +92,7 @@ export function createIngress(protocol: Protocol) {
           ctx.state.set(
             "ai.plan",
             await host.call<AIPlan>(
-              "ai.routing@1",
+              "ai.routing@2",
               {
                 model: decoded.model,
                 ingressProtocol: protocol,

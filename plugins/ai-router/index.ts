@@ -39,6 +39,7 @@ export default definePlugin({
   setup(host) {
     const getCatalog = (input?: CatalogScope) => readCatalog(host, input);
     host.provide("ai.catalog@1", getCatalog);
+    host.provide("ai.catalog@2", getCatalog);
     async function channels(input?: { userId?: string }) {
       const platform = Object.entries(
         (host.config().upstreams ?? {}) as Record<string, Upstream>,
@@ -502,6 +503,9 @@ export default definePlugin({
       },
     });
     host.provide("ai.routing@1", (request: RoutingRequest, signal) =>
+      planRoute(host, request, signal),
+    );
+    host.provide("ai.routing@2", (request: RoutingRequest, signal) =>
       planRoute(host, request, signal),
     );
     host.provide(

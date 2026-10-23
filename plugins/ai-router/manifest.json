@@ -5,7 +5,7 @@
   "name": "渠道与模型路由",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.22",
+  "version": "0.1.0-alpha.23",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -13,8 +13,10 @@
   },
   "provides": [
     "ai.routing@1",
+    "ai.routing@2",
     "ai.execution@1",
     "ai.catalog@1",
+    "ai.catalog@2",
     "ai.channels@1",
     "ai.targets@1"
   ],

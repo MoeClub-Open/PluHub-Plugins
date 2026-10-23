@@ -32,7 +32,7 @@ export default definePlugin({
       access: "public",
       async handle() {
         // Never use a visitor's channel selector or identity for this listing.
-        const models = await host.call<CatalogModel[]>("ai.catalog@1");
+        const models = await host.call<CatalogModel[]>("ai.catalog@2");
         return Response.json(
           await withMetrics(models).then((models) =>
             models.map((model) => ({
@@ -61,7 +61,7 @@ export default definePlugin({
       access: "authenticated",
       async handle(request, ctx) {
         const models = await host.call<CatalogModel[]>(
-          "ai.catalog@1",
+          "ai.catalog@2",
           catalogScope(request, ctx),
         );
         const allowed = ctx.principal?.attributes?.models as

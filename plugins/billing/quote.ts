@@ -24,7 +24,7 @@ export function installPriceQuote(host: Host) {
       const allowed = ctx.principal?.attributes?.models as string[] | undefined;
       if (allowed?.length && !allowed.includes(model))
         throw new HostError("forbidden", "Model is not allowed", 403);
-      const models = await host.call<CatalogModel[]>("ai.catalog@1", {
+      const models = await host.call<CatalogModel[]>("ai.catalog@2", {
         principalId: ctx.principal!.id,
         ...channels,
       });

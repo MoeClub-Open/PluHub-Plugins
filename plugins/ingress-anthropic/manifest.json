@@ -5,7 +5,7 @@
   "name": "Anthropic Messages 入口",
   "description": "接收并解析 Anthropic Messages 客户端请求。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -15,7 +15,7 @@
     "ai.ingress.anthropic@1"
   ],
   "requires": [
-    "ai.routing@1",
+    "ai.routing@2",
     "ai.execution@1"
   ],
   "permissions": [
