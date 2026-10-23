@@ -282,6 +282,7 @@ export function decode(
       "stream",
       "tools",
       "max_output_tokens",
+      "max_tool_calls",
       "temperature",
       "store",
       "reasoning",
@@ -957,6 +958,9 @@ export function encodeRequest(protocol: Protocol, request: AIRequest): any {
       ...(request.webSearch?.choice
         ? { tool_choice: { type: request.webSearch.choice } }
         : {}),
+      ...(request.webSearch?.maxCalls !== undefined
+        ? { max_tool_calls: request.webSearch.maxCalls }
+        : {}),
       ...(request.webSearch?.includeSources
         ? {
             include: [
@@ -1347,7 +1351,11 @@ export function reason(value: any): AIResult["reason"] {
 export async function* resultEvents(result: AIResult): AsyncGenerator<AIEvent> {
   for (const [index, block] of (result.reasoning ?? []).entries())
     yield { type: "reasoning", index, ...block };
-  for (const call of result.searchCalls ?? []) yield { type: "search", call };
+  for (const call of result.searchCalls ?? [])
+    yield {
+      type: "search",
+      call: { ...call, status: call.status ?? "completed" },
+    };
   if (result.refusal) yield { type: "refusal", text: result.refusal };
   if (result.text) yield { type: "text", text: result.text };
   for (const citation of result.citations ?? [])
@@ -1405,7 +1413,7 @@ export function appendEvent(out: AIResult, e: AIEvent) {
     )
       citations.push(e.citation);
   } else if (e.type === "usage") out.usage = e.usage;
-  else {
+  else if (e.type === "finish") {
     out.reason = e.reason;
     if (e.stopSequence) out.stopSequence = e.stopSequence;
   }

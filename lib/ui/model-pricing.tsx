@@ -11,6 +11,8 @@ const labels = () => ({
   cacheWrite1h: tr("缓存写入 · 1 小时"),
 });
 export function readModelPricing(f: FormData): ModelPricing | undefined {
+  const search = String(f.get("webSearchPrice") ?? "").trim();
+  const extra = search ? { webSearch: Number(search) } : {};
   const mode = String(f.get("billingMode") ?? "tokens") as NonNullable<
     ModelPricing["mode"]
   >;
@@ -18,10 +20,11 @@ export function readModelPricing(f: FormData): ModelPricing | undefined {
     return {
       mode,
       expression: String(f.get("billingExpression") ?? "").trim(),
+      ...extra,
     };
   if (mode === "request")
-    return { mode, request: Number(f.get("requestPrice")) };
-  const pricing: ModelPricing = {};
+    return { mode, request: Number(f.get("requestPrice")), ...extra };
+  const pricing: ModelPricing = { ...extra };
   for (const key of cacheFields) {
     const value = String(f.get(key) ?? "").trim();
     if (value) pricing[key] = Number(value);
@@ -74,6 +77,11 @@ export function ModelPriceFields({ model }: { model?: ModelRoute }) {
   );
   return (
     <>
+      {rate(
+        "webSearchPrice",
+        tr("网页搜索原价 · USD / 次"),
+        model?.pricing?.webSearch,
+      )}
       <label>
         {tr("计价方式")}
         <Select

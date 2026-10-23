@@ -79,6 +79,7 @@ export async function* wire(
     block: { key: string; index: number; kind: string } | undefined;
   const closedReasoning = new Set<string>();
   const completedSearches = new Set<string>();
+  const searchPhases = new Set<string>();
   function* closeBlock(): Generator<string> {
     if (!block) return;
     if (block.kind === "thinking") {
@@ -312,11 +313,16 @@ export async function* wire(
           yield* item(key, { ...e.call, status: "in_progress" });
           const entry = items.find((item) => item.key === key)!;
           entry.item = { ...entry.item, ...e.call };
-          if (e.phase)
-            yield response("response.web_search_call." + e.phase, {
+          const phase =
+            e.phase ??
+            (e.call.status === "completed" ? "completed" : undefined);
+          if (phase && !searchPhases.has(key + ":" + phase)) {
+            searchPhases.add(key + ":" + phase);
+            yield response("response.web_search_call." + phase, {
               item_id: entry.item.id,
               output_index: entry.index,
             });
+          }
           if (
             !e.phase &&
             ["completed", "failed", "incomplete"].includes(
@@ -486,7 +492,9 @@ export async function* wire(
           });
       } else if (e.type === "tool") yield* tool(e.index, !!e.done);
       else if (e.type === "usage") usageKnown = true;
-      else {
+      else if (e.type === "media")
+        unsupported("media output in a conversational endpoint");
+      else if (e.type === "finish") {
         for (let index = 0; index < r.calls.length; index++)
           if (r.calls[index]) yield* tool(index, true);
         finished = true;

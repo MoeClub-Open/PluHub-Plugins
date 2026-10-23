@@ -10,6 +10,7 @@ export async function cancelSSE(body: ReadableStream<Uint8Array>) {
 }
 export async function* parseSSE(
   body: ReadableStream<Uint8Array>,
+  maximumEventSize = 1048576,
 ): AsyncGenerator<{ event: string; data: string }> {
   const reader = body.getReader();
   readers.set(body, reader);
@@ -43,7 +44,7 @@ export async function* parseSSE(
         newline.lastIndex = 0;
         scan = 0;
         eventSize += line.length + 1;
-        if (eventSize > 1048576)
+        if (eventSize > maximumEventSize)
           throw new HostError("upstream_protocol", "SSE event too large", 502);
         if (!line) {
           if (data.length)
@@ -60,7 +61,7 @@ export async function* parseSSE(
         }
       }
       if (!match) scan = buffer.length;
-      if (buffer.length + eventSize > 1024 * 1024)
+      if (buffer.length + eventSize > maximumEventSize)
         throw new HostError("upstream_protocol", "SSE event too large", 502);
       if (done) {
         finished = true;

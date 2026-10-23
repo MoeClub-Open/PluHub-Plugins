@@ -5,19 +5,15 @@
   "name": "旧版流程兼容",
   "description": "为旧配置提供 ai.workflow 能力；新渠道直接使用渠道内的流程图。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "ai.workflow@1"
-  ],
+  "provides": ["ai.workflow@1"],
   "requires": [],
-  "permissions": [
-    "api.register"
-  ],
+  "permissions": ["api.register"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -29,10 +25,7 @@
         "additionalProperties": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "entry",
-            "nodes"
-          ],
+          "required": ["entry", "nodes"],
           "properties": {
             "name": {
               "type": "string",
@@ -52,11 +45,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "next"
-                    ],
+                    "required": ["id", "type", "next"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -76,13 +65,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "test",
-                      "yes",
-                      "no"
-                    ],
+                    "required": ["id", "type", "test", "yes", "no"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -134,9 +117,7 @@
                           }
                         },
                         "then": {
-                          "required": [
-                            "protocol"
-                          ]
+                          "required": ["protocol"]
                         }
                       }
                     ]
@@ -144,12 +125,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "next",
-                      "text"
-                    ],
+                    "required": ["id", "type", "next", "text"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -174,12 +150,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "next",
-                      "effort"
-                    ],
+                    "required": ["id", "type", "next", "effort"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -210,12 +181,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "next",
-                      "limit"
-                    ],
+                    "required": ["id", "type", "next", "limit"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -240,12 +206,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "next",
-                      "tokenizer"
-                    ],
+                    "required": ["id", "type", "next", "tokenizer"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -285,26 +246,17 @@
                     },
                     "anyOf": [
                       {
-                        "required": [
-                          "rate"
-                        ]
+                        "required": ["rate"]
                       },
                       {
-                        "required": [
-                          "aggregateRate"
-                        ]
+                        "required": ["aggregateRate"]
                       }
                     ]
                   },
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "target",
-                      "mode"
-                    ],
+                    "required": ["id", "type", "target", "mode"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -320,20 +272,14 @@
                         "maxLength": 256
                       },
                       "mode": {
-                        "enum": [
-                          "implicit",
-                          "explicit"
-                        ]
+                        "enum": ["implicit", "explicit"]
                       }
                     }
                   },
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type"
-                    ],
+                    "required": ["id", "type"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -346,9 +292,7 @@
                       "upstream": {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "protocol"
-                        ],
+                        "required": ["protocol"],
                         "properties": {
                           "protocol": {
                             "enum": [
@@ -378,10 +322,7 @@
                             "maxLength": 512
                           },
                           "authMode": {
-                            "enum": [
-                              "siwc",
-                              "cli"
-                            ]
+                            "enum": ["siwc", "cli"]
                           },
                           "subscriptionAccountIds": {
                             "type": "array",
@@ -399,15 +340,10 @@
                           {
                             "anyOf": [
                               {
-                                "required": [
-                                  "baseUrl",
-                                  "keyRef"
-                                ]
+                                "required": ["baseUrl", "keyRef"]
                               },
                               {
-                                "required": [
-                                  "subscriptionAccountIds"
-                                ]
+                                "required": ["subscriptionAccountIds"]
                               }
                             ]
                           }
@@ -423,11 +359,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "profile"
-                    ],
+                    "required": ["id", "type", "profile"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -447,13 +379,7 @@
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "next",
-                      "allow",
-                      "conversion"
-                    ],
+                    "required": ["id", "type", "next", "allow", "conversion"],
                     "properties": {
                       "id": {
                         "type": "string",
@@ -483,22 +409,14 @@
                         }
                       },
                       "conversion": {
-                        "enum": [
-                          "auto",
-                          "disabled"
-                        ]
+                        "enum": ["auto", "disabled"]
                       }
                     }
                   },
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "type",
-                      "next",
-                      "rule"
-                    ],
+                    "required": ["id", "type", "next", "rule"],
                     "properties": {
                       "id": {
                         "type": "string",

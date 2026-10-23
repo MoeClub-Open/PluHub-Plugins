@@ -32,6 +32,8 @@ export function validRate(
   return value;
 }
 export function validatePricing(price: RequestPricing) {
+  if (price.webSearch !== undefined)
+    validRate(price.webSearch, "web search price");
   for (const key of rateKeys) {
     if (key === "input" || key === "output" || price[key] !== undefined)
       validRate(price[key], key);
@@ -112,6 +114,7 @@ export function validateUsage(usage: Usage) {
     "cacheWrite",
     "cacheWrite1h",
     "reasoning",
+    "webSearch",
   ] as const)
     if (
       (key === "input" || key === "output" || usage[key] !== undefined) &&
@@ -149,11 +152,18 @@ export function priceUsage(
   validateUsage(usage);
   if (pricing.mode === "expression") {
     const result = expressionCost(usage, pricing);
-    let total = result.amount;
+    const original = add(
+      result.amount,
+      multiply(
+        decimal(pricing.webSearch ?? 0),
+        decimal((usage.webSearch ?? 0) * 1_000_000),
+      ),
+    );
+    let total = original;
     total = multiply(total, decimal(pricing.multiplier ?? 1));
     return {
       amount: rounded(total),
-      originalAmount: rounded(result.amount),
+      originalAmount: rounded(original),
       mode: result.mode,
       tier: result.tier,
       expression: pricing.expression,
@@ -166,6 +176,15 @@ export function priceUsage(
           quantity: 1,
           rate: expressionDollars(result.amount),
         },
+        ...(usage.webSearch
+          ? [
+              {
+                kind: "webSearch",
+                quantity: usage.webSearch,
+                rate: pricing.webSearch ?? 0,
+              },
+            ]
+          : []),
       ],
     };
   }
@@ -213,6 +232,14 @@ export function priceUsage(
         decimal(line.quantity * (mode === "request" ? 1_000_000 : 1)),
       ),
     );
+  if (usage.webSearch) {
+    const rate = pricing.webSearch ?? 0;
+    total = add(
+      total,
+      multiply(decimal(rate), decimal(usage.webSearch * 1_000_000)),
+    );
+    lines.push({ kind: "webSearch", quantity: usage.webSearch, rate });
+  }
   const originalAmount = rounded(total);
   total = multiply(total, decimal(pricing.multiplier ?? 1));
   return {
@@ -230,23 +257,30 @@ export function reserveCost(
   input: number,
   output: number,
   pricing: RequestPricing,
+  webSearch = 0,
 ): number {
   validatePricing(pricing);
   if (pricing.mode === "expression")
     return rounded(
       multiply(
-        expressionCost({ input, output }, pricing, true).amount,
+        add(
+          expressionCost({ input, output }, pricing, true).amount,
+          multiply(
+            decimal(pricing.webSearch ?? 0),
+            decimal(webSearch * 1_000_000),
+          ),
+        ),
         decimal(pricing.multiplier ?? 1),
       ),
     );
   if (pricing.mode === "request")
-    return priceUsage({ input: 0, output: 0 }, pricing).amount;
+    return priceUsage({ input: 0, output: 0, webSearch }, pricing).amount;
   const tiers = [
     pricing,
     ...(pricing.tiers ?? []).map((tier) => ({ ...pricing, ...tier })),
   ];
   return priceUsage(
-    { input, output },
+    { input, output, webSearch },
     {
       ...pricing,
       tiers: undefined,

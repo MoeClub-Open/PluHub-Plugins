@@ -1,5 +1,6 @@
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
+import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { Upstream, ModelRoute, ModelRedirect } from "@pluhub/contracts/ai";
@@ -221,6 +222,7 @@ function Page({ host }: { host: UIHost }) {
           }
           if (!m.name) delete m.name;
           m.pricing = readModelPricing(f);
+          m.operations = f.getAll("operations") as ModelRoute["operations"];
           if (!m.pricing) delete m.pricing;
           if (!m.provider) delete m.provider;
           if (text("reasoningEfforts"))
@@ -584,6 +586,7 @@ function Page({ host }: { host: UIHost }) {
                       <ModelPriceFields model={existing} />
                     </div>
                   </fieldset>
+                  <ModelEndpoints value={existing?.operations} />
                   <label className="full">
                     {tr("支持的思考档位（逗号分隔）")}
                     <input

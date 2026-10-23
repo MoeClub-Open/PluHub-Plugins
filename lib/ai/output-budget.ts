@@ -55,6 +55,32 @@ export function outputBudget(
   plan: AIPlan,
   config: Record<string, unknown>,
 ): { request: AIRequest; budget: OutputBudget } {
+  const media = (plan.preparedRequest ?? original).operation;
+  if (media) {
+    if (
+      media.kind !== "embeddings" &&
+      plan.pricing &&
+      !fixedPricing(plan.pricing)
+    )
+      throw new HostError(
+        "media_price_required",
+        "Configure per-request or fixed expression pricing for this media model",
+        503,
+      );
+    return {
+      request: plan.preparedRequest ?? original,
+      budget: {
+        mode:
+          media.kind === "embeddings" &&
+          plan.pricing &&
+          !fixedPricing(plan.pricing)
+            ? "estimate"
+            : "fixed",
+        source: "default",
+        reservedTokens: 0,
+      },
+    };
+  }
   const prepared = normalizeOutputOptions(
     plan.preparedRequest ?? original,
     plan.upstream,

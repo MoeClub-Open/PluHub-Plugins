@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "official.upstream-openai-media",
+  "category": "upstream",
+  "name": "OpenAI 媒体上游",
+  "description": "图片、向量和音频接口。",
+  "codeReload": "parallel",
+  "version": "0.1.0-alpha.1",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": ["ai.media.openai-chat@1", "ai.media.openai-responses@1"],
+  "requires": ["http.transport@1"],
+  "permissions": ["secrets.read"],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "secretRefs": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        }
+      }
+    }
+  },
+  "optionalRequires": ["credentials.resolve@1"]
+}

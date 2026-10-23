@@ -72,6 +72,7 @@ export async function* observeEvents(
       if (
         event.type === "text" ||
         event.type === "tool" ||
+        event.type === "media" ||
         event.type === "reasoning" ||
         event.type === "refusal"
       ) {
@@ -89,7 +90,10 @@ export async function* observeEvents(
           (n) => Number.isSafeInteger(n) && n >= 0,
         )
       ) {
-        state.usage = event.usage;
+        state.usage = {
+          ...event.usage,
+          ...(searchCalls.size ? { webSearch: searchCalls.size } : {}),
+        };
         const budget = state.routing?.outputBudget;
         if (
           budget?.mode === "bounded" &&
@@ -102,9 +106,13 @@ export async function* observeEvents(
             502,
           );
       }
-      if (event.type === "search" && event.call.action?.type === "search") {
+      if (
+        event.type === "search" &&
+        (event.call.status === "completed" || event.phase === "completed")
+      ) {
         searchCalls.add(event.call.id);
         state.routing = { ...state.routing, webSearchCalls: searchCalls.size };
+        if (state.usage) state.usage.webSearch = searchCalls.size;
       }
       if (event.type === "finish") state.finished = true;
       yield event;

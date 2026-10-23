@@ -155,6 +155,15 @@ export function runWorkflow(
     signal.throwIfAborted();
     const node = graph.nodes.get(id)!;
     trace.nodes.push(id);
+    if (
+      request.operation &&
+      ["prompt", "reasoning", "maxTokens", "tps", "routing"].includes(node.type)
+    )
+      throw new HostError(
+        "operation_not_supported",
+        "This channel node requires a conversational request",
+        400,
+      );
     if (node.type === "provider")
       return {
         request,

@@ -5,20 +5,14 @@
   "name": "智能路由",
   "description": "根据任务选择模型和思考强度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.12",
+  "version": "0.1.0-alpha.13",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "ai.auto-routing@1",
-    "ai.upstream.auto-router@1"
-  ],
-  "requires": [
-    "ai.targets@1",
-    "http.transport@1"
-  ],
+  "provides": ["ai.auto-routing@1", "ai.upstream.auto-router@1"],
+  "requires": ["ai.targets@1", "http.transport@1"],
   "optionalRequires": [
     "ai.upstream.openai-chat@1",
     "ai.upstream.openai-responses@1",
@@ -28,10 +22,7 @@
     "ai.upstream.claude-subscription@1",
     "ai.upstream.antigravity@1"
   ],
-  "permissions": [
-    "api.register",
-    "secrets.read"
-  ],
+  "permissions": ["api.register", "secrets.read"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -42,11 +33,7 @@
         "additionalProperties": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "mode",
-            "candidates",
-            "decision"
-          ],
+          "required": ["mode", "candidates", "decision"],
           "properties": {
             "name": {
               "type": "string",
@@ -54,12 +41,7 @@
               "maxLength": 256
             },
             "mode": {
-              "enum": [
-                "model",
-                "effort",
-                "both",
-                "manual"
-              ]
+              "enum": ["model", "effort", "both", "manual"]
             },
             "candidates": {
               "type": "array",
@@ -68,11 +50,7 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "id",
-                  "target",
-                  "strength"
-                ],
+                "required": ["id", "target", "strength"],
                 "properties": {
                   "id": {
                     "type": "string",
@@ -143,17 +121,10 @@
             "decision": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "kind"
-              ],
+              "required": ["kind"],
               "properties": {
                 "kind": {
-                  "enum": [
-                    "rules",
-                    "luna",
-                    "systemone",
-                    "jev"
-                  ]
+                  "enum": ["rules", "luna", "systemone", "jev"]
                 },
                 "model": {
                   "type": "string",
@@ -186,10 +157,7 @@
               "maximum": 1
             },
             "onFailure": {
-              "enum": [
-                "fallback",
-                "reject"
-              ]
+              "enum": ["fallback", "reject"]
             },
             "fallbackCandidate": {
               "type": "string",
@@ -284,11 +252,7 @@
               }
             },
             "strategy": {
-              "enum": [
-                "balanced",
-                "cost",
-                "quality"
-              ]
+              "enum": ["balanced", "cost", "quality"]
             }
           }
         }

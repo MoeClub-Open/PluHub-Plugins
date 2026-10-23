@@ -213,7 +213,7 @@ it("counts cached input and thought output while refusing to fabricate missing s
       },
       "m",
     ).usage,
-  ).toEqual({ input: 2, output: 8, reasoning: 5 });
+  ).toEqual({ input: 2, output: 8, reasoning: 5, cacheRead: 0 });
   const body = new ReadableStream<Uint8Array>({
     start(c) {
       c.enqueue(

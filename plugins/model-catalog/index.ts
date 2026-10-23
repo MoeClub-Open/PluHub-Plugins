@@ -48,6 +48,7 @@ export default definePlugin({
               channel: model.channel,
               billing: model.billing,
               features: model.features,
+              operations: model.operations,
               metrics: model.metrics,
             })),
           ),

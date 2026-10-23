@@ -253,6 +253,15 @@ export function UpstreamInterfaces({
             <details className="full">
               <summary>{tr("高级参数")}</summary>
               <div className="form-grid">
+                {["openai-chat", "openai-responses"].includes(
+                  route.protocol,
+                ) && (
+                  <JsonField
+                    label={tr("媒体接口路径")}
+                    value={route.mediaPaths}
+                    onChange={(mediaPaths) => update(index, { mediaPaths })}
+                  />
+                )}
                 <label>
                   {tr("模型目录路径")}
                   <input

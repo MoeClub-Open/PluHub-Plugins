@@ -152,6 +152,7 @@ export default definePlugin({
               "cacheWrite",
               "cacheWrite1h",
               "reasoning",
+              "webSearch",
             ].flatMap((key) => {
               const value = (state.usage as any)[key];
               return value === undefined ? [] : [[key, value]];
@@ -177,6 +178,7 @@ export default definePlugin({
                 "cacheWrite1h",
                 "mode",
                 "request",
+                "webSearch",
                 "multiplier",
                 "tiers",
                 "expression",
@@ -212,7 +214,13 @@ export default definePlugin({
             (state.usage || (state.finished && fixedPricing(state.pricing)))
           )
             cost = priceUsage(
-              state.usage ?? { input: 0, output: 0 },
+              state.usage ?? {
+                input: 0,
+                output: 0,
+                ...(state.routing?.webSearchCalls
+                  ? { webSearch: state.routing.webSearchCalls }
+                  : {}),
+              },
               state.pricing,
             ).amount;
         } catch {

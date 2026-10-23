@@ -5,21 +5,16 @@
   "name": "请求限流",
   "description": "按规则限制请求频率和 Token 配额。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "ai.request-limits@1"
-  ],
+  "provides": ["ai.request-limits@1"],
   "requires": [],
   "optionalRequires": [],
-  "permissions": [
-    "api.register",
-    "hooks.register"
-  ],
+  "permissions": ["api.register", "hooks.register"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",

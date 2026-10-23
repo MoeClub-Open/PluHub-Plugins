@@ -5,7 +5,7 @@
   "name": "个人渠道",
   "description": "管理用户自带密钥、个人渠道及消耗倍率。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.23",
+  "version": "0.1.0-alpha.24",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

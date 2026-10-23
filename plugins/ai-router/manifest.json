@@ -5,7 +5,7 @@
   "name": "渠道与模型路由",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.26",
+  "version": "0.1.0-alpha.27",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -482,6 +482,36 @@
                                         "type": "string",
                                         "minLength": 1
                                       }
+                                    },
+                                    "mediaPaths": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "embeddings": {
+                                          "type": "string",
+                                          "pattern": "^/(?!/)"
+                                        },
+                                        "images/generations": {
+                                          "type": "string",
+                                          "pattern": "^/(?!/)"
+                                        },
+                                        "images/edits": {
+                                          "type": "string",
+                                          "pattern": "^/(?!/)"
+                                        },
+                                        "audio/speech": {
+                                          "type": "string",
+                                          "pattern": "^/(?!/)"
+                                        },
+                                        "audio/transcriptions": {
+                                          "type": "string",
+                                          "pattern": "^/(?!/)"
+                                        },
+                                        "audio/translations": {
+                                          "type": "string",
+                                          "pattern": "^/(?!/)"
+                                        }
+                                      }
                                     }
                                   }
                                 }
@@ -707,6 +737,36 @@
                       "type": "string",
                       "minLength": 1
                     }
+                  },
+                  "mediaPaths": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "embeddings": {
+                        "type": "string",
+                        "pattern": "^/(?!/)"
+                      },
+                      "images/generations": {
+                        "type": "string",
+                        "pattern": "^/(?!/)"
+                      },
+                      "images/edits": {
+                        "type": "string",
+                        "pattern": "^/(?!/)"
+                      },
+                      "audio/speech": {
+                        "type": "string",
+                        "pattern": "^/(?!/)"
+                      },
+                      "audio/transcriptions": {
+                        "type": "string",
+                        "pattern": "^/(?!/)"
+                      },
+                      "audio/translations": {
+                        "type": "string",
+                        "pattern": "^/(?!/)"
+                      }
+                    }
                   }
                 }
               }
@@ -898,7 +958,28 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 16384
+                },
+                "webSearch": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000000
                 }
+              }
+            },
+            "operations": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "chat",
+                  "embeddings",
+                  "images/generations",
+                  "images/edits",
+                  "audio/speech",
+                  "audio/transcriptions",
+                  "audio/translations"
+                ]
               }
             }
           }
@@ -937,6 +1018,7 @@
     "order": 10
   },
   "optionalRequires": [
+    "http.transport@1",
     "ai.upstream.openai-chat@1",
     "ai.upstream.openai-responses@1",
     "ai.upstream.anthropic@1",
@@ -958,6 +1040,8 @@
     "ai.upstream-models.openai-chat@1",
     "ai.upstream-models.openai-responses@1",
     "ai.upstream-models.anthropic@1",
-    "ai.upstream-models.gemini@1"
+    "ai.upstream-models.gemini@1",
+    "ai.media.openai-chat@1",
+    "ai.media.openai-responses@1"
   ]
 }

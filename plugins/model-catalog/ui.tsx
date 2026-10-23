@@ -21,6 +21,24 @@ import {
 } from "../../lib/ui/components.js";
 
 const featureNames: Record<string, string> = {
+  get embeddings() {
+    return tr("向量");
+  },
+  get "images/generations"() {
+    return tr("图片生成");
+  },
+  get "images/edits"() {
+    return tr("图片编辑");
+  },
+  get "audio/speech"() {
+    return tr("语音合成");
+  },
+  get "audio/transcriptions"() {
+    return tr("语音转写");
+  },
+  get "audio/translations"() {
+    return tr("音频翻译");
+  },
   get text() {
     return tr("文本对话");
   },
@@ -120,8 +138,31 @@ function Page({ host }: { host: UIHost }) {
     guest
       ? "/login?next=" + encodeURIComponent(playPath(model))
       : playPath(model);
-  const snippet = (model: CatalogModel) =>
-    `curl ${location.origin}/v1/chat/completions \\\n  -H "Authorization: Bearer $PLUHUB_API_KEY" \\\n  -H "Content-Type: application/json" \\\n${model.channel ? `  -H "x-pluhub-channel: ${model.channel.id}" \\\n` : ""}  -d '${JSON.stringify({ model: model.id, messages: [{ role: "user", content: "Hello" }], stream: true })}'`;
+  const snippet = (model: CatalogModel) => {
+    const operation = (model.operations ?? ["chat"])[0] ?? "chat";
+    const endpoint = operation === "chat" ? "chat/completions" : operation;
+    const headers = `-H "Authorization: Bearer $PLUHUB_API_KEY"${model.channel ? ` -H "x-pluhub-channel: ${model.channel.id}"` : ""}`;
+    const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+    if (
+      ["images/edits", "audio/transcriptions", "audio/translations"].includes(
+        operation,
+      )
+    )
+      return `curl ${location.origin}/v1/${endpoint} ${headers} -F ${quote("model=" + model.id)} -F ${quote(operation === "images/edits" ? "image=@image.png" : "file=@audio.wav")}${operation === "images/edits" ? " -F 'prompt=Edit this image'" : ""}`;
+    const input =
+      operation === "embeddings"
+        ? { model: model.id, input: "Hello" }
+        : operation === "images/generations"
+          ? { model: model.id, prompt: "A cat" }
+          : operation === "audio/speech"
+            ? { model: model.id, input: "Hello", voice: "alloy" }
+            : {
+                model: model.id,
+                messages: [{ role: "user", content: "Hello" }],
+                stream: true,
+              };
+    return `curl ${location.origin}/v1/${endpoint} ${headers} -H "Content-Type: application/json" -d ${quote(JSON.stringify(input))}`;
+  };
   return (
     <div className="model-directory">
       <PageHeading title={tr("模型目录")}>
@@ -232,7 +273,7 @@ function Page({ host }: { host: UIHost }) {
                 <div className="catalog-list-head" aria-hidden="true">
                   <span>{tr("模型")}</span>
                   <span>{tr("能力")}</span>
-                  <span>{tr("扣费价格 / 百万 Token")}</span>
+                  <span>{tr("扣费价格")}</span>
                   <span>{tr("操作")}</span>
                 </div>
                 {group.models.map((model) => (
@@ -330,13 +371,15 @@ function Page({ host }: { host: UIHost }) {
                       >
                         {tr("详情")}
                       </button>
-                      <button
-                        className="secondary"
-                        onClick={() => host.navigate(destination(model))}
-                      >
-                        {tr("使用")}
-                        <Icon name="arrow" size={14} />
-                      </button>
+                      {(model.operations ?? ["chat"]).includes("chat") && (
+                        <button
+                          className="secondary"
+                          onClick={() => host.navigate(destination(model))}
+                        >
+                          {tr("使用")}
+                          <Icon name="arrow" size={14} />
+                        </button>
+                      )}
                     </div>
                   </article>
                 ))}
@@ -428,6 +471,19 @@ function Page({ host }: { host: UIHost }) {
               </div>
             </dl>
             <ModelPrices model={selected} />
+            {selected.pricing?.webSearch !== undefined && (
+              <dl className="catalog-detail-facts">
+                <div>
+                  <dt>{tr("网页搜索 · USD / 次")}</dt>
+                  <dd>
+                    {price(
+                      selected.pricing.webSearch *
+                        (selected.consumptionMultiplier ?? 1),
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            )}
             {!guest &&
               selected.channel?.scope !== "personal" &&
               (["request", "expression"].includes(
@@ -464,9 +520,11 @@ function Page({ host }: { host: UIHost }) {
                 {tr("管理 API Key")}
               </button>
             )}
-            <button onClick={() => host.navigate(destination(selected))}>
-              {guest ? tr("登录并开始对话") : tr("开始对话")}
-            </button>
+            {(selected.operations ?? ["chat"]).includes("chat") && (
+              <button onClick={() => host.navigate(destination(selected))}>
+                {guest ? tr("登录并开始对话") : tr("开始对话")}
+              </button>
+            )}
           </div>
         </Dialog>
       )}

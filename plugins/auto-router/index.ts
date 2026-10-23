@@ -190,42 +190,12 @@ export default definePlugin({
               "protocol_conversion_forbidden",
               "web_search_unsupported",
               "interface_not_supported",
+              "operation_not_supported",
+              "search_usage_unavailable",
             ].includes((e as HostError).code)
           )
             continue;
           throw e;
-        }
-        if (input.credentialId) {
-          if (!input.principalId)
-            throw new HostError(
-              "unauthorized",
-              "Personal channel credentials require a user",
-              401,
-            );
-          if (!target.plan.upstreamId) continue;
-          try {
-            await host.call(
-              "credentials.select@1",
-              {
-                id: input.credentialId,
-                userId: input.principalId,
-                channel: target.plan.upstreamId,
-              },
-              signal,
-            );
-          } catch (e) {
-            if (
-              [
-                "credential_channel",
-                "credential_not_found",
-                "channel_disabled",
-                "subscription_disabled",
-                "subscription_reauthorize",
-              ].includes((e as HostError).code)
-            )
-              continue;
-            throw e;
-          }
         }
         if (
           target.route.contextWindow &&

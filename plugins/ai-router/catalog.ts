@@ -52,7 +52,13 @@ function catalog(
       pricing: m.pricing,
       consumptionMultiplier: upstreams[m.upstream]?.consumptionMultiplier ?? 1,
       billing: routePricing(m, upstreams[m.upstream]),
-      features: ["text", "tools", "stream", "usage"],
+      operations: m.operations,
+      features: [
+        ...((m.operations ?? ["chat"]).includes("chat")
+          ? ["text", "tools", "stream", "usage"]
+          : ["usage"]),
+        ...(m.operations ?? []).filter((operation) => operation !== "chat"),
+      ],
     }));
 }
 export async function readCatalog(

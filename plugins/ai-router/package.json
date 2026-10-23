@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-ai-router",
-  "version": "0.1.0-alpha.24",
+  "version": "0.1.0-alpha.27",
   "type": "module",
   "license": "Apache-2.0",
   "files": [

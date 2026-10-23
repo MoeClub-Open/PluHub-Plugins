@@ -14,6 +14,7 @@ import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { providerSession } from "../../lib/ai/session.js";
 import { geminiEffort } from "../../lib/ai/reasoning.js";
 import { readCatalog } from "./catalog.js";
+import { validateOperations } from "../../lib/ai/media.js";
 import { resolveInterface } from "../../lib/ai/upstream-interfaces.js";
 import {
   bindPricingContext,
@@ -41,7 +42,13 @@ export async function planRoute(
       { principalId: input.principalId, channelIds: input.channelIds },
       signal,
     );
-    const match = models.find((model) => model.id === input.model);
+    const match = models.find(
+      (model) =>
+        model.id === input.model &&
+        (model.operations ?? ["chat"]).includes(
+          input.request?.operation?.kind ?? "chat",
+        ),
+    );
     if (!match)
       throw new HostError("model_not_found", "绑定渠道中没有此模型", 404);
     input = { ...input, channelId: match.channelId };
@@ -103,6 +110,17 @@ export async function planRoute(
     const route = Object.hasOwn(models, model) ? models[model] : undefined;
     if (!route || route.enabled === false)
       throw new HostError("model_not_found", "Unknown model", 404);
+    validateOperations(route.operations);
+    if (
+      !(route.operations ?? ["chat"]).includes(
+        input.request?.operation?.kind ?? "chat",
+      )
+    )
+      throw new HostError(
+        "operation_not_supported",
+        "Model does not support this endpoint",
+        400,
+      );
     if (
       !bindingChecked &&
       input.channelId &&
@@ -269,7 +287,10 @@ export async function planRoute(
             JSON.stringify(m.pricing) === JSON.stringify(pricing.pricing),
         );
       resolved = {
-        capability: "ai.upstream." + connection.protocol + "@1",
+        capability:
+          (prepared?.operation ? "ai.media." : "ai.upstream.") +
+          connection.protocol +
+          "@1",
         upstream: connection,
         model: providerModel,
         upstreamId: route.upstream,
@@ -336,7 +357,28 @@ export async function planRoute(
     );
   if (outputPolicy && !host.hasCapability("ai.output-pace@2"))
     throw new HostError("limiter_unavailable", "TPS 插件未安装或已停用", 503);
+  if (
+    prepared?.operation &&
+    !["openai-chat", "openai-responses"].includes(
+      resolved.upstream.protocol ?? "",
+    )
+  )
+    throw new HostError(
+      "operation_not_supported",
+      "This upstream does not provide OpenAI media endpoints",
+      400,
+    );
   if (prepared) validateWebSearchTarget(prepared, resolved.upstream.protocol);
+  if (
+    prepared?.webSearch &&
+    resolved.upstream.protocol === "openai-chat" &&
+    resolved.pricing?.webSearch
+  )
+    throw new HostError(
+      "search_usage_unavailable",
+      "Separate search billing requires a Responses upstream with reported tool calls",
+      400,
+    );
   if (
     prepared?.webSearch &&
     input.ingressProtocol &&

@@ -15,7 +15,11 @@ export default definePlugin({
         const allowed = ctx.principal?.attributes?.models as
           string[] | undefined;
         return Response.json(
-          models.filter((m) => !allowed?.length || allowed.includes(m.id)),
+          models.filter(
+            (m) =>
+              (m.operations ?? ["chat"]).includes("chat") &&
+              (!allowed?.length || allowed.includes(m.id)),
+          ),
           {
             headers: {
               "cache-control": "private, no-store",

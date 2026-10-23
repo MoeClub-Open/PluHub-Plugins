@@ -1,4 +1,5 @@
 import { HostError } from "@pluhub/sdk";
+import { mediaKinds } from "./media.js";
 import type {
   Protocol,
   Upstream,
@@ -44,7 +45,22 @@ export function validateInterfaces(
         ))
     )
       bad("模型匹配规则不能为空");
-    for (const path of [route.path, route.streamPath, route.modelsPath])
+    if (
+      route.mediaPaths !== undefined &&
+      (!route.mediaPaths ||
+        typeof route.mediaPaths !== "object" ||
+        Array.isArray(route.mediaPaths) ||
+        Object.keys(route.mediaPaths).some(
+          (kind) => !mediaKinds.includes(kind as any),
+        ))
+    )
+      bad("Invalid media endpoint paths");
+    for (const path of [
+      route.path,
+      route.streamPath,
+      route.modelsPath,
+      ...Object.values(route.mediaPaths ?? {}),
+    ])
       if (
         path !== undefined &&
         (typeof path !== "string" ||

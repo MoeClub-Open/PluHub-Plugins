@@ -92,11 +92,6 @@ function harness(
           },
           route: { upstream: i.target, model: i.target + "-vendor" },
         };
-      if (n === "credentials.select@1") {
-        if (i.channel !== "strong")
-          throw new HostError("credential_channel", "wrong channel");
-        return {};
-      }
       if (n === "http.transport@1") {
         calls++;
         return Response.json(answer());
@@ -309,16 +304,15 @@ it("falls back or rejects low confidence, truncation and service failures", asyn
       : original(n, i, s);
   expect((await h.resolve()).decision.source).toBe("fallback");
 });
-it("propagates cancellation and filters BYOK channels before deciding", async () => {
+it("propagates cancellation and skips candidates that cannot represent the requested operation", async () => {
   const h = harness();
-  expect(
-    (
-      await h.resolve(request(), signal(), {
-        credentialId: "byok",
-        principalId: "owner",
-      })
-    ).upstreamId,
-  ).toBe("strong");
+  const original = h.host.call;
+  h.host.call = (n: string, i: any, s: AbortSignal) => {
+    if (n === "ai.targets@1" && i.target === "fast")
+      throw new HostError("operation_not_supported", "wrong endpoint");
+    return original(n, i, s);
+  };
+  expect((await h.resolve()).upstreamId).toBe("strong");
   const c = new AbortController();
   c.abort();
   await expect(h.resolve(request(), c.signal)).rejects.toMatchObject({
@@ -326,12 +320,7 @@ it("propagates cancellation and filters BYOK channels before deciding", async ()
   });
   h.p.mode = "effort";
   h.p.fixedCandidate = "fast";
-  await expect(
-    h.resolve(request(), signal(), {
-      credentialId: "byok",
-      principalId: "owner",
-    }),
-  ).rejects.toMatchObject({ code: "no_route" });
+  await expect(h.resolve()).rejects.toMatchObject({ code: "no_route" });
 });
 it("rejects invalid fixed policies and rate limits the remote classifier independently", async () => {
   const h = harness({

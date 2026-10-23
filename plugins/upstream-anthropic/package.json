@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-upstream-anthropic",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.11",
   "type": "module",
   "license": "Apache-2.0",
   "files": [

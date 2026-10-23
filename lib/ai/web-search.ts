@@ -36,6 +36,11 @@ export function readWebSearch(
       ? { ...body.web_search_options, type: "web_search" }
       : undefined);
   if (!tool) {
+    if (body.max_tool_calls != null)
+      throw new HostError(
+        "unsupported_feature",
+        "max_tool_calls requires a hosted tool",
+      );
     if (isSearchTool(body.tool_choice))
       throw new HostError(
         "invalid_request",
@@ -51,6 +56,11 @@ export function readWebSearch(
   )
     throw new HostError("invalid_request", "Invalid web_search_options");
   const { type, ...options } = tool;
+  if (
+    body.max_tool_calls != null &&
+    (!Number.isSafeInteger(body.max_tool_calls) || body.max_tool_calls < 1)
+  )
+    throw new HostError("invalid_request", "Invalid max_tool_calls");
   const choice = isSearchTool(body.tool_choice)
     ? body.tool_choice.type
     : undefined;
@@ -62,6 +72,7 @@ export function readWebSearch(
   return {
     type,
     options,
+    ...(body.max_tool_calls != null ? { maxCalls: body.max_tool_calls } : {}),
     ...(choice ? { choice } : {}),
     ...(body.include?.includes("web_search_call.action.sources")
       ? { includeSources: true }
@@ -89,6 +100,7 @@ export function validateWebSearchTarget(
     (request.toolChoice === "none" ||
       search.choice ||
       search.includeSources ||
+      search.maxCalls !== undefined ||
       Object.keys(search.options).some(
         (key) => !["search_context_size", "user_location"].includes(key),
       ))

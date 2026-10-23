@@ -5,15 +5,13 @@
   "name": "AI 协议转换",
   "description": "提供可替换的协议编解码能力；标准适配器可直接完成转换，无需安装此插件。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.9",
+  "version": "0.1.0-alpha.10",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "ai.converter@1"
-  ],
+  "provides": ["ai.converter@1"],
   "requires": [],
   "optionalRequires": [],
   "permissions": [],

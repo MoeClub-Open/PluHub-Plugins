@@ -16,6 +16,7 @@ import {
   type PriceReceipt,
 } from "../../lib/commerce/pricing.js";
 import { installPriceQuote } from "./quote.js";
+import { mediaInputBound } from "../../lib/ai/media.js";
 import { fixedPricing } from "../../lib/commerce/expression.js";
 import { retirePricingFactors } from "../../lib/commerce/migrations.js";
 import { observation } from "../../lib/ai/telemetry.js";
@@ -155,13 +156,14 @@ export default definePlugin({
           host.config(),
         );
         plan.preparedRequest = prepared;
-        const inputBound =
-          Buffer.byteLength(
-            JSON.stringify({
-              messages: prepared.messages,
-              tools: prepared.tools,
-            }),
-          ) + 1024;
+        const inputBound = prepared.operation
+          ? mediaInputBound(prepared)
+          : Buffer.byteLength(
+              JSON.stringify({
+                messages: prepared.messages,
+                tools: prepared.tools,
+              }),
+            ) + 1024;
         const pricing = structuredClone(plan.pricing);
         plan.pricing = pricing;
         const state = observation(ctx);
@@ -169,7 +171,12 @@ export default definePlugin({
           state.pricing = pricing;
           state.routing = { ...state.routing, outputBudget: budget };
         }
-        const amount = reserveCost(inputBound, budget.reservedTokens, pricing);
+        const amount = reserveCost(
+          inputBound,
+          budget.reservedTokens,
+          pricing,
+          prepared.webSearch ? (prepared.webSearch.maxCalls ?? 3) : 0,
+        );
         transaction(db, () => {
           const userId = ctx.principal!.id;
           if (wallet(userId).available < amount)
@@ -222,6 +229,7 @@ export default definePlugin({
                   "cacheWrite",
                   "cacheWrite1h",
                   "reasoning",
+                  "webSearch",
                 ].flatMap((key) =>
                   (state.usage as any)[key] === undefined
                     ? []
@@ -256,7 +264,13 @@ export default definePlugin({
           let receipt: PriceReceipt;
           try {
             receipt = priceUsage(
-              state.usage ?? { input: 0, output: 0 },
+              state.usage ?? {
+                input: 0,
+                output: 0,
+                ...(state.routing?.webSearchCalls
+                  ? { webSearch: state.routing.webSearchCalls }
+                  : {}),
+              },
               pricing,
             );
             amount = receipt.amount;

@@ -39,6 +39,7 @@ import { channelConnections } from "../../lib/ai/channel-config.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
 import { subscriptionModels } from "../../lib/ai/subscription-models.js";
+import { validateOperations } from "../../lib/ai/media.js";
 export { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 export default definePlugin({
   setup(host) {
@@ -222,6 +223,17 @@ export default definePlugin({
         channel.enabled === false
       )
         throw new HostError("model_not_found", "Target model unavailable", 404);
+      if (
+        request &&
+        !(route.operations ?? ["chat"]).includes(
+          request.operation?.kind ?? "chat",
+        )
+      )
+        throw new HostError(
+          "operation_not_supported",
+          "Model does not support this endpoint",
+          400,
+        );
       let upstream = channel;
       let providerModel = route.model;
       if (channel.flow) {
@@ -397,8 +409,10 @@ export default definePlugin({
         );
     }
     host.validateConfig((config) => {
-      for (const model of Object.values(config.models ?? {}) as ModelRoute[])
+      for (const model of Object.values(config.models ?? {}) as ModelRoute[]) {
         routePricing(model);
+        validateOperations(model.operations);
+      }
       const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
       for (const upstream of Object.values(upstreams)) {
         if (upstream.flow) {
@@ -561,7 +575,7 @@ export default definePlugin({
         const pacing = host.hasCapability("ai.output-pace@2")
           ? "ai.output-pace@2"
           : "ai.output-pace@1";
-        return host.hasCapability(pacing)
+        return !actual.operation && host.hasCapability(pacing)
           ? host.call<AsyncIterable<AIEvent>>(
               pacing,
               { events, plan, request: actual },

@@ -17,6 +17,8 @@ import { SubscriptionAccounts } from "../../lib/ui/subscription-accounts.js";
 import { parseApiConnection } from "../../lib/ai/personal-api.js";
 import { listSubscriptionAccounts } from "../../lib/ui/subscription-providers.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
+import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
+import type { ModelRoute } from "@pluhub/contracts/ai";
 import type { SubscriptionModel } from "../../lib/ai/subscription-models.js";
 const api = "/api/plugins/official.byok";
 type Model = {
@@ -27,6 +29,7 @@ type Model = {
   upstreamInputPrice: string;
   upstreamOutputPrice: string;
   pricingSource?: string;
+  operations?: ModelRoute["operations"];
 };
 const emptyModel = (): Model => ({
   alias: "",
@@ -157,6 +160,7 @@ function Page({ host }: { host: UIHost }) {
             ([alias, value]: [string, any]) => ({
               alias,
               model: value.model,
+              operations: value.operations,
               inputPrice:
                 value.inputPrice === undefined ? "" : String(value.inputPrice),
               outputPrice:
@@ -575,6 +579,7 @@ function Page({ host }: { host: UIHost }) {
                         m.alias.trim(),
                         {
                           model: m.model.trim(),
+                          operations: m.operations,
                           inputPrice:
                             m.inputPrice === ""
                               ? undefined
@@ -1087,6 +1092,17 @@ function Page({ host }: { host: UIHost }) {
                               })
                             }
                           />
+                          {!subscription && (
+                            <details>
+                              <summary>{tr("可用端点")}</summary>
+                              <ModelEndpoints
+                                value={m.operations}
+                                onChange={(operations) =>
+                                  patchModel(i, { operations })
+                                }
+                              />
+                            </details>
+                          )}
                         </td>
                         {!subscription && (
                           <>

@@ -14,6 +14,7 @@ import type {
   PersonalChannel,
   Protocol,
   UpstreamInterface,
+  ModelRoute,
 } from "@pluhub/contracts/ai";
 import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { channelPresets } from "../../lib/ai/channel-presets.js";
@@ -31,6 +32,7 @@ import {
 } from "../../lib/ai/channel-graph.js";
 import { assertPublicUrl } from "../../lib/ai/public-network.js";
 import { installChannelAdmin } from "./admin.js";
+import { validateOperations } from "../../lib/ai/media.js";
 import {
   subscriptionDefaults,
   type SubscriptionKind,
@@ -44,6 +46,7 @@ import {
 
 type Model = {
   model: string;
+  operations?: ModelRoute["operations"];
   inputPrice?: number;
   outputPrice?: number;
   upstreamInputPrice?: number;
@@ -281,8 +284,10 @@ export function installPersonalChannels(
       )
         throw new HostError("invalid_models", "无效的公开模型名");
       const model = raw as any;
+      validateOperations(model?.operations);
       models[alias] = {
         model: requiredString(model?.model, "model", 256),
+        ...(model?.operations ? { operations: model.operations } : {}),
         inputPrice: tokenPrice(model?.inputPrice),
         outputPrice: tokenPrice(model?.outputPrice),
         upstreamInputPrice: tokenPrice(model?.upstreamInputPrice),
