@@ -12,6 +12,7 @@ import { routePricing } from "../../lib/commerce/pricing.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { providerSession } from "../../lib/ai/session.js";
 import { geminiEffort } from "../../lib/ai/reasoning.js";
+import { readCatalog } from "./catalog.js";
 import {
   runWorkflow,
   checkProtocolConversion,
@@ -22,6 +23,23 @@ export async function planRoute(
   input: RoutingRequest,
   signal: AbortSignal,
 ): Promise<AIPlan> {
+  if (
+    input.channelId &&
+    input.channelIds?.length &&
+    !input.channelIds.includes(input.channelId)
+  )
+    throw new HostError("channel_forbidden", "渠道不在密钥授权范围内", 403);
+  if (!input.channelId && input.channelIds?.length) {
+    const models = await readCatalog(
+      host,
+      { principalId: input.principalId, channelIds: input.channelIds },
+      signal,
+    );
+    const match = models.find((model) => model.id === input.model);
+    if (!match)
+      throw new HostError("model_not_found", "绑定渠道中没有此模型", 404);
+    input = { ...input, channelId: match.channelId };
+  }
   let config = host.config();
   let credentialId: string | undefined;
   if (input.channelId?.startsWith("personal:")) {
@@ -36,7 +54,9 @@ export async function planRoute(
       throw new HostError("channel_not_found", "个人渠道不可用", 404);
     credentialId = channel.id;
     config = {
-      upstreams: { [channel.id]: channel.upstream },
+      upstreams: {
+        [channel.id]: { ...channel.upstream, enabled: channel.enabled },
+      },
       models: channel.models,
     };
   }

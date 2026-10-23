@@ -1,0 +1,126 @@
+.key-channel-bindings {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.key-channel-bindings legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.key-channel-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 12px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.key-channel-options label {
+  min-width: 0;
+}
+.key-channel-options label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.key-editor .advanced-options {
+  margin: 0;
+}
+.key-editor .form-grid > label {
+  margin-top: 10px;
+}
+.keys-table .key-identity,
+.keys-table .key-scope {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.keys-table .key-identity {
+  min-width: 100px;
+  max-width: 220px;
+}
+.keys-table .key-scope {
+  max-width: 360px;
+}
+.key-bound-channels,
+.key-action-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.key-bound-channels {
+  margin-top: 4px;
+}
+.key-bound-channels .feature-pill {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+.key-action-buttons {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+@media (max-width: 1100px) {
+  .keys-table th:nth-child(4),
+  .keys-table th:nth-child(5),
+  .keys-table .key-last-used,
+  .keys-table .key-created {
+    display: none;
+  }
+  .key-action-label {
+    display: none;
+  }
+  .keys-table .key-action-buttons button {
+    width: 34px;
+    min-height: 34px;
+    padding: 6px;
+  }
+}
+@media (max-width: 640px) {
+  .key-filters > .muted,
+  .keys-table thead {
+    display: none;
+  }
+  .keys-table table,
+  .keys-table tbody {
+    display: block;
+  }
+  .keys-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 12px;
+    padding: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .keys-table tr:first-child {
+    border-top: 0;
+  }
+  .keys-table td {
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    border: 0;
+  }
+  .keys-table .key-actions {
+    grid-area: 1 / 2;
+  }
+  .keys-table .key-scope {
+    grid-area: 2 / 1;
+  }
+  .keys-table .key-status {
+    grid-area: 2 / 2;
+    text-align: right;
+    align-self: end;
+  }
+  .keys-table .empty-inline {
+    grid-column: 1 / -1;
+    padding: 16px 0;
+  }
+}
+@media (max-width: 380px) {
+  .key-editor label:has(input[type="datetime-local"]) {
+    grid-column: 1 / -1;
+  }
+}

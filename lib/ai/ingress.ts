@@ -8,6 +8,7 @@ import type {
 import { decode, collect, encodeResult, protocolError } from "./protocols.js";
 import { encodeStream } from "./streams.js";
 import { clientSession } from "./session.js";
+import { channelScope } from "./channel-scope.js";
 import {
   beginObservation,
   planObservation,
@@ -73,18 +74,11 @@ export function createIngress(protocol: Protocol) {
               403,
             );
           ctx.state.set("ai.request", decoded);
-          const policy = ctx.principal?.attributes;
           if (request.headers.has("x-pluhub-credential"))
             throw new HostError("unsupported_credential", "平台渠道凭证已移除");
-          const boundChannel = policy?.channelId as string | undefined;
           const channelHeader =
             request.headers.get("x-pluhub-channel") ?? undefined;
-          if (boundChannel && channelHeader && channelHeader !== boundChannel)
-            throw new HostError(
-              "channel_forbidden",
-              "请求不能覆盖 API Key 的渠道绑定",
-              403,
-            );
+          const channels = channelScope(ctx.principal, channelHeader);
           if (host.hasCapability("auth.admit@1")) {
             await host.call(
               "auth.admit@1",
@@ -110,7 +104,7 @@ export function createIngress(protocol: Protocol) {
                   ...(decoded.stream ? ["stream"] : []),
                 ],
                 principalId: ctx.principal?.id,
-                channelId: boundChannel ?? channelHeader,
+                ...channels,
               },
               ctx.signal,
             ),

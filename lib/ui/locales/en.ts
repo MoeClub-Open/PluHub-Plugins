@@ -1,23 +1,31 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
-  "订阅账号繁忙，请稍后重试": "Subscription accounts are busy. Try again shortly.",
-  "编辑密钥": "Edit key",
-  "密钥配置已保存": "Key settings saved",
-  "重新生成密钥": "Regenerate key",
-  "重新生成后，旧密钥立即失效，应用需要更换密钥。": "The previous key will stop working immediately. Update your applications with the new key.",
-  "此密钥未保存可恢复副本，请重新生成": "This key has no recoverable copy. Regenerate it to continue.",
+  渠道不在密钥授权范围内: "Channel is outside the key's allowed channels",
+  无效的渠道列表: "Invalid channel list",
+  绑定渠道中没有此模型: "Model is not available in the bound channels",
+  "订阅账号繁忙，请稍后重试":
+    "Subscription accounts are busy. Try again shortly.",
+  编辑密钥: "Edit key",
+  密钥配置已保存: "Key settings saved",
+  重新生成密钥: "Regenerate key",
+  "重新生成后，旧密钥立即失效，应用需要更换密钥。":
+    "The previous key will stop working immediately. Update your applications with the new key.",
+  "此密钥未保存可恢复副本，请重新生成":
+    "This key has no recoverable copy. Regenerate it to continue.",
   "修改 API Key": "Update API key",
   "复制 API Key": "Copy API key",
   "重新生成 API Key": "Regenerate API key",
   "扣费价格 · 美元 / 百万 Token": "Billed price · USD / 1M tokens",
   "扣费价格 / 百万 Token": "Billed price / 1M tokens",
   "扣费价 · USD": "Billed price · USD",
-  "平均延迟": "Average latency",
+  平均延迟: "Average latency",
   "近 24 小时": "Last 24 hours",
-  "输出速度": "Output speed",
-  "缓存命中率": "Cache hit rate",
-  "可见输出 Token / 内容流持续时间；{0} 个样本": "Visible output tokens / content streaming time; {0} samples",
-  "已报告缓存用量的成功请求中，发生缓存命中的比例；{0} 个样本": "Successful cache-reporting requests with a cache hit; {0} samples",
+  输出速度: "Output speed",
+  缓存命中率: "Cache hit rate",
+  "可见输出 Token / 内容流持续时间；{0} 个样本":
+    "Visible output tokens / content streaming time; {0} samples",
+  "已报告缓存用量的成功请求中，发生缓存命中的比例；{0} 个样本":
+    "Successful cache-reporting requests with a cache hit; {0} samples",
   "24 小时": "24 hours",
   "7 天": "7 days",
   "30 天": "30 days",
@@ -533,11 +541,9 @@ export const en: Record<string, string> = {
   "正在添加…": "Adding…",
   渠道尚未配置上游节点: "The channel has no upstream node",
   尚未选择订阅账号: "No subscription account selected",
-  该上游不支持模型目录查询:
-    "This upstream does not support model discovery",
+  该上游不支持模型目录查询: "This upstream does not support model discovery",
   无效的上游地址: "Invalid upstream URL",
-  上游返回了无效的模型目录:
-    "The upstream returned an invalid model directory",
+  上游返回了无效的模型目录: "The upstream returned an invalid model directory",
   上游模型目录不可用: "The upstream model directory is unavailable",
   "保存中…": "Saving…",
   保存并编辑流程: "Save and edit flow",

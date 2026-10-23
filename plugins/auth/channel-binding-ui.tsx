@@ -1,58 +1,76 @@
 import { t as tr } from "../../lib/ui/i18n.js";
-import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
+import { Checkbox } from "../../lib/ui/checkbox.js";
+
 export function ChannelBinding({
   host,
-  initialChannel = "",
+  initialChannels = [],
+  disabled = false,
 }: {
   host: UIHost;
-  initialChannel?: string;
+  initialChannels?: string[];
+  disabled?: boolean;
 }) {
-  const channels = useLoad<any[]>(() =>
-    host.request("/api/plugins/official.ai-router/channels"),
-  );
-  const [channel, setChannel] = React.useState(initialChannel);
+  const loaded = useLoad<
+    {
+      id: string;
+      name: string;
+      scope: string;
+      consumptionMultiplier?: number;
+    }[]
+  >(() => host.request("/api/plugins/official.ai-router/channels"));
+  const [selected, setSelected] = React.useState(initialChannels);
+  const channels = [
+    ...(loaded.data ?? []),
+    ...initialChannels
+      .filter((id) => !loaded.data?.some((channel) => channel.id === id))
+      .map((id) => ({
+        id,
+        name: id,
+        scope: "unavailable",
+        consumptionMultiplier: undefined,
+      })),
+  ];
   return (
-    <>
-      <Notice message={channels.error} />
-      <label>
-        {tr("绑定渠道")}
-        <Select
-          name="channelId"
-          value={channel}
-          onChange={(e) => {
-            setChannel(e.target.value);
-          }}
-        >
-          <option value="">{tr("平台默认路由")}</option>
-          {initialChannel &&
-            !channels.data?.some((c) => c.id === initialChannel) && (
-              <option value={initialChannel}>
-                {tr("原绑定（不可用，请更换）")}
-              </option>
-            )}
-          <optgroup label={tr("个人渠道")}>
-            {channels.data
-              ?.filter((c) => c.scope === "personal")
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · ×{c.consumptionMultiplier ?? 1}
-                </option>
-              ))}
-          </optgroup>
-          <optgroup label={tr("平台渠道")}>
-            {channels.data
-              ?.filter((c) => c.scope === "platform")
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · ×{c.consumptionMultiplier ?? 1}
-                </option>
-              ))}
-          </optgroup>
-        </Select>
-      </label>
-    </>
+    <fieldset className="key-channel-bindings" disabled={disabled}>
+      <legend>{tr("绑定渠道")}</legend>
+      <Notice message={loaded.error} />
+      <div className="key-channel-options">
+        <label className="checkbox">
+          <Checkbox
+            disabled={disabled}
+            checked={!selected.length}
+            onCheckedChange={() => setSelected([])}
+          />
+          <span>{tr("平台默认路由")}</span>
+        </label>
+        {channels.map((channel) => (
+          <label className="checkbox" key={channel.id}>
+            <Checkbox
+              name="channelIds"
+              value={channel.id}
+              disabled={disabled}
+              checked={selected.includes(channel.id)}
+              onCheckedChange={(checked) =>
+                setSelected((current) =>
+                  checked
+                    ? [...current, channel.id]
+                    : current.filter((id) => id !== channel.id),
+                )
+              }
+            />
+            <span title={channel.name}>
+              {channel.name}
+              {channel.scope === "personal" ? " · " + tr("个人渠道") : ""}
+              {channel.scope === "unavailable"
+                ? " · " + tr("不可用")
+                : " · ×" + (channel.consumptionMultiplier ?? 1)}
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }

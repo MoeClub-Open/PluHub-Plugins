@@ -16,7 +16,7 @@ pnpm test
 
 产品插件：Model Catalog 提供模型搜索与接入详情；Observability 提供 SQLite 请求元数据、用量汇总及按用户隔离的日志；Leaderboard 提供用户榜、模型榜和当前用户排名；Playground 使用登录会话经标准入口发起流式对话。共有 34 个官方插件，新站默认启用 32 个；Protocol Converter 和旧版 Workflow 保留按需安装，标准协议转换和渠道内流程图不依赖这两个兼容适配器。排行榜统计范围、保留和隐私边界见主仓 `docs/LEADERBOARD.md`。
 
-Auth 支持密钥模型范围、有效期与单节点自然分钟限速；API Key 不授予系统管理权限，管理凭证需使用控制台会话。AI Router 提供渠道与模型的表单配置、启停及显式测试请求。Console 支持明暗主题与移动端导航，用户页面通过 Manifest 的 `ui.public` 展示，后端独立检查权限。
+Auth 支持密钥多渠道绑定、模型范围、有效期与单节点自然分钟限速；API Key 不授予系统管理权限，管理凭证需使用控制台会话。未指定渠道时按模型匹配已绑定渠道，也可通过 `x-pluhub-channel` 在绑定范围内选择，按实际渠道倍率计费；空绑定保留平台默认路由。AI Router 提供渠道与模型的表单配置、启停及显式测试请求。Console 支持明暗主题与移动端导航，用户页面通过 Manifest 的 `ui.public` 展示，后端独立检查权限。
 
 管理员设置按「渠道与路由」「流量控制」「支付与商业」「安全与验证」聚合，组内使用二级导航。插件通过可选 `ui.group`、`ui.order` 声明位置；`ui.pages` 可在同一入口模块提供额外页面，通过公开 `UIHost.page` 区分。额外页面默认仅管理员可见，不继承主页面的 `public`。个人充值、账单和账号安全仍位于用户控制台。未声明或未知分组的第三方扩展保留独立入口；停用插件后统一注销其所有页面。契约说明见主仓 `docs/PLUGIN_API.md`。
 
@@ -42,7 +42,7 @@ AI Router 的每个渠道统一通过流程图组合功能；协议与连接属�
 
 商业与订阅上游插件包括 Billing、Commerce、Stripe、易支付、BYOK、Rate Limit、Protocol Converter、Codex、Claude Subscription、Antigravity。配置说明位于主仓 docs/COMMERCIAL.md。插件通过公开 SDK 与 Spec 协作，支付与计费默认关闭。
 
-BYOK 现在提供用户独立的个人渠道、可编辑服务商预设、模型原价与输入/输出消耗倍率、公开报价同步、渠道流程图及 API Key 渠道绑定。旧平台渠道凭证入口仍保留。详见主仓 `docs/PERSONAL_CHANNELS.md`。
+BYOK 提供用户独立的个人渠道、可编辑服务商预设、模型原价与输入/输出消耗倍率、公开报价同步、渠道流程图及 API Key 渠道绑定。详见主仓 `docs/PERSONAL_CHANNELS.md`。
 
 
 工单与支持 Tickets 插件提供用户新建、分类、优先级、双方回复、关闭与重新打开；管理入口在「系统管理 → 工单管理」。数据通过独立 SQLite 迁移保存，需控制台会话，支持用户隔离、幂等提交、并发版本检查、配额和分页。Console 账号菜单显示真实可用余额、冻结及订阅，主题可跟随系统，统一下拉组件支持键盘与主题样式。

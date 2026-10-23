@@ -10,6 +10,17 @@ import {
 } from "@pluhub/sdk";
 
 export const keysMigration = "ALTER TABLE api_keys ADD COLUMN secret TEXT;";
+export const channelBindingsMigration = `ALTER TABLE api_keys ADD COLUMN channel_ids_json TEXT NOT NULL DEFAULT '[]';
+ UPDATE api_keys SET channel_ids_json=json_array(channel_id) WHERE channel_id IS NOT NULL;`;
+export const keyChannelIds = (row: {
+  channel_ids_json?: string;
+  channel_id?: string | null;
+}): string[] =>
+  row.channel_ids_json
+    ? JSON.parse(row.channel_ids_json)
+    : row.channel_id
+      ? [row.channel_id]
+      : [];
 type Vault = {
   encrypt: (value: string, aad: string) => string;
   decrypt: (value: string, aad: string) => string;
@@ -47,21 +58,35 @@ export function installKeys(
   async function keyBinding(body: any, userId: string, previous?: any) {
     if (body.credentialId)
       throw new HostError("unsupported_credential", "平台渠道凭证已移除");
-    const channelId = body.channelId
-      ? requiredString(body.channelId, "channelId", 256)
-      : null;
-    if (channelId && channelId !== previous?.channel_id) {
+    const requested =
+      body.channelIds ?? (body.channelId ? [body.channelId] : []);
+    if (
+      !Array.isArray(requested) ||
+      requested.some(
+        (id) => typeof id !== "string" || !id.trim() || id.length > 256,
+      )
+    )
+      throw new HostError("invalid_binding", "无效的渠道列表");
+    const channelIds = [...new Set<string>(requested)];
+    const previousIds = previous ? keyChannelIds(previous) : [];
+    if (channelIds.some((id) => !previousIds.includes(id))) {
       const options = await host.call<{ id: string }[]>("ai.channels@1", {
         userId,
       });
-      if (!options.some((channel) => channel.id === channelId))
+      if (
+        channelIds.some(
+          (id) =>
+            !previousIds.includes(id) &&
+            !options.some((channel) => channel.id === id),
+        )
+      )
         throw new HostError(
           "invalid_binding",
           "渠道不可用或不属于当前用户",
           403,
         );
     }
-    return channelId;
+    return channelIds;
   }
   async function settings(body: any, userId: string, previous?: any) {
     const name = requiredString(body.name, "name", 128),
@@ -101,15 +126,16 @@ export function installKeys(
       return safeJson(
         db
           .prepare(
-            "SELECT id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id,secret IS NOT NULL AS can_copy FROM api_keys WHERE user_id=? ORDER BY created_at DESC,id",
+            "SELECT id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id,channel_ids_json,secret IS NOT NULL AS can_copy FROM api_keys WHERE user_id=? ORDER BY created_at DESC,id",
           )
           .all(owner(ctx))
           .map((row: any) => {
-            const { models_json, can_copy, ...key } = row;
+            const { models_json, channel_ids_json, can_copy, ...key } = row;
             return {
               ...key,
               models: JSON.parse(models_json),
               canCopy: !!can_copy,
+              channelIds: keyChannelIds(row),
             };
           }),
       );
@@ -126,7 +152,7 @@ export function installKeys(
         id = randomUUID();
       const secret = vault.encrypt(token, `api-key:${userId}:${id}`);
       db.prepare(
-        "INSERT INTO api_keys(id,user_id,name,hash,prefix,created_at,models_json,expires_at,requests_per_minute,channel_id,secret) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO api_keys(id,user_id,name,hash,prefix,created_at,models_json,expires_at,requests_per_minute,channel_id,secret,channel_ids_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         id,
         userId,
@@ -137,8 +163,9 @@ export function installKeys(
         config.models,
         config.expires,
         config.rpm,
-        config.channel,
+        config.channel[0] ?? null,
         secret,
+        JSON.stringify(config.channel),
       );
       tag({ resourceId: id });
       return safeJson({ id, token }, 201);
@@ -153,13 +180,14 @@ export function installKeys(
         row = ownKey(ctx, requiredString(body.id, "id"));
       const config = await settings(body, row.user_id, row);
       db.prepare(
-        "UPDATE api_keys SET name=?,models_json=?,expires_at=?,requests_per_minute=?,channel_id=? WHERE id=? AND user_id=?",
+        "UPDATE api_keys SET name=?,models_json=?,expires_at=?,requests_per_minute=?,channel_id=?,channel_ids_json=? WHERE id=? AND user_id=?",
       ).run(
         config.name,
         config.models,
         config.expires,
         config.rpm,
-        config.channel,
+        config.channel[0] ?? null,
+        JSON.stringify(config.channel),
         row.id,
         row.user_id,
       );
@@ -211,9 +239,10 @@ export function installKeys(
     async handle(request, ctx) {
       const body = await readObject(request),
         row = ownKey(ctx, requiredString(body.id, "id"));
+      const channels = await keyBinding(body, row.user_id, row);
       db.prepare(
-        "UPDATE api_keys SET channel_id=? WHERE id=? AND user_id=?",
-      ).run(await keyBinding(body, row.user_id, row), row.id, row.user_id);
+        "UPDATE api_keys SET channel_id=?,channel_ids_json=? WHERE id=? AND user_id=?",
+      ).run(channels[0] ?? null, JSON.stringify(channels), row.id, row.user_id);
       return safeJson({ ok: true });
     },
   });

@@ -30,7 +30,11 @@ export function KeyAdmin({ host }: { host: UIHost }) {
             render: (r) => (
               <>
                 {r.models.length ? r.models.join(", ") : tr("全部模型")}
-                <small>{r.channel_id ?? tr("平台默认路由")}</small>
+                <small>
+                  {r.channelIds?.length
+                    ? r.channelIds.join(", ")
+                    : (r.channel_id ?? tr("平台默认路由"))}
+                </small>
               </>
             ),
           },

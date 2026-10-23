@@ -4,16 +4,16 @@ import { installAuthSecurity, securityMigration } from "./security/index.js";
 import { adminTarget } from "../../lib/admin/access.js";
 import { installAdmin } from "./admin.js";
 import { installSetup, setupMigration } from "./setup.js";
-import { installKeys, keysMigration } from "./keys.js";
+import {
+  installKeys,
+  keysMigration,
+  channelBindingsMigration,
+  keyChannelIds,
+} from "./keys.js";
 import { sessionMigration } from "./sessions.js";
 import { installSecurityHistory, historyMigration } from "./history.js";
 import { join } from "node:path";
-import {
-  randomBytes,
-  createHash,
-  scrypt,
-  timingSafeEqual,
-} from "node:crypto";
+import { randomBytes, createHash, scrypt, timingSafeEqual } from "node:crypto";
 import {
   definePlugin,
   HostError,
@@ -64,6 +64,7 @@ export default definePlugin({
       historyMigration,
       "UPDATE api_keys SET expires_at=0 WHERE credential_id IS NOT NULL AND (channel_id IS NULL OR channel_id NOT LIKE 'personal:%'); UPDATE api_keys SET credential_id=NULL;",
       keysMigration,
+      channelBindingsMigration,
     ]);
     rawHost.cleanup(() => db.close());
     const history = installSecurityHistory(rawHost, db),
@@ -189,6 +190,7 @@ export default definePlugin({
           Date.now(),
           digest(token),
         );
+      const boundChannels = key ? keyChannelIds(row) : [];
       return {
         id: user.id,
         permissions: !key && user.role === "admin" ? ["*"] : [],
@@ -199,7 +201,9 @@ export default definePlugin({
                 keyId: row.id,
                 models: JSON.parse(row.models_json),
                 requestsPerMinute: row.requests_per_minute,
-                channelId: row.channel_id ?? undefined,
+                channelIds: boundChannels,
+                // Older ingress plugins retain a restrictive first-channel binding.
+                channelId: boundChannels[0],
               },
             }
           : {}),

@@ -18,6 +18,8 @@ import type {
   Protocol,
   ProviderConnection,
 } from "@pluhub/contracts/ai";
+import { readCatalog, type CatalogScope } from "./catalog.js";
+import { channelScope } from "../../lib/ai/channel-scope.js";
 import { redirectModel } from "./redirects.js";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { planRoute } from "./planning.js";
@@ -35,80 +37,7 @@ import { subscriptionModels } from "../../lib/ai/subscription-models.js";
 export { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 export default definePlugin({
   setup(host) {
-    const catalog = (
-      config = host.config(),
-      channelId?: string,
-    ): CatalogModel[] => {
-      const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
-      const models = {
-        ...((config.models ?? {}) as Record<string, ModelRoute>),
-      };
-      const redirects = (config.redirects ?? {}) as Record<
-        string,
-        ModelRedirect
-      >;
-      for (const [id, rule] of Object.entries(redirects)) {
-        if (rule.enabled === false) continue;
-        const target = redirectModel(id, redirects).model;
-        if (models[target]) models[id] = models[target]!;
-      }
-      return Object.entries(models)
-        .filter(
-          ([, m]) =>
-            (!channelId || m.upstream === channelId) &&
-            m.enabled !== false &&
-            upstreams[m.upstream]?.enabled !== false,
-        )
-        .map(([id, m]) => ({
-          id,
-          channelId: m.upstream,
-          channel: {
-            id: m.upstream,
-            name: upstreams[m.upstream]?.name || m.upstream,
-            scope: m.upstream.startsWith("personal:") ? "personal" : "platform",
-          },
-          name: m.name || id,
-          provider: m.provider || upstreams[m.upstream]?.protocol || "Custom",
-          description: m.description ?? "",
-          contextWindow: m.contextWindow,
-          inputPrice: m.inputPrice,
-          outputPrice: m.outputPrice,
-          pricing: m.pricing,
-          consumptionMultiplier:
-            upstreams[m.upstream]?.consumptionMultiplier ?? 1,
-          billing: routePricing(m, upstreams[m.upstream]),
-          features: ["text", "tools", "stream", "usage"],
-        }));
-    };
-    async function getCatalog(input?: {
-      principalId?: string;
-      channelId?: string;
-    }) {
-      if (input?.channelId?.startsWith("personal:")) {
-        if (!input.principalId)
-          throw new HostError("unauthorized", "个人渠道需要用户身份", 401);
-        const [channel] = await host.call<PersonalChannel[]>(
-          "ai.user-channels@1",
-          { userId: input.principalId, id: input.channelId },
-        );
-        if (!channel)
-          throw new HostError("channel_not_found", "个人渠道不可用", 404);
-        return catalog(
-          {
-            upstreams: {
-              [channel.id]: {
-                ...channel.upstream,
-                name: channel.name,
-                enabled: channel.enabled,
-              },
-            },
-            models: channel.models,
-          },
-          channel.id,
-        );
-      }
-      return catalog(host.config(), input?.channelId);
-    }
+    const getCatalog = (input?: CatalogScope) => readCatalog(host, input);
     host.provide("ai.catalog@1", getCatalog);
     async function channels(input?: { userId?: string }) {
       const platform = Object.entries(
@@ -545,34 +474,30 @@ export default definePlugin({
       path: "/v1/models",
       access: "authenticated",
       handle: async (request, ctx) => {
-        const binding = ctx.principal?.attributes?.channelId as
-          string | undefined;
-        const requested = request.headers.get("x-pluhub-channel") ?? undefined;
-        if (binding && requested && binding !== requested)
-          throw new HostError(
-            "channel_forbidden",
-            "不能覆盖密钥的渠道绑定",
-            403,
-          );
+        const scope = channelScope(
+          ctx.principal,
+          request.headers.get("x-pluhub-channel") ?? undefined,
+        );
+        const allowed = ctx.principal?.attributes?.models as
+          string[] | undefined;
+        const visible = new Map<string, CatalogModel>();
+        for (const model of await getCatalog({
+          principalId: ctx.principal?.id,
+          ...scope,
+        }))
+          if (
+            (!allowed?.length || allowed.includes(model.id)) &&
+            !visible.has(model.id)
+          )
+            visible.set(model.id, model);
         return json({
           object: "list",
-          data: (
-            await getCatalog({
-              principalId: ctx.principal?.id,
-              channelId: binding ?? requested,
-            })
-          )
-            .filter((m) => {
-              const allowed = ctx.principal?.attributes?.models as
-                string[] | undefined;
-              return !allowed?.length || allowed.includes(m.id);
-            })
-            .map((m) => ({
-              id: m.id,
-              object: "model",
-              created: 0,
-              owned_by: m.provider,
-            })),
+          data: [...visible.values()].map((model) => ({
+            id: model.id,
+            object: "model",
+            created: 0,
+            owned_by: model.provider,
+          })),
         });
       },
     });

@@ -7,6 +7,7 @@ import {
 } from "@pluhub/sdk";
 import type { CatalogModel, RequestPricing } from "@pluhub/contracts/ai";
 import { priceUsage } from "../../lib/commerce/pricing.js";
+import { channelScope } from "../../lib/ai/channel-scope.js";
 
 export function installPriceQuote(host: Host) {
   host.api({
@@ -16,18 +17,16 @@ export function installPriceQuote(host: Host) {
     async handle(request, ctx) {
       const body = await readObject(request);
       const model = requiredString(body.model, "model");
-      const bound = ctx.principal?.attributes?.channelId as string | undefined;
       const selectedChannel = body.channelId
         ? requiredString(body.channelId, "channelId", 256)
         : undefined;
-      if (bound && selectedChannel && bound !== selectedChannel)
-        throw new HostError("channel_forbidden", "不能覆盖密钥的渠道绑定", 403);
+      const channels = channelScope(ctx.principal, selectedChannel);
       const allowed = ctx.principal?.attributes?.models as string[] | undefined;
       if (allowed?.length && !allowed.includes(model))
         throw new HostError("forbidden", "Model is not allowed", 403);
       const models = await host.call<CatalogModel[]>("ai.catalog@1", {
         principalId: ctx.principal!.id,
-        channelId: bound ?? selectedChannel,
+        ...channels,
       });
       const selected = models.find((entry) => entry.id === model);
       if (

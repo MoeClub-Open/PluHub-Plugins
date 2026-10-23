@@ -21,7 +21,9 @@ export default definePlugin({
           : {};
       return models.map(({ channelId, ...model }) => ({
         ...model,
-        metrics: metrics[model.id],
+        metrics: channelId?.startsWith("personal:")
+          ? undefined
+          : metrics[model.id],
       }));
     }
     host.api({

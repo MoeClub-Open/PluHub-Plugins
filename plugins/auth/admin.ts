@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { keyChannelIds } from "./keys.js";
 import {
   HostError,
   json,
@@ -87,14 +88,18 @@ export function installAdmin(host: Host, db: DatabaseSync) {
       const clause = where.length ? " WHERE " + where.join(" AND ") : "";
       const items = db
         .prepare(
-          "SELECT id,user_id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id FROM api_keys" +
+          "SELECT id,user_id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id,channel_ids_json FROM api_keys" +
             clause +
             " ORDER BY created_at DESC,id LIMIT ? OFFSET ?",
         )
         .all(...values, limit, offset)
         .map((row: any) => {
-          const { models_json, ...key } = row;
-          return { ...key, models: JSON.parse(models_json) };
+          const { models_json, channel_ids_json, ...key } = row;
+          return {
+            ...key,
+            models: JSON.parse(models_json),
+            channelIds: keyChannelIds(row),
+          };
         });
       return json({
         total: Number(

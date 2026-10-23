@@ -37,6 +37,8 @@ import {
   ShieldCheck,
   Eye,
   EyeOff,
+  Pencil,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 const icons: Record<string, LucideIcon> = {
@@ -74,6 +76,8 @@ const icons: Record<string, LucideIcon> = {
   shield: ShieldCheck,
   eye: Eye,
   "eye-off": EyeOff,
+  edit: Pencil,
+  delete: Trash2,
 };
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const Component = icons[name] ?? Puzzle;
