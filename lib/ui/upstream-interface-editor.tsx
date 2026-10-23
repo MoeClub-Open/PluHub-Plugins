@@ -1,4 +1,6 @@
 import React from "react";
+import * as Popover from "@radix-ui/react-popover";
+import { ChevronDown } from "lucide-react";
 import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
 import { t as tr } from "./i18n.js";
 import { Select } from "./select.js";
@@ -73,7 +75,7 @@ function JsonField({
   );
 }
 
-function ModelPatterns({
+export function ModelPatterns({
   value,
   onChange,
 }: {
@@ -102,6 +104,79 @@ function ModelPatterns({
   );
 }
 
+export function IncomingInterfaces({
+  value,
+  onChange,
+}: {
+  value: Protocol[];
+  onChange: (value: Protocol[]) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const trigger = React.useRef<HTMLButtonElement>(null);
+  const all = interfaceProtocols.every((option) => value.includes(option.id));
+  const label = all
+    ? tr("全部接口")
+    : interfaceProtocols
+        .filter((option) => value.includes(option.id))
+        .map((option) => option.name)
+        .join(" / ") || tr("选择入口接口");
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
+        ref={trigger}
+        className="select-trigger interface-incoming-trigger"
+        aria-label={tr("入口接口")}
+        title={label}
+      >
+        <span>{label}</span>
+        <ChevronDown size={14} aria-hidden="true" />
+      </Popover.Trigger>
+      <Popover.Portal
+        container={
+          trigger.current?.closest<HTMLElement>(".dialog-layer, dialog") ??
+          undefined
+        }
+      >
+        <Popover.Content
+          className="interface-incoming-popover"
+          align="start"
+          sideOffset={5}
+          collisionPadding={8}
+          aria-label={tr("入口接口")}
+        >
+          <label>
+            <Checkbox
+              checked={all}
+              indeterminate={value.length > 0 && !all}
+              onCheckedChange={(checked) =>
+                onChange(
+                  checked ? interfaceProtocols.map((option) => option.id) : [],
+                )
+              }
+            />
+            {tr("全部接口")}
+          </label>
+          {interfaceProtocols.map((option) => (
+            <label key={option.id}>
+              <Checkbox
+                checked={value.includes(option.id)}
+                onCheckedChange={(checked) =>
+                  onChange(
+                    checked
+                      ? [...value, option.id]
+                      : value.filter((protocol) => protocol !== option.id),
+                  )
+                }
+              />
+              {option.name}
+            </label>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 export function UpstreamInterfaceEditor({
   route,
   update,
@@ -109,193 +184,88 @@ export function UpstreamInterfaceEditor({
   route: UpstreamInterface;
   update: (patch: Partial<UpstreamInterface>) => void;
 }) {
-  const [customIncoming, setCustomIncoming] = React.useState(
-    route.incoming.length > 1 &&
-      route.incoming.length < interfaceProtocols.length,
-  );
-  const incoming = customIncoming
-    ? "custom"
-    : route.incoming.length === interfaceProtocols.length
-      ? "all"
-      : (route.incoming[0] ?? "");
   const target = interfaceProtocols.find(
     (option) => option.id === route.protocol,
   )!;
   return (
-    <div className="form-grid interface-route-fields">
+    <div className="form-grid interface-route-options">
       <label>
-        {tr("入口接口")}
-        <Select
-          value={incoming}
-          onChange={(event) => {
-            const choice = event.target.value;
-            setCustomIncoming(choice === "custom");
-            if (choice !== "custom")
-              update({
-                incoming:
-                  choice === "all"
-                    ? interfaceProtocols.map((option) => option.id)
-                    : [choice as Protocol],
-              });
-          }}
-        >
-          <option value="all">{tr("全部接口")}</option>
-          {interfaceProtocols.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name}
-            </option>
-          ))}
-          <option value="custom">{tr("自定义")}</option>
-        </Select>
+        {tr("流式接口路径")}
+        <input
+          value={route.streamPath ?? ""}
+          placeholder={
+            route.protocol === "gemini"
+              ? "/v1beta/models/{model}:streamGenerateContent"
+              : route.path || target.path
+          }
+          onChange={(event) =>
+            update({ streamPath: event.target.value || undefined })
+          }
+        />
       </label>
       <label>
-        {tr("上游接口")}
+        {tr("模型目录路径")}
+        <input
+          value={route.modelsPath ?? ""}
+          placeholder={
+            route.protocol === "gemini" ? "/v1beta/models" : "/v1/models"
+          }
+          onChange={(event) =>
+            update({ modelsPath: event.target.value || undefined })
+          }
+        />
+      </label>
+      <label>
+        {tr("认证方式")}
         <Select
-          value={route.protocol}
+          value={route.auth?.type ?? "default"}
           onChange={(event) =>
             update({
-              protocol: event.target.value as Protocol,
-              path: undefined,
-              streamPath: undefined,
+              auth: {
+                type: event.target.value as NonNullable<
+                  UpstreamInterface["auth"]
+                >["type"],
+                name: route.auth?.name,
+              },
             })
           }
         >
-          {interfaceProtocols.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name}
-            </option>
-          ))}
+          <option value="default">{tr("接口默认")}</option>
+          <option value="bearer">Bearer</option>
+          <option value="header">{tr("自定义请求头")}</option>
+          <option value="query">{tr("查询参数")}</option>
+          <option value="none">{tr("无认证")}</option>
         </Select>
       </label>
-      {customIncoming && (
-        <div
-          className="full interface-incoming"
-          role="group"
-          aria-label={tr("入口接口")}
-        >
-          {interfaceProtocols.map((option) => (
-            <label key={option.id}>
-              <Checkbox
-                checked={route.incoming.includes(option.id)}
-                onCheckedChange={(checked) =>
-                  update({
-                    incoming: checked
-                      ? [...route.incoming, option.id]
-                      : route.incoming.filter(
-                          (protocol) => protocol !== option.id,
-                        ),
-                  })
-                }
-              />
-              {option.name}
-            </label>
-          ))}
-        </div>
+      {["header", "query"].includes(route.auth?.type ?? "") && (
+        <label>
+          {tr("认证字段名")}
+          <input
+            required
+            value={route.auth?.name ?? ""}
+            onChange={(event) =>
+              update({ auth: { ...route.auth!, name: event.target.value } })
+            }
+          />
+        </label>
       )}
-      <label className="full">
-        {tr("匹配模型")}
-        <ModelPatterns
-          value={route.models}
-          onChange={(models) => update({ models })}
+      <JsonField
+        label={tr("请求头")}
+        value={route.headers}
+        onChange={(headers) => update({ headers })}
+      />
+      <JsonField
+        label={tr("请求参数")}
+        value={route.params}
+        onChange={(params) => update({ params })}
+      />
+      {["openai-chat", "openai-responses"].includes(route.protocol) && (
+        <JsonField
+          label={tr("媒体接口路径")}
+          value={route.mediaPaths}
+          onChange={(mediaPaths) => update({ mediaPaths })}
         />
-      </label>
-      <details className="full interface-route-options">
-        <summary>{tr("路径与认证")}</summary>
-        <div className="form-grid">
-          <label>
-            {tr("接口路径")}
-            <input
-              value={route.path ?? ""}
-              placeholder={target.path}
-              onChange={(event) =>
-                update({ path: event.target.value || undefined })
-              }
-            />
-          </label>
-          <label>
-            {tr("流式接口路径")}
-            <input
-              value={route.streamPath ?? ""}
-              placeholder={
-                route.protocol === "gemini"
-                  ? "/v1beta/models/{model}:streamGenerateContent"
-                  : route.path || target.path
-              }
-              onChange={(event) =>
-                update({ streamPath: event.target.value || undefined })
-              }
-            />
-          </label>
-          <label>
-            {tr("模型目录路径")}
-            <input
-              value={route.modelsPath ?? ""}
-              placeholder={
-                route.protocol === "gemini" ? "/v1beta/models" : "/v1/models"
-              }
-              onChange={(event) =>
-                update({ modelsPath: event.target.value || undefined })
-              }
-            />
-          </label>
-          <label>
-            {tr("认证方式")}
-            <Select
-              value={route.auth?.type ?? "default"}
-              onChange={(event) =>
-                update({
-                  auth: {
-                    type: event.target.value as NonNullable<
-                      UpstreamInterface["auth"]
-                    >["type"],
-                    name: route.auth?.name,
-                  },
-                })
-              }
-            >
-              <option value="default">{tr("接口默认")}</option>
-              <option value="bearer">Bearer</option>
-              <option value="header">{tr("自定义请求头")}</option>
-              <option value="query">{tr("查询参数")}</option>
-              <option value="none">{tr("无认证")}</option>
-            </Select>
-          </label>
-          {["header", "query"].includes(route.auth?.type ?? "") && (
-            <label>
-              {tr("认证字段名")}
-              <input
-                required
-                value={route.auth?.name ?? ""}
-                onChange={(event) =>
-                  update({ auth: { ...route.auth!, name: event.target.value } })
-                }
-              />
-            </label>
-          )}
-          {["openai-chat", "openai-responses"].includes(route.protocol) && (
-            <JsonField
-              label={tr("媒体接口路径")}
-              value={route.mediaPaths}
-              onChange={(mediaPaths) => update({ mediaPaths })}
-            />
-          )}
-        </div>
-      </details>
-      <details className="full interface-route-options">
-        <summary>{tr("参数覆盖")}</summary>
-        <div className="form-grid">
-          <JsonField
-            label={tr("请求头")}
-            value={route.headers}
-            onChange={(headers) => update({ headers })}
-          />
-          <JsonField
-            label={tr("请求参数")}
-            value={route.params}
-            onChange={(params) => update({ params })}
-          />
-        </div>
-      </details>
+      )}
     </div>
   );
 }
