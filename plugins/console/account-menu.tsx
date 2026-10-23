@@ -3,6 +3,7 @@ import React from "react";
 import type { UIHost, Extension } from "@pluhub/ui-sdk";
 import { Icon } from "../../lib/ui/components.js";
 import type { ThemeMode } from "./theme.js";
+import { LanguageMenu } from "./language-menu.js";
 const usd = (value: number) =>
   new Intl.NumberFormat(getLocale(), {
     style: "currency",
@@ -139,6 +140,7 @@ export function AccountMenu({
           </span>
           <Icon name="chevrons" size={14} />
         </button>
+        <LanguageMenu />
         <button
           className="ghost icon-button"
           aria-label={

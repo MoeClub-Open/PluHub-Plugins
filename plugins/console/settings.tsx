@@ -17,16 +17,11 @@ export function SettingsNavigation({
   management: Extension[];
   overview: boolean;
 }) {
-  const [query, setQuery] = React.useState("");
-  const matches = searchSettings(
-    sections.filter((s) => s.id !== "system"),
-    home ? "" : query,
-  );
   const system = sections.find((s) => s.id === "system");
-  const visible = [...matches, ...(system ? [system] : [])];
-  React.useEffect(() => {
-    if (home) setQuery("");
-  }, [home]);
+  const visible = [
+    ...sections.filter((s) => s.id !== "system"),
+    ...(system ? [system] : []),
+  ];
   return (
     <>
       <div className="settings-context">
@@ -64,18 +59,6 @@ export function SettingsNavigation({
           <Icon name="overview" />
           {tr("设置总览")}
         </a>
-        {!home && (
-          <label className="settings-nav-search">
-            <Icon name="search" size={15} />
-            <input
-              type="search"
-              aria-label={tr("筛选设置导航")}
-              placeholder={tr("查找设置…")}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-        )}
         {visible.map((section) => (
           <div className="settings-nav-section" key={section.id}>
             <a className="settings-nav-title" href={"#" + section.path}>
@@ -98,9 +81,6 @@ export function SettingsNavigation({
             ))}
           </div>
         ))}
-        {!matches.length && query && (
-          <p className="empty-inline">{tr("没有匹配的设置")}</p>
-        )}
       </nav>
     </>
   );

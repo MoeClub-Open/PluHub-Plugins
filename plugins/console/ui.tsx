@@ -659,13 +659,22 @@ function App() {
           onClick={() => setMobile(false)}
         />
       )}
-      <aside className={mobile ? "open" : ""}>
+      <aside id="console-sidebar" className={mobile ? "open" : ""}>
         <a className="brand" href={managementMode ? "#/admin" : "#/console"}>
           <BrandMark brand={brand} />
           <span className="brand-name" title={brand.name}>
             {brand.name}
           </span>
         </a>
+        <button
+          className="sidebar-search"
+          aria-label={tr("打开页面搜索")}
+          onClick={() => setSearchOpen(true)}
+        >
+          <Icon name="search" size={16} />
+          <span>{tr("搜索")}</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         {managementMode ? (
           <SettingsNavigation
             sections={sections}
@@ -722,49 +731,16 @@ function App() {
         </div>
       </aside>
       <section className="main">
-        <header>
-          <div className="breadcrumb">
-            <button
-              className="ghost icon-button mobile-menu"
-              aria-label={tr("打开导航")}
-              onClick={() => setMobile(true)}
-            >
-              <Icon name="menu" />
-            </button>
-            {managementMode ? (
-              <a href="#/admin">{tr("管理后台")}</a>
-            ) : (
-              <a href="#/console">{tr("控制台")}</a>
-            )}
-            <span>/</span>
-            <strong>
-              {path === "/admin" && admin
-                ? tr("全站总览")
-                : path === "/settings" && admin
-                  ? tr("设置总览")
-                  : (selected?.title ??
-                    section?.title ??
-                    (path === "/plugins"
-                      ? tr("插件管理")
-                      : path === "/console"
-                        ? tr("总览")
-                        : tr("页面不可用")))}
-            </strong>
-          </div>
-          <div className="actions">
-            <LanguageMenu />
-            <button
-              className="header-search"
-              aria-label={tr("打开页面搜索")}
-              onClick={() => setSearchOpen(true)}
-            >
-              <Icon name="search" size={16} />
-              <span>{tr("搜索")}</span>
-              <kbd>Ctrl K</kbd>
-            </button>
-          </div>
-        </header>
         <main ref={content}>
+          <button
+            className="ghost icon-button mobile-menu"
+            aria-label={tr("打开导航")}
+            aria-controls="console-sidebar"
+            aria-expanded={mobile}
+            onClick={() => setMobile(true)}
+          >
+            <Icon name="menu" />
+          </button>
           {consoleNav.walletActive && consoleNav.wallet.length > 1 && (
             <nav className="wallet-tabs" aria-label={tr("钱包功能")}>
               {consoleNav.wallet.map((entry) => (

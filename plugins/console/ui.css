@@ -311,37 +311,16 @@ p {
   margin-left: var(--sidebar-width);
   min-width: 0;
   flex: 1;
-}
-.main > header {
-  height: 52px;
-  border-bottom: 1px solid var(--border);
-  padding: 0 24px;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: blur(14px);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  gap: 12px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--muted);
-}
-.breadcrumb strong {
-  color: var(--text);
-  font-weight: 500;
+  flex-direction: column;
 }
 .main main {
   padding: 24px;
+  flex: 1;
+  width: 100%;
   max-width: 1540px;
-  margin: auto;
-  min-height: calc(100vh - 100px);
+  margin: 0 auto;
+  min-height: 0;
 }
 .main > footer {
   display: flex;
@@ -1313,7 +1292,7 @@ code {
 }
 .playground-grid {
   display: flex;
-  height: clamp(360px, calc(100dvh - 216px), 820px);
+  height: clamp(360px, calc(100dvh - 164px), 820px);
 }
 .chat-toolbar {
   display: flex;
@@ -1486,7 +1465,6 @@ code {
   .main main {
     padding: 20px 24px;
   }
-  .main > header,
   .main > footer {
     padding-left: 24px;
     padding-right: 24px;
@@ -1526,9 +1504,6 @@ code {
   }
   .main {
     margin-left: 208px;
-  }
-  .main > header {
-    padding: 0 22px;
   }
   .main main {
     padding: 24px 20px;
@@ -1577,12 +1552,11 @@ code {
   .main {
     margin-left: 0;
   }
-  .main > header {
-    height: 48px;
-    padding: 0 12px;
-  }
   .mobile-menu {
     display: inline-flex !important;
+    float: inline-start;
+    margin-inline-end: 8px;
+    margin-bottom: 8px;
   }
   .main main {
     padding: 12px;
@@ -1665,7 +1639,7 @@ code {
     gap: 10px;
   }
   .playground-grid {
-    height: max(360px, calc(100dvh - 216px));
+    height: max(360px, calc(100dvh - 168px));
   }
   .chat-messages {
     padding: 12px;
@@ -1798,9 +1772,6 @@ code {
 @media (max-width: 820px) {
   .main main {
     padding: 12px;
-  }
-  .main > header {
-    padding-inline: 12px;
   }
   .section-heading > .actions {
     min-width: 0;
