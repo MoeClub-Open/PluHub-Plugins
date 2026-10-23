@@ -19,6 +19,7 @@ const providers: Record<SubscriptionKind, string> = {
   codex: "Codex",
   "claude-subscription": "Claude",
   antigravity: "Antigravity",
+  grok: "Grok",
 };
 const date = (v?: number) =>
   v ? new Date(v).toLocaleString(getLocale(), { hour12: false }) : "—";
@@ -88,7 +89,7 @@ function ProviderAccounts({
     setBusy(true);
     setMessage("");
     try {
-      const result = await host.request(api + "/account", {
+      const result = await host.request<any>(api + "/account", {
         method: "POST",
         body: JSON.stringify({ id: account.id, action, ...extra }),
       });
@@ -98,6 +99,12 @@ function ProviderAccounts({
         );
       data.reload();
       setRemove(undefined);
+      if (action === "delete" && result.revocationConfirmed === false)
+        setMessage(
+          tr(
+            "本地账号已删除，远端授权未确认撤销，可在 ChatGPT 的已连接应用中移除。",
+          ),
+        );
     } catch (error) {
       setMessage((error as Error).message);
     } finally {

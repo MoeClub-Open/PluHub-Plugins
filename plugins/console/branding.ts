@@ -1,5 +1,7 @@
 import { isLocale, type Locale } from "@pluhub/ui-sdk";
+import { siteThemes, type SiteTheme } from "./site-themes.js";
 export interface Branding {
+  siteTheme: SiteTheme;
   defaultLanguage: Locale;
   name: string;
   description: string;
@@ -16,6 +18,7 @@ export interface Branding {
 }
 
 export const defaultBranding: Branding = {
+  siteTheme: "graphite",
   defaultLanguage: "zh-CN",
   name: "PluHub",
   description: "AI 模型服务",
@@ -32,6 +35,7 @@ export const defaultBranding: Branding = {
 };
 
 export const brandingLimits: Record<keyof Branding, number> = {
+  siteTheme: 20,
   defaultLanguage: 5,
   name: 64,
   description: 200,
@@ -71,6 +75,12 @@ export function readBranding(config: Record<string, unknown>): Branding {
     throw new Error("品牌配置必须为对象");
   const result = { ...defaultBranding };
   for (const [key, value] of Object.entries(raw)) {
+    if (key === "siteTheme") {
+      if (typeof value !== "string" || !Object.hasOwn(siteThemes, value))
+        throw new Error("无效的站点主题");
+      result.siteTheme = value as SiteTheme;
+      continue;
+    }
     if (key === "defaultLanguage") {
       if (!isLocale(value)) throw new Error("不支持的站点语言");
       result.defaultLanguage = value;
@@ -89,7 +99,8 @@ export function readBranding(config: Record<string, unknown>): Branding {
       value.length > brandingLimits[key as keyof Branding]
     )
       throw new Error("无效的品牌字段：" + key);
-    result[key as Exclude<keyof Branding, "defaultLanguage">] = value.trim();
+    result[key as Exclude<keyof Branding, "defaultLanguage" | "siteTheme">] =
+      value.trim();
   }
   if (!result.name) throw new Error("请填写站点名称");
   if (

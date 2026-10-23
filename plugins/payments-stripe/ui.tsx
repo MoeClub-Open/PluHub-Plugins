@@ -1,2 +1,2 @@
-import { paymentSettings } from "../../lib/ui/payment-settings.js";
+import { paymentSettings } from "./settings.js";
 export const mount = paymentSettings();

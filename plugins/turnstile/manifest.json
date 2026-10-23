@@ -5,23 +5,15 @@
   "name": "人机验证",
   "description": "提供 Turnstile、reCAPTCHA 与极验人机验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.8",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "captcha.options@1",
-    "captcha.verify@1"
-  ],
-  "requires": [
-    "http.transport@1"
-  ],
-  "permissions": [
-    "api.register",
-    "secrets.read"
-  ],
+  "provides": ["captcha.options@1", "captcha.verify@1"],
+  "requires": ["http.transport@1"],
+  "permissions": ["api.register", "secrets.read"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -60,25 +52,15 @@
       },
       "provider": {
         "type": "string",
-        "enum": [
-          "turnstile",
-          "recaptcha",
-          "geetest"
-        ]
+        "enum": ["turnstile", "recaptcha", "geetest"]
       },
       "recaptchaVersion": {
         "type": "string",
-        "enum": [
-          "v2",
-          "v3"
-        ]
+        "enum": ["v2", "v3"]
       },
       "recaptchaDomain": {
         "type": "string",
-        "enum": [
-          "www.google.com",
-          "www.recaptcha.net"
-        ]
+        "enum": ["www.google.com", "www.recaptcha.net"]
       },
       "minScore": {
         "type": "number",

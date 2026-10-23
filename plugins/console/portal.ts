@@ -11,6 +11,8 @@ export interface PortalContent {
   primaryUrl: string;
   docsUrl: string;
   showEndpoint: boolean;
+  layout: "split" | "centered";
+  featuredModels: string[];
   features: { title: string; description: string }[];
   faqs: { question: string; answer: string }[];
   pages: { slug: string; title: string; body: string }[];
@@ -18,21 +20,17 @@ export interface PortalContent {
 export const defaultPortal: PortalContent = {
   enabled: true,
   eyebrow: "",
-  title: "AI 模型服务",
-  description: "在线对话或通过 API 调用模型。",
+  title: "多模型 API\n与在线对话",
+  description: "",
   announcement: "",
   primaryLabel: "浏览模型",
   primaryUrl: "#/models",
   docsUrl: "",
   showEndpoint: true,
+  layout: "split",
+  featuredModels: [],
   features: [],
-  faqs: [
-    {
-      question: "如何收费？",
-      answer:
-        "模型目录展示每百万 Token 的模型原价。实际扣费按用量与所选渠道的消耗倍率计算，可登录后查看用量与账单。",
-    },
-  ],
+  faqs: [],
   pages: [],
 };
 export const portalUrl = (value: string) =>
@@ -42,16 +40,9 @@ export const portalUrl = (value: string) =>
 export function defaultPortalFor(locale: Locale): PortalContent {
   const result = structuredClone(defaultPortal);
   if (locale === "en-US") {
-    result.title = "AI model service";
-    result.description = "Chat online or use models through the API.";
+    result.title = "AI models.\nFor chat and API.";
+    result.description = "";
     result.primaryLabel = "Browse models";
-    result.faqs = [
-      {
-        question: "How does pricing work?",
-        answer:
-          "The catalog shows original model prices per million tokens. Charges depend on usage and the selected channel's usage multiplier. Sign in to view usage and billing.",
-      },
-    ];
   }
   return result;
 }
@@ -69,6 +60,16 @@ export function readPortal(config: Record<string, unknown>): PortalContent {
     ...defaults,
     ...structuredClone(data),
   } as PortalContent;
+  if (!["split", "centered"].includes(result.layout))
+    throw new Error("无效的门户布局");
+  if (
+    !Array.isArray(result.featuredModels) ||
+    result.featuredModels.length > 8 ||
+    result.featuredModels.some(
+      (id) => typeof id !== "string" || !id || id.length > 1024,
+    )
+  )
+    throw new Error("无效的精选模型");
   for (const key of ["enabled", "showEndpoint"] as const)
     if (typeof result[key] !== "boolean") throw new Error("无效的门户开关");
   const limits = {

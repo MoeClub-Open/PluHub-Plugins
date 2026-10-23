@@ -31,7 +31,7 @@ export default definePlugin({
         // Public rankings use the platform catalog, never a viewer's BYOK catalog.
         const [users, models] = await Promise.all([
           host.call<PublicUserProfile[]>("users.directory@1", {}),
-          kind === "models"
+          kind === "models" && host.hasCapability("ai.catalog@2")
             ? host.call<CatalogModel[]>("ai.catalog@2", {})
             : Promise.resolve([] as CatalogModel[]),
         ]);

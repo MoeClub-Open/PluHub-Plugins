@@ -14,10 +14,14 @@ const registryUrl =
 const cacheTtl = 15 * 60_000;
 const failureTtl = 60_000;
 let registryCache:
-  | { expiresAt: number; data: Record<string, unknown> }
-  | undefined;
+  { expiresAt: number; data: Record<string, unknown> } | undefined;
 
 const fallback: Record<SubscriptionKind, SubscriptionModel[]> = {
+  grok: [
+    { id: "grok-4.7", name: "Grok 4.7" },
+    { id: "grok-4.7-build-fast", name: "Grok 4.7 Fast" },
+    { id: "grok-build-0.1", name: "Grok Build 0.1" },
+  ],
   codex: [
     { id: "gpt-5.5", name: "GPT 5.5" },
     { id: "gpt-5.6-sol", name: "GPT 5.6 Sol" },
@@ -92,20 +96,19 @@ function normalizeModels(value: unknown): SubscriptionModel[] {
     models.set(model.id, {
       ...previous,
       ...model,
-      contextLength: Math.max(
-        previous?.contextLength ?? 0,
-        model.contextLength ?? 0,
-      ) || undefined,
-      maxOutputTokens: Math.max(
-        previous?.maxOutputTokens ?? 0,
-        model.maxOutputTokens ?? 0,
-      ) || undefined,
+      contextLength:
+        Math.max(previous?.contextLength ?? 0, model.contextLength ?? 0) ||
+        undefined,
+      maxOutputTokens:
+        Math.max(previous?.maxOutputTokens ?? 0, model.maxOutputTokens ?? 0) ||
+        undefined,
     });
   }
   return [...models.values()].slice(0, 256);
 }
 
 function registryKeys(kind: SubscriptionKind, plan?: unknown) {
+  if (kind === "grok") return ["xai"];
   if (kind === "claude-subscription") return ["claude"];
   if (kind === "antigravity") return ["antigravity"];
   const value = typeof plan === "string" ? plan.toLowerCase() : "";

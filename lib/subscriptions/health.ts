@@ -12,6 +12,7 @@ function scope(
   kind: SubscriptionKind,
   q: SubscriptionQuota,
 ): string | undefined {
+  if (kind === "grok" && ["requests", "tokens"].includes(q.window)) return "";
   if (kind === "antigravity" && q.window.startsWith("model:"))
     return q.window.slice(6);
   if (kind === "codex" && ["primary", "secondary"].includes(q.window))
@@ -184,12 +185,20 @@ export function createSubscriptionHealth(
     db.prepare("DELETE FROM account_cooldowns WHERE account_id=?").run(id);
     notify(id);
   }
+  // Providers without a quota endpoint retry only after their advertised reset.
+  function expire(id: string) {
+    const result = db
+      .prepare("DELETE FROM account_cooldowns WHERE account_id=? AND until<=?")
+      .run(id, Date.now());
+    if (result.changes) notify(id);
+  }
   return {
     blocked,
     cooldowns,
     report: (...args: Parameters<typeof report>) =>
       transaction(db, () => report(...args)),
     recovered,
+    expire,
     remove,
   };
 }

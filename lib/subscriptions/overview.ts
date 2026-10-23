@@ -15,6 +15,7 @@ export const subscriptionNames: Record<SubscriptionKind, string> = {
   codex: "Codex",
   "claude-subscription": "Claude",
   antigravity: "Antigravity",
+  grok: "Grok",
 };
 type Overview = {
   quota: SubscriptionQuota[];
@@ -106,7 +107,7 @@ export async function subscriptionIdentity(
   signal: AbortSignal,
 ) {
   const token = normalizeSubscriptionToken(raw);
-  if (token.email || kind === "codex") return token;
+  if (token.email || kind === "codex" || kind === "grok") return token;
   try {
     const profile = await request(
       host,
@@ -133,6 +134,12 @@ export async function subscriptionOverview(
   token: SubscriptionToken,
   signal: AbortSignal,
 ): Promise<Overview> {
+  if (kind === "grok" || token.auth_mode === "siwc")
+    throw new HostError(
+      "subscription_quota_unknown",
+      "Quota is reported by actual upstream responses; no separate quota endpoint is available",
+      502,
+    );
   const now = Date.now();
   const quota: SubscriptionQuota[] = [];
   let plan: string | undefined,
@@ -243,24 +250,19 @@ export async function subscriptionOverview(
   } else {
     projectId =
       token.project_id ??
-      (await discoverAntigravityProject(
-        host,
-        token.access_token!,
-        signal,
-      ));
+      (await discoverAntigravityProject(host, token.access_token!, signal));
     const models = await antigravityAvailableModels(
       host,
       token.access_token!,
       projectId,
       signal,
     );
-    for (const [model, item] of Object.entries(models) as [
-      string,
-      any,
-    ][])
+    for (const [model, item] of Object.entries(models) as [string, any][])
       if (
-        typeof (item?.quotaInfo?.remainingFraction ??
-          item?.quotaInfo?.remaining_fraction) === "number" &&
+        typeof (
+          item?.quotaInfo?.remainingFraction ??
+          item?.quotaInfo?.remaining_fraction
+        ) === "number" &&
         (item.quotaInfo.remainingFraction ??
           item.quotaInfo.remaining_fraction) >= 0 &&
         (item.quotaInfo.remainingFraction ??

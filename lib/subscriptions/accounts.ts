@@ -34,6 +34,8 @@ import { discoverAntigravityProject } from "../ai/antigravity-control.js";
 import { oauthConfig, tokenRequest } from "./oauth.js";
 import { createSubscriptionOAuth } from "./oauth-flow.js";
 import { subscriptionOverview, subscriptionNames } from "./overview.js";
+import { siwcProfile, siwcResource, verifySiwc, revokeSiwc } from "./siwc.js";
+import { accountSubscriptionModels } from "./models.js";
 
 const fail = (code: string, message: string, status = 400): never => {
   throw new HostError(code, message, status);
@@ -142,6 +144,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       provider: r.provider,
       name: r.name,
       email: value.email,
+      authMode: value.auth_mode ?? (kind === "codex" ? "cli" : undefined),
       plan: value.plan_type,
       credits: value.credits,
       enabled: !!r.enabled,
@@ -188,9 +191,15 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       accountId: value.account_id,
       projectId: value.project_id,
       version: r.version,
+      authMode: value.auth_mode,
     };
   }
-  async function save(input: any, ownerId = "", signal?: AbortSignal) {
+  async function save(
+    input: any,
+    ownerId = "",
+    signal?: AbortSignal,
+    verified = false,
+  ) {
     const provider = subscriptionKind(input.provider ?? kind);
     if (provider !== kind)
       fail("subscription_provider", "订阅账号与提供商不匹配");
@@ -212,6 +221,26 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     if (previous && previous.provider !== provider)
       fail("subscription_provider", "无法更改授权提供商");
     let token = normalizeSubscriptionToken(input.authorization);
+    if (token.auth_mode === "siwc" && !verified)
+      token = normalizeSubscriptionToken(
+        await verifySiwc(
+          host,
+          token,
+          token.client_id!,
+          signal ?? AbortSignal.timeout(30000),
+          undefined,
+          previous ? decrypt(previous) : undefined,
+        ),
+      );
+    if (
+      previous &&
+      decrypt(previous).auth_mode === "siwc" &&
+      token.auth_mode !== "siwc"
+    )
+      fail(
+        "oauth_identity",
+        "Create a separate account to change authorization type",
+      );
     if (previous) token = { ...decrypt(previous), ...token };
     if (provider === "antigravity" && token.access_token && !token.project_id) {
       const discovery = AbortSignal.any([
@@ -289,9 +318,32 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           {
             grant_type: "refresh_token",
             refresh_token: value.refresh_token!,
+            ...(value.auth_mode === "siwc" ? { resource: siwcResource } : {}),
           },
           AbortSignal.any([stop.signal, AbortSignal.timeout(30000)]),
+          value.auth_mode === "siwc"
+            ? { clientId: value.client_id!, tokenUrl: siwcProfile.tokenUrl }
+            : undefined,
         );
+        if (
+          value.auth_mode === "siwc" &&
+          typeof response.scope === "string" &&
+          !response.scope.split(/\s+/).includes("chatgpt.tokens.use.direct")
+        )
+          fail(
+            "subscription_reauthorize",
+            "ChatGPT plan usage permission was removed",
+            503,
+          );
+        if (value.auth_mode === "siwc" && response.id_token)
+          await verifySiwc(
+            host,
+            { ...response, scopes: value.scopes },
+            value.client_id!,
+            AbortSignal.any([stop.signal, AbortSignal.timeout(15000)]),
+            undefined,
+            value,
+          );
         const next = normalizeSubscriptionToken(response);
         if (
           !next.access_token ||
@@ -307,6 +359,15 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           refresh_token: next.refresh_token ?? value.refresh_token,
           account_id: next.account_id ?? value.account_id,
           project_id: next.project_id ?? value.project_id,
+          ...(value.auth_mode === "siwc"
+            ? {
+                id_token: response.id_token ?? value.id_token,
+                scopes:
+                  typeof response.scope === "string"
+                    ? response.scope.split(/\s+/)
+                    : value.scopes,
+              }
+            : {}),
         };
         db.prepare(
           `UPDATE accounts SET cipher=?,version=version+1,
@@ -386,6 +447,10 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     const task = (async () => {
       let token = await resolve(id);
       let current = row(id);
+      if (kind === "grok" || decrypt(current).auth_mode === "siwc") {
+        health.expire(id);
+        return metadata(current);
+      }
       const read = () =>
         subscriptionOverview(
           host,
@@ -469,10 +534,19 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       signal.throwIfAborted();
       if ("provider" in input && input.provider && input.provider !== kind)
         fail("subscription_provider", "订阅账号与提供商不匹配");
-      if (input.action === "inspect") {
+      if ("id" in input) {
         const r = ownedRow(input.id, input.ownerId ?? "");
         if (input.provider && r.provider !== input.provider)
           fail("subscription_provider", "订阅账号与提供商不匹配");
+        if (input.action === "models") {
+          await resolve(r.id);
+          return accountSubscriptionModels(
+            host,
+            kind,
+            decrypt(row(r.id)),
+            signal,
+          );
+        }
         return metadata(r);
       }
       if (input.action === "acquire" || input.action === "availability") {
@@ -484,9 +558,15 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           input.ids.some((id) => typeof id !== "string" || id.length > 256)
         )
           fail("subscription_binding", "请选择订阅账号，且不可重复");
+        const matchingRows = () =>
+          poolRows(input.ids, input.ownerId).filter(
+            (r) =>
+              kind !== "codex" ||
+              (decrypt(r).auth_mode ?? "cli") === (input.authMode ?? "cli"),
+          );
         if (input.action === "availability")
           return {
-            available: poolRows(input.ids, input.ownerId).some(
+            available: matchingRows().some(
               (r) =>
                 r.enabled &&
                 r.status === "ready" &&
@@ -517,7 +597,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
           try {
             selected = await affinity.acquire(
               () =>
-                poolRows(input.ids, input.ownerId).filter(
+                matchingRows().filter(
                   (r) =>
                     !excluded.has(r.id) && !health.blocked(r.id, input.model),
                 ),
@@ -601,7 +681,12 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       fail("session_required", "请使用控制台会话", 403);
     return ctx.principal!;
   };
-  const oauth = createSubscriptionOAuth(host, save, kind);
+  const oauth = createSubscriptionOAuth(
+    host,
+    (input, owner, signal) => save(input, owner, signal, true),
+    kind,
+    (id, owner) => decrypt(ownedRow(id, owner)),
+  );
   host.api({
     method: "GET",
     path: "/oauth/callback",
@@ -642,10 +727,18 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       const b = await readObject(request),
         r = ownedRow(requiredString(b.id, "id"), owner(ctx));
       if (b.action === "delete") {
+        const token = decrypt(r);
+        const revocationConfirmed =
+          token.auth_mode !== "siwc" ||
+          (await revokeSiwc(
+            host,
+            token,
+            AbortSignal.any([ctx.signal, AbortSignal.timeout(15000)]),
+          ).catch(() => false));
         db.prepare("DELETE FROM accounts WHERE id=?").run(r.id);
         affinity.remove(r.id);
         health.remove(r.id);
-        return json({ ok: true });
+        return json({ ok: true, revocationConfirmed });
       }
       if (b.action === "update") {
         db.prepare(

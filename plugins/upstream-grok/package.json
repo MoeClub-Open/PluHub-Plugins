@@ -1,6 +1,6 @@
 {
-  "name": "@pluhub/plugin-subscription-accounts",
-  "version": "0.1.0-alpha.4",
+  "name": "@pluhub/plugin-upstream-grok",
+  "version": "0.1.0-alpha.1",
   "type": "module",
   "private": true,
   "files": [

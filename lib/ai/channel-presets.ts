@@ -55,7 +55,12 @@ export const channelPresets: {
     pricing: "newapi",
   },
   ...(
-    ["codex", "claude-subscription", "antigravity"] as SubscriptionKind[]
+    [
+      "codex",
+      "claude-subscription",
+      "antigravity",
+      "grok",
+    ] as SubscriptionKind[]
   ).map((protocol) => ({
     id: protocol,
     name:
@@ -63,7 +68,9 @@ export const channelPresets: {
         ? "Codex"
         : protocol === "claude-subscription"
           ? "Claude"
-          : "Antigravity",
+          : protocol === "grok"
+            ? "Grok"
+            : "Antigravity",
     protocol,
     baseUrl: subscriptionDefaults[protocol].baseUrl,
     authorization: "subscription" as const,

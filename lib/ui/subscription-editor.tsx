@@ -4,13 +4,22 @@ import type { SubscriptionKind } from "../ai/subscription-auth.js";
 import { Dialog, Icon } from "./components.js";
 import { Notice } from "./mount.js";
 import { t as tr } from "./i18n.js";
+import { Select } from "./select.js";
 
 const providers: Record<SubscriptionKind, string> = {
   codex: "Codex",
   "claude-subscription": "Claude",
   antigravity: "Antigravity",
+  grok: "Grok",
 };
-type Flow = { id: string; url: string; expiresAt: number };
+type Flow = {
+  id: string;
+  url: string;
+  expiresAt: number;
+  mode?: string;
+  userCode?: string;
+  retryAfterMs?: number;
+};
 
 export function SubscriptionEditor({
   host,
@@ -33,6 +42,7 @@ export function SubscriptionEditor({
   const [projectId, setProject] = React.useState(account?.projectId ?? "");
   const [tab, setTab] = React.useState(account ? "details" : "login");
   const [flow, setFlow] = React.useState<Flow>();
+  const [authMode, setAuthMode] = React.useState(account?.authMode ?? "cli");
   const [callback, setCallback] = React.useState("");
   const [copied, setCopied] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -44,6 +54,7 @@ export function SubscriptionEditor({
     provider,
     name: name.trim(),
     maxConcurrency,
+    authMode,
   };
   const cancel = React.useCallback(async () => {
     const previous = current.current;
@@ -63,6 +74,32 @@ export function SubscriptionEditor({
       void cancel();
     };
   }, [cancel]);
+  React.useEffect(() => {
+    if (flow?.mode !== "device") return;
+    let stopped = false,
+      timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await host.request<any>(api + "/oauth/status", {
+          method: "POST",
+          body: JSON.stringify({ id: flow.id }),
+        });
+        if (stopped || current.current?.id !== flow.id) return;
+        if (result.status === "complete") {
+          await done(result.account);
+          return;
+        }
+        timer = setTimeout(poll, Math.max(1000, result.retryAfterMs ?? 5000));
+      } catch (error) {
+        if (!stopped) setMessage((error as Error).message);
+      }
+    };
+    timer = setTimeout(poll, flow.retryAfterMs ?? 5000);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [flow, host, api]);
   async function done(result: any) {
     current.current = undefined;
     if (
@@ -101,7 +138,10 @@ export function SubscriptionEditor({
           await cancel();
           next = await host.request<Flow>(api + "/oauth/start", {
             method: "POST",
-            body: JSON.stringify({ ...input, mode: "manual" }),
+            body: JSON.stringify({
+              ...input,
+              mode: provider === "grok" ? "device" : "manual",
+            }),
           });
           current.current = next;
           if (!alive.current) {
@@ -194,6 +234,19 @@ export function SubscriptionEditor({
           </div>
         )}
         <div className="form-grid">
+          {provider === "codex" && tab === "login" && !flow && (
+            <label>
+              {tr("授权方式")}
+              <Select
+                value={authMode}
+                disabled={!!account}
+                onChange={(e) => setAuthMode(e.target.value)}
+              >
+                <option value="cli">Codex CLI</option>
+                <option value="siwc">Continue with ChatGPT (SIWC)</option>
+              </Select>
+            </label>
+          )}
           <label>
             {tr("名称")}
             <input
@@ -229,7 +282,18 @@ export function SubscriptionEditor({
         </div>
         {tab === "login" && (
           <div className="oauth-connect">
-            {flow && (
+            {flow?.mode === "device" && (
+              <label>
+                {tr("设备验证码")}
+                <input
+                  readOnly
+                  value={flow.userCode}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <span role="status">{tr("等待授权…")}</span>
+              </label>
+            )}
+            {flow && flow.mode !== "device" && (
               <label>
                 {tr("授权链接")}
                 <input
@@ -317,7 +381,7 @@ export function SubscriptionEditor({
           >
             {tr("取消")}
           </button>
-          {(flow || tab !== "login") && (
+          {((flow && flow.mode !== "device") || tab !== "login") && (
             <button disabled={busy}>
               {flow ? tr("完成授权") : tr("保存")}
             </button>

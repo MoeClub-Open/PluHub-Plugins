@@ -40,6 +40,7 @@ export default definePlugin({
       "ALTER TABLE orders ADD COLUMN request_key TEXT; CREATE UNIQUE INDEX orders_request_key ON orders(user_id,request_key) WHERE request_key IS NOT NULL; CREATE INDEX orders_user_time ON orders(user_id,created_at);",
       adjustmentMigration,
       "ALTER TABLE orders ADD COLUMN payment_method TEXT; ALTER TABLE orders ADD COLUMN payment_method_name TEXT;",
+      "ALTER TABLE subscriptions ADD COLUMN observed_at INTEGER NOT NULL DEFAULT 0;",
     ]);
     host.cleanup(() => db.close());
     const products = () => (host.config().products ?? []) as Product[];
@@ -155,6 +156,9 @@ export default definePlugin({
           "cancelled",
           "past_due",
           "cancel_scheduled",
+          "active",
+          "failed",
+          "expired",
         ].includes(e.kind)
       )
         throw new HostError("invalid_payment", "Invalid payment event");
@@ -170,6 +174,12 @@ export default definePlugin({
             "Payment method does not match the order",
           );
         const p = JSON.parse(order.product) as Product;
+        if (e.kind === "failed" || e.kind === "expired") {
+          db.prepare(
+            "UPDATE orders SET status='failed',checkout_url=NULL WHERE id=? AND status='pending'",
+          ).run(order.id);
+          return;
+        }
         if (
           e.provider === "epay" &&
           p.mode === "subscription" &&
@@ -184,15 +194,18 @@ export default definePlugin({
         if (
           e.kind === "cancelled" ||
           e.kind === "past_due" ||
-          e.kind === "cancel_scheduled"
+          e.kind === "cancel_scheduled" ||
+          e.kind === "active"
         ) {
           if (e.subscriptionId)
             db.prepare(
-              "UPDATE subscriptions SET status=? WHERE id=? AND order_id=?",
+              "UPDATE subscriptions SET status=?,observed_at=? WHERE id=? AND order_id=? AND observed_at<=?",
             ).run(
               e.kind === "cancel_scheduled" ? "cancel_at_period_end" : e.kind,
+              e.observedAt ?? Date.now(),
               e.subscriptionId,
               order.id,
+              e.observedAt ?? Date.now(),
             );
           return;
         }
@@ -246,10 +259,15 @@ export default definePlugin({
               "Subscription order mismatch",
               409,
             );
-          if (existing && e.periodEnd! <= existing.period_end) return; // delayed or duplicate invoices cannot extend twice
           db.prepare(
-            "INSERT INTO subscriptions VALUES(?,?,'active',?) ON CONFLICT(id) DO UPDATE SET status='active',period_end=excluded.period_end",
-          ).run(e.subscriptionId, order.id, e.periodEnd!);
+            "INSERT INTO subscriptions(id,order_id,status,period_end,observed_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=CASE WHEN subscriptions.observed_at<=excluded.observed_at THEN excluded.status ELSE subscriptions.status END,period_end=MAX(subscriptions.period_end,excluded.period_end),observed_at=MAX(subscriptions.observed_at,excluded.observed_at)",
+          ).run(
+            e.subscriptionId,
+            order.id,
+            e.subscriptionStatus ?? "active",
+            e.periodEnd!,
+            e.observedAt ?? Date.now(),
+          );
         }
         db.prepare("UPDATE orders SET status='paid' WHERE id=?").run(order.id);
         db.prepare(
@@ -295,14 +313,49 @@ export default definePlugin({
           signal,
         );
         db.prepare(
-          "UPDATE subscriptions SET status='cancel_at_period_end' WHERE id=?",
-        ).run(sub.id);
+          "UPDATE subscriptions SET status='cancel_at_period_end',observed_at=? WHERE id=?",
+        ).run(Date.now(), sub.id);
       })().finally(() => cancelling.delete(sub.id));
       cancelling.set(sub.id, work);
       return work;
     }
     installCommerceAdmin(host, db, cancelSubscription);
     installOrderHistory(host, db);
+    host.api({
+      method: "POST",
+      path: "/customer-portal",
+      access: "authenticated",
+      handle: async (_request, ctx) => {
+        if (!ctx.principal?.session)
+          throw new HostError(
+            "session_required",
+            "Console session required",
+            403,
+          );
+        const url =
+          requiredString(host.config().publicUrl, "publicUrl", 2048).replace(
+            /\/$/,
+            "",
+          ) + "/#/commerce";
+        const subscriptions = db
+          .prepare(
+            "SELECT s.id,s.order_id AS orderId FROM subscriptions s JOIN orders o ON o.id=s.order_id WHERE o.user_id=? AND o.provider='stripe' ORDER BY s.period_end DESC LIMIT 10",
+          )
+          .all(ctx.principal.id);
+        return json(
+          await host.call(
+            "payments.stripe@1",
+            {
+              action: "portal",
+              userId: ctx.principal.id,
+              returnUrl: url,
+              subscriptions,
+            },
+            ctx.signal,
+          ),
+        );
+      },
+    });
     const checkouts = new Map<string, Promise<{ id: string; url: string }>>();
     host.api({
       method: "GET",
@@ -324,6 +377,13 @@ export default definePlugin({
           products: products(),
           providers: [...new Set(paymentMethods.map((m) => m.provider))],
           paymentMethods,
+          customerPortal:
+            host.hasCapability("payments.stripe@1") &&
+            (
+              await host.call<PaymentProviderStatus>("payments.stripe@1", {
+                action: "status",
+              })
+            ).customerPortal === true,
         });
       },
     });

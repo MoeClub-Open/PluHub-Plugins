@@ -41,6 +41,9 @@ importers:
       '@simplewebauthn/server':
         specifier: 14.0.3
         version: 14.0.3
+      jose:
+        specifier: 6.2.13
+        version: 6.2.13
       js-tiktoken:
         specifier: 1.0.21
         version: 1.0.21
@@ -924,6 +927,9 @@ packages:
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
+
+  jose@6.2.13:
+    resolution: {integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==}
 
   js-tiktoken@1.0.21:
     resolution: {integrity: sha512-biOj/6M5qdgx5TKjDnFT1ymSpM5tbd3ylwDtrQvFQSu0Z7bBYko2dF+W/aUkXUPuk6IVpRxk/3Q2sHOzGlS36g==}
@@ -2008,6 +2014,8 @@ snapshots:
   get-nonce@1.0.1: {}
 
   is-fullwidth-code-point@3.0.0: {}
+
+  jose@6.2.13: {}
 
   js-tiktoken@1.0.21:
     dependencies:

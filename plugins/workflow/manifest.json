@@ -5,7 +5,7 @@
   "name": "旧版流程兼容",
   "description": "为旧配置提供 ai.workflow 能力；新渠道直接使用渠道内的流程图。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -302,7 +302,8 @@
                               "gemini",
                               "codex",
                               "claude-subscription",
-                              "antigravity"
+                              "antigravity",
+                              "grok"
                             ]
                           },
                           "baseUrl": {

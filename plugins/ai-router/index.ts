@@ -38,7 +38,6 @@ import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
-import { subscriptionModels } from "../../lib/ai/subscription-models.js";
 import { validateOperations } from "../../lib/ai/media.js";
 export { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 export default definePlugin({
@@ -96,23 +95,16 @@ export default definePlugin({
               throw new HostError("subscription_missing", "尚未选择订阅账号");
             const providers = await Promise.all(
               ids.map(async (accountId) => {
-                const account = await host.call<{
-                  enabled: boolean;
-                  plan?: string;
-                }>(
+                return host.call<
+                  import("../../lib/ai/subscription-models.js").SubscriptionModel[]
+                >(
                   `ai.subscription.${connection.protocol}@1`,
                   {
-                    action: "inspect",
+                    action: "models",
                     id: accountId,
                     ownerId: "",
                     provider: connection.protocol,
                   },
-                  signal,
-                );
-                return subscriptionModels(
-                  host,
-                  connection.protocol as keyof typeof subscriptionDefaults,
-                  account.plan,
                   signal,
                 );
               }),
@@ -317,6 +309,7 @@ export default definePlugin({
               ids: upstream.subscriptionAccountIds,
               model,
               ownerId: upstream.credentialOwner,
+              authMode: upstream.authMode,
             },
             signal,
           );

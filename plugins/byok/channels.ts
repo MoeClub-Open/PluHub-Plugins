@@ -37,7 +37,6 @@ import {
   subscriptionDefaults,
   type SubscriptionKind,
 } from "../../lib/ai/subscription-auth.js";
-import { subscriptionModels } from "../../lib/ai/subscription-models.js";
 import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
 import {
   validateInterfaces,
@@ -81,6 +80,7 @@ export function installPersonalChannels(
     "codex",
     "claude-subscription",
     "antigravity",
+    "grok",
   ];
   const session = (principal: any) => {
     if (!principal?.session)
@@ -490,27 +490,17 @@ export function installPersonalChannels(
         );
       if (!Object.hasOwn(subscriptionDefaults, provider))
         throw new HostError("invalid_provider", "无效的订阅提供商");
-      const account = await host.call<{
-        enabled: boolean;
-        plan?: string;
-      }>(
+      const models = await host.call(
         `ai.subscription.${provider}@1`,
         {
-          action: "inspect",
+          action: "models",
           id: requiredString(query.get("accountId"), "subscription account"),
           ownerId: userId,
           provider,
         },
         ctx.signal,
       );
-      return json({
-        models: await subscriptionModels(
-          host,
-          provider as SubscriptionKind,
-          account.plan,
-          ctx.signal,
-        ),
-      });
+      return json({ models });
     },
   });
   host.api({

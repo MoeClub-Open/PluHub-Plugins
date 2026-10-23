@@ -5,21 +5,15 @@
   "name": "整站排行榜",
   "description": "展示用户用量榜和平台模型热度榜。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
   "provides": [],
-  "requires": [
-    "observability.rankings@1",
-    "users.directory@1",
-    "ai.catalog@2"
-  ],
-  "permissions": [
-    "api.register"
-  ],
+  "requires": ["observability.rankings@1", "users.directory@1"],
+  "permissions": ["api.register"],
   "configReload": "restart",
   "configSchema": {
     "type": "object",
@@ -32,5 +26,6 @@
     "public": true,
     "path": "/leaderboard",
     "order": 40
-  }
+  },
+  "optionalRequires": ["ai.catalog@2"]
 }

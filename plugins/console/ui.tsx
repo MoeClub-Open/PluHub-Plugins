@@ -22,6 +22,7 @@ import {
 } from "../../lib/ui/i18n.js";
 import { usePageTransition } from "./page-transition.js";
 import { AccountMenu } from "./account-menu.js";
+import { PluginActions } from "./plugin-actions.js";
 import { RegistryBrowser, PluginUpdates } from "./registry-ui.js";
 import { Dashboard } from "./dashboard.js";
 import { Login } from "./login.js";
@@ -54,7 +55,7 @@ import { Portal, PortalSettings } from "./portal-ui.js";
 import { defaultPortal, type PortalContent } from "./portal.js";
 import { Onboarding } from "./onboarding-ui.js";
 import { setupRedirect, type SetupState } from "./onboarding.js";
-import { Icon, PageHeading, Empty, Dialog } from "../../lib/ui/components.js";
+import { Icon, PageHeading, Empty } from "../../lib/ui/components.js";
 import "./ui.css";
 import "./management.css";
 import "./stripe.css";
@@ -180,7 +181,6 @@ function App() {
   const [setupState, setSetupState] = React.useState<SetupState>();
   const [setupError, setSetupError] = React.useState("");
   const [message, setMessage] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
   const [mobile, setMobile] = React.useState(false);
   const [version, setVersion] = React.useState(0);
   const [searchOpen, setSearchOpen] = React.useState(false);
@@ -217,10 +217,6 @@ function App() {
   const [pluginCategoryFilter, setPluginCategoryFilter] = React.useState("");
   const [pluginStateFilter, setPluginStateFilter] = React.useState("");
   const [updatePlugin, setUpdatePlugin] = React.useState<any>();
-  const [pendingPlugin, setPendingPlugin] = React.useState<{
-    id: string;
-    enabled: boolean;
-  }>();
   const theme = useTheme();
   const { dark } = theme;
   const page = React.useRef<HTMLDivElement>(null);
@@ -519,6 +515,7 @@ function App() {
   )
     return (
       <Portal
+        host={client}
         brand={brand}
         content={portal}
         path={path}
@@ -652,20 +649,6 @@ function App() {
     setPluginQuery("");
     setPluginCategoryFilter("");
     setPluginStateFilter("");
-  }
-  async function state(id: string, enabled: boolean) {
-    setBusy(true);
-    try {
-      await client.request("/api/host/plugin-state", {
-        method: "POST",
-        body: JSON.stringify({ id, enabled }),
-      });
-      setVersion((v) => v + 1);
-    } catch (e) {
-      setMessage((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
   }
   return (
     <div className="layout">
@@ -975,38 +958,17 @@ function App() {
                           {
                             <button
                               className="ghost"
-                              disabled={busy}
                               onClick={() => setUpdatePlugin(p)}
                             >
                               {tr("更新")}
                             </button>
                           }
-                          <button
-                            className="ghost"
-                            disabled={
-                              busy ||
-                              (p.state === "Active" && p.managementProtected)
-                            }
-                            title={
-                              p.managementProtected
-                                ? tr(
-                                    "该组件提供管理入口，请通过本地维护流程停用",
-                                  )
-                                : undefined
-                            }
-                            onClick={() =>
-                              setPendingPlugin({
-                                id: p.id,
-                                enabled: p.state !== "Active",
-                              })
-                            }
-                          >
-                            {p.state === "Active" && p.managementProtected
-                              ? tr("管理入口")
-                              : p.state === "Active"
-                                ? tr("停用")
-                                : tr("启用")}
-                          </button>
+                          <PluginActions
+                            plugin={p}
+                            host={client}
+                            changed={() => setVersion((v) => v + 1)}
+                            report={setMessage}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -1082,42 +1044,6 @@ function App() {
           complete={() => finishIdentity()}
           close={() => finishIdentity(new Error(tr("操作已取消")))}
         />
-      )}
-      {pendingPlugin && (
-        <Dialog
-          title={pendingPlugin.enabled ? tr("启用插件") : tr("停用插件")}
-          close={() => {
-            if (!busy) setPendingPlugin(undefined);
-          }}
-        >
-          <p>
-            {pendingPlugin.enabled ? tr("确认启用") : tr("确认停用")}「
-            {plugins.find((p) => p.id === pendingPlugin.id)?.name ||
-              pendingPlugin.id}
-            」？
-            {!pendingPlugin.enabled &&
-              tr("该插件的页面和能力将不可用，依赖它的功能也可能受影响。")}
-          </p>
-          <div className="form-actions">
-            <button
-              className="secondary"
-              disabled={busy}
-              onClick={() => setPendingPlugin(undefined)}
-            >
-              {tr("取消")}
-            </button>
-            <button
-              className={pendingPlugin.enabled ? "" : "danger"}
-              disabled={busy}
-              onClick={async () => {
-                await state(pendingPlugin.id, pendingPlugin.enabled);
-                setPendingPlugin(undefined);
-              }}
-            >
-              {busy ? tr("处理中…") : tr("确认")}
-            </button>
-          </div>
-        </Dialog>
       )}
       {updatePlugin && (
         <RegistryBrowser

@@ -16,12 +16,23 @@ export function subscriptionRequest(
   kind: SubscriptionKind,
   request: AIRequest,
   upstream: Upstream,
-  credential: { secret: string; accountId?: string; projectId?: string },
+  credential: {
+    secret: string;
+    accountId?: string;
+    projectId?: string;
+    authMode?: "siwc";
+  },
 ) {
+  if (credential.authMode === "siwc")
+    upstream = {
+      ...upstream,
+      authMode: "siwc",
+      baseUrl: "https://api.openai.com/v1",
+    };
   request = normalizeOutputOptions(request, { ...upstream, protocol: kind });
   validateWebSearchTarget(request, { ...upstream, protocol: kind });
   const protocol: Protocol =
-    kind === "codex"
+    kind === "codex" || kind === "grok"
       ? "openai-responses"
       : kind === "claude-subscription"
         ? "anthropic"
@@ -55,6 +66,10 @@ export function subscriptionRequest(
   let suffix = "";
   if (kind === "codex") {
     suffix = "/responses";
+    if (upstream.authMode === "siwc") {
+      body.stream = true;
+      body.store = false;
+    }
     if (!supportsOutputLimit({ ...upstream, protocol: kind })) {
       body.stream = true;
       body.store = false;
@@ -72,8 +87,24 @@ export function subscriptionRequest(
       headers["openai-beta"] = "responses=experimental";
     }
     const account = credential.accountId ?? upstream.accountId;
-    if (account) headers["chatgpt-account-id"] = account;
+    if (account && upstream.authMode !== "siwc")
+      headers["chatgpt-account-id"] = account;
     if (request.sessionId) headers.session_id = request.sessionId;
+  } else if (kind === "grok") {
+    suffix = "/responses";
+    body.stream = true;
+    body.store = false;
+    delete body.previous_response_id;
+    headers["x-xai-token-auth"] = "xai-grok-cli";
+    headers["x-grok-client-identifier"] = "grok-shell";
+    headers["x-authenticateresponse"] = "authenticate-response";
+    headers["accept"] = "text/event-stream";
+    headers["x-grok-client-version"] = "1.0.46";
+    headers["user-agent"] = "xai-grok-workspace/1.0.46";
+    if (request.sessionId) {
+      headers["x-grok-conv-id"] = request.sessionId;
+      body.prompt_cache_key = request.sessionId;
+    }
   } else if (kind === "claude-subscription") {
     suffix = url.pathname.replace(/\/$/, "").endsWith("/v1")
       ? "/messages"

@@ -111,6 +111,28 @@ function Page({ host }: { host: UIHost }) {
   return (
     <>
       <PageHeading title={tr("充值与订阅")}>
+        {catalog.data?.customerPortal && (
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const result = await host.request<{ url: string }>(
+                  api + "/customer-portal",
+                  { method: "POST", body: "{}" },
+                );
+                location.assign(result.url);
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {tr("管理付款方式与账单")}
+          </button>
+        )}
         <button
           className="secondary"
           aria-label={tr("刷新付款状态")}

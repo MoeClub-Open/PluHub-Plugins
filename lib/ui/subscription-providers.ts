@@ -4,6 +4,7 @@ export const subscriptionProviders: SubscriptionKind[] = [
   "codex",
   "claude-subscription",
   "antigravity",
+  "grok",
 ];
 export const subscriptionApi = (provider: SubscriptionKind) =>
   "/api/plugins/official.upstream-" + provider;
@@ -18,18 +19,14 @@ export async function listSubscriptionAccounts(host: UIHost, personal = false) {
   const results = await Promise.allSettled(
     providers.map((provider) =>
       host.request<any[]>(
-        subscriptionApi(provider) +
-          (personal ? "/personal" : "") +
-          "/accounts",
+        subscriptionApi(provider) + (personal ? "/personal" : "") + "/accounts",
       ),
     ),
   );
   const accounts = results.flatMap((result) =>
     result.status === "fulfilled" ? result.value : [],
   );
-  const firstError = results.find(
-    (result) => result.status === "rejected",
-  );
+  const firstError = results.find((result) => result.status === "rejected");
   if (!accounts.length && firstError?.status === "rejected")
     throw firstError.reason;
   return accounts;

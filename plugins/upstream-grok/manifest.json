@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "official.upstream-grok",
+  "category": "upstream",
+  "name": "Grok 订阅接入",
+  "description": "Grok 授权、订阅账号与上游调用。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.1",
+  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": ["ai.upstream.grok@1", "ai.subscription.grok@1"],
+  "requires": ["http.transport@1"],
+  "optionalRequires": ["credentials.resolve@1"],
+  "permissions": ["secrets.read", "api.register"],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "masterKeyRef": {
+        "type": "string",
+        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+      },
+      "secretRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        },
+        "uniqueItems": true
+      }
+    }
+  },
+  "ui": {
+    "title": "Grok 订阅",
+    "entry": "dist/ui.js",
+    "path": "/settings/subscriptions/grok",
+    "public": false,
+    "group": "routing",
+    "order": 28
+  }
+}

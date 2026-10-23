@@ -7,11 +7,14 @@ import type { Branding } from "./branding.js";
 import { defaultPortal, readPortal, type PortalContent } from "./portal.js";
 import { consoleEntry } from "./onboarding.js";
 import { Notice, useLoad } from "../../lib/ui/mount.js";
+import { PortalModels, featuredModelId } from "./portal-models.js";
+import { Select } from "../../lib/ui/select.js";
 import { Empty, Icon } from "../../lib/ui/components.js";
 import type { ThemeMode } from "./theme.js";
 import { LanguageMenu } from "./language-menu.js";
 
 export function Portal({
+  host,
   brand,
   content,
   path,
@@ -21,6 +24,7 @@ export function Portal({
   children,
   contentRef,
 }: {
+  host: UIHost;
   brand: Branding;
   content: PortalContent;
   path: string;
@@ -31,10 +35,6 @@ export function Portal({
   contentRef?: React.Ref<HTMLElement>;
 }) {
   const [copyStatus, setCopyStatus] = React.useState("");
-  const [exampleOpen, setExampleOpen] = React.useState(
-    () => window.matchMedia("(min-width: 701px)").matches,
-  );
-  const exampleId = React.useId();
   const endpoint = location.origin + "/v1";
   const themeNames = {
     system: tr("跟随系统"),
@@ -61,7 +61,7 @@ export function Portal({
     brand.privacyUrl
   );
   return (
-    <div className="portal-shell">
+    <div className={"portal-shell portal-layout-" + content.layout}>
       <header className="portal-header">
         <a className="brand" href="#/">
           <BrandMark brand={brand} />
@@ -122,8 +122,7 @@ export function Portal({
               )}
               <div
                 className={
-                  "portal-intro" +
-                  (content.showEndpoint ? "" : " portal-intro-text")
+                  "portal-intro" + (modelCatalog ? "" : " portal-intro-text")
                 }
               >
                 <section className="portal-hero">
@@ -146,64 +145,31 @@ export function Portal({
                     )}
                   </div>
                 </section>
-                {content.showEndpoint && (
-                  <section className="portal-api" aria-label={tr("API 接入")}>
-                    <div className="portal-api-heading">
-                      <h2>{tr("API 接入")}</h2>
-                      <button
-                        className="ghost portal-example-toggle"
-                        aria-expanded={exampleOpen}
-                        aria-controls={exampleId}
-                        onClick={() => setExampleOpen((open) => !open)}
-                      >
-                        {tr("调用示例")}
-                        <Icon name="chevron" size={14} />
-                      </button>
-                    </div>
-                    <div className="portal-api-row">
-                      <div className="portal-api-address">
-                        <span>{tr("API 地址")}</span>
-                        <code title={endpoint}>{endpoint}</code>
-                      </div>
-                      <div className="portal-api-actions">
-                        <button
-                          className="ghost"
-                          aria-label={tr("复制 API 地址")}
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(endpoint);
-                              setCopyStatus(tr("已复制"));
-                            } catch {
-                              setCopyStatus(tr("复制失败，请手动复制"));
-                            }
-                          }}
-                        >
-                          <Icon
-                            name={
-                              copyStatus === tr("已复制") ? "check" : "copy"
-                            }
-                            size={14}
-                          />
-                          <span role="status">{copyStatus || tr("复制")}</span>
-                        </button>
-                      </div>
-                    </div>
-                    {exampleOpen && (
-                      <div
-                        className="portal-example"
-                        id={exampleId}
-                        role="region"
-                        aria-label={tr("调用示例")}
-                      >
-                        <div className="portal-code-language">cURL</div>
-                        <pre>
-                          <code>{`curl ${endpoint}/chat/completions \\\n  -H "Authorization: Bearer $API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "model": "YOUR_MODEL",\n    "messages": [{"role": "user", "content": "Hello"}]\n  }'`}</code>
-                        </pre>
-                      </div>
-                    )}
-                  </section>
+                {modelCatalog && (
+                  <PortalModels host={host} selected={content.featuredModels} />
                 )}
               </div>
+              {content.showEndpoint && (
+                <div className="portal-endpoint">
+                  <span>API</span>
+                  <code>{endpoint}</code>
+                  <button
+                    className="ghost"
+                    aria-label={tr("复制 API 地址")}
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(endpoint);
+                        setCopyStatus(tr("已复制"));
+                      } catch {
+                        setCopyStatus(tr("复制失败，请手动复制"));
+                      }
+                    }}
+                  >
+                    <Icon name="copy" size={14} />
+                    <span role="status">{copyStatus || tr("复制")}</span>
+                  </button>
+                </div>
+              )}
               {content.features.length > 0 && (
                 <section
                   className="portal-features"
@@ -284,6 +250,10 @@ export function Portal({
 export function PortalSettings({ host }: { host: UIHost }) {
   const data = useLoad<any>(() => host.request("/api/host/config"));
   const [draft, setDraft] = React.useState(defaultPortal);
+  const [tab, setTab] = React.useState("hero");
+  const catalog = useLoad<any[]>(() =>
+    host.request("/api/plugins/official.model-catalog/public"),
+  );
   const [saved, setSaved] = React.useState(defaultPortal);
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -317,7 +287,7 @@ export function PortalSettings({ host }: { host: UIHost }) {
       });
       setDraft(portal);
       setSaved(portal);
-      setMessage(tr("门户与公开内容已保存并发布。"));
+      setMessage(tr("已保存"));
       window.dispatchEvent(new Event("pluhub:public"));
     } catch (error) {
       setMessage((error as Error).message);
@@ -361,7 +331,7 @@ export function PortalSettings({ host }: { host: UIHost }) {
   ) {
     const items = draft[key] as unknown as Record<string, string>[];
     return (
-      <section className="card settings-form-section">
+      <section className="settings-form-section" hidden={tab !== key}>
         <div className="panel-heading">
           <div>
             <h2>{title}</h2>
@@ -391,9 +361,7 @@ export function PortalSettings({ host }: { host: UIHost }) {
         </div>
         {items.map((item, index) => (
           <fieldset className="portal-editor-item" key={index}>
-            <legend>
-              {title} {index + 1}
-            </legend>
+            <legend>{item.title || item.question || title}</legend>
             <div className="actions">
               <button
                 type="button"
@@ -465,7 +433,27 @@ export function PortalSettings({ host }: { host: UIHost }) {
       <Notice message={message || data.error} />
       {data.data && (
         <form onSubmit={save} className="portal-settings-form">
-          <section className="card settings-form-section">
+          <div className="tabs" role="tablist" aria-label={tr("门户设置")}>
+            {[
+              ["hero", "首页布局"],
+              ["models", "精选模型"],
+              ["features", "服务特色"],
+              ["faqs", "常见问题"],
+              ["pages", "公开页面"],
+            ].map(([id, label]) => (
+              <button
+                type="button"
+                key={id}
+                role="tab"
+                aria-selected={tab === id}
+                className={tab === id ? "active" : ""}
+                onClick={() => setTab(id!)}
+              >
+                {tr(label!)}
+              </button>
+            ))}
+          </div>
+          <section className="settings-form-section" hidden={tab !== "hero"}>
             <div className="panel-heading">
               <div>
                 <h2>{tr("门户与首屏")}</h2>
@@ -489,7 +477,19 @@ export function PortalSettings({ host }: { host: UIHost }) {
               {tr("启用落地门户页")}
             </label>
             <div className="form-grid">
-              {field("eyebrow", tr("首屏标语"))}
+              <label>
+                {tr("首页布局")}
+                <Select
+                  value={draft.layout}
+                  onChange={(e) =>
+                    set("layout", e.target.value as PortalContent["layout"])
+                  }
+                >
+                  <option value="split">{tr("模型橱窗")}</option>
+                  <option value="centered">{tr("居中布局")}</option>
+                </Select>
+              </label>
+              {field("eyebrow", tr("分类标签"))}
               {field("title", tr("门户标题"), true)}
               {field("description", tr("门户简介"), true)}
               {field("announcement", tr("站点公告"), true)}
@@ -503,12 +503,45 @@ export function PortalSettings({ host }: { host: UIHost }) {
                 checked={draft.showEndpoint}
                 onCheckedChange={(event) => set("showEndpoint", event === true)}
               />
-              {tr("显示 API 接入区")}
+              {tr("显示 API 地址")}
             </label>
+          </section>
+          <section className="settings-form-section" hidden={tab !== "models"}>
+            <div className="form-grid">
+              {(catalog.data ?? [])
+                .filter(
+                  (model) =>
+                    (model.operations ?? ["chat"]).includes("chat") &&
+                    model.pricing?.mode !== "request",
+                )
+                .map((model) => {
+                  const id = featuredModelId(model),
+                    selected = draft.featuredModels.includes(id);
+                  return (
+                    <label className="checkbox" key={id}>
+                      <Checkbox
+                        checked={selected}
+                        disabled={!selected && draft.featuredModels.length >= 8}
+                        onCheckedChange={(checked) =>
+                          set(
+                            "featuredModels",
+                            checked
+                              ? [...draft.featuredModels, id]
+                              : draft.featuredModels.filter(
+                                  (value) => value !== id,
+                                ),
+                          )
+                        }
+                      />
+                      {model.name} · {model.channel?.name}
+                    </label>
+                  );
+                })}
+            </div>
           </section>
           {collection(
             "features",
-            tr("能力介绍"),
+            tr("服务特色"),
             { title: tr("标题"), description: tr("说明") },
             6,
           )}

@@ -1,10 +1,10 @@
-import { Checkbox } from "./checkbox.js";
-import { t as tr } from "./i18n.js";
-import { Select } from "./select.js";
+import { Checkbox } from "../../lib/ui/checkbox.js";
+import { t as tr } from "../../lib/ui/i18n.js";
+import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import { mountPage, useLoad, Notice } from "./mount.js";
-import { PageHeading } from "./components.js";
+import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
+import { PageHeading } from "../../lib/ui/components.js";
 export function paymentSettings() {
   function Page({ host }: { host: UIHost }) {
     const data = useLoad<any>(() => host.request("/api/host/config"));
@@ -26,18 +26,40 @@ export function paymentSettings() {
         const p = find(config);
         if (!p) throw new Error(tr("支付插件未安装"));
         const next: any = { enabled: f.get("enabled") === "on" };
-        const fields = ["keyRef", "webhookSecretRef"];
+        const fields = [
+          "keyRef",
+          "webhookSecretRef",
+          "previousWebhookSecretRef",
+        ];
+        const entered: Record<string, string> = {};
         for (const k of fields) {
           const value = String(f.get(k) ?? "").trim();
-          if (value) next[k] = value;
+          if (value.startsWith("env:")) next[k] = value;
+          else if (value) entered[k] = value;
+          else if (settings[k]) next[k] = settings[k];
         }
+        if (Object.keys(entered).length)
+          Object.assign(
+            next,
+            await host.request(
+              "/api/plugins/official.payments-stripe/secrets",
+              { method: "POST", body: JSON.stringify(entered) },
+            ),
+          );
+        if (f.get("clearPrevious") === "on")
+          delete next.previousWebhookSecretRef;
+        next.portalEnabled = f.get("portalEnabled") === "on";
+        if (f.get("portalConfiguration"))
+          next.portalConfiguration = String(
+            f.get("portalConfiguration"),
+          ).trim();
         next.livemode = f.get("livemode") === "true";
         next.secretRefs = [
           ...new Set(
             fields
               .filter((k) => k.endsWith("Ref"))
               .map((k) => next[k])
-              .filter(Boolean),
+              .filter((value) => value?.startsWith("env:")),
           ),
         ];
         p.config = next;
@@ -58,8 +80,13 @@ export function paymentSettings() {
         {title}
         <input
           name={name}
-          defaultValue={settings[name] ?? ""}
-          placeholder={placeholder}
+          type={name.endsWith("Ref") ? "password" : "text"}
+          defaultValue={name.endsWith("Ref") ? "" : (settings[name] ?? "")}
+          placeholder={
+            name.endsWith("Ref") && settings[name]
+              ? tr("已设置，留空保留")
+              : placeholder
+          }
           autoComplete="off"
         />
       </label>
@@ -79,15 +106,18 @@ export function paymentSettings() {
               {tr("启用支付渠道")}
             </label>
             <div className="form-grid">
+              {input("keyRef", "Stripe Secret Key", "sk_…")}
+              {input("webhookSecretRef", tr("Webhook 签名密钥"), "whsec_…")}
               {input(
-                "keyRef",
-                tr("Stripe Secret Key 引用"),
-                "env:STRIPE_SECRET_KEY",
+                "previousWebhookSecretRef",
+                tr("轮换期间的旧签名密钥"),
+                "whsec_…",
               )}
-              {input(
-                "webhookSecretRef",
-                tr("Webhook 签名密钥引用"),
-                "env:STRIPE_WEBHOOK_SECRET",
+              {settings.previousWebhookSecretRef && (
+                <label className="checkbox">
+                  <Checkbox name="clearPrevious" />
+                  {tr("结束旧密钥轮换")}
+                </label>
               )}
               <label>
                 {tr("运行模式")}
@@ -100,6 +130,15 @@ export function paymentSettings() {
                 </Select>
               </label>
             </div>
+            <label className="checkbox">
+              <Checkbox
+                appearance="switch"
+                name="portalEnabled"
+                defaultChecked={settings.portalEnabled === true}
+              />
+              {tr("Stripe 账单门户")}
+            </label>
+            {input("portalConfiguration", tr("账单门户配置 ID"), "bpc_…")}
             <label>
               {tr("回调地址")}
               <input

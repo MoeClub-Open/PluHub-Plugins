@@ -28,6 +28,7 @@ const protocols = [
   "codex",
   "claude-subscription",
   "antigravity",
+  "grok",
   "auto-router",
 ];
 const routerIndex = (config: any) =>

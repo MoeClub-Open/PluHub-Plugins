@@ -206,7 +206,7 @@ export default definePlugin({
           candidate.reasoningEfforts ?? target.route.reasoningEfforts ?? [];
         const protocol = target.plan.upstream.protocol;
         const wireProtocol =
-          protocol === "codex"
+          protocol === "codex" || protocol === "grok"
             ? "openai-responses"
             : protocol === "claude-subscription"
               ? "anthropic"

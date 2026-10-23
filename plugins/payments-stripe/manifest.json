@@ -5,7 +5,7 @@
   "name": "Stripe 支付",
   "description": "对接 Stripe 单次支付、订阅和回调验签。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -17,7 +17,7 @@
     "commerce.payment@1",
     "http.transport@1"
   ],
-  "optionalRequires": [],
+  "optionalRequires": ["auth.admin@1"],
   "permissions": ["api.register", "secrets.read"],
   "configReload": "snapshot",
   "configSchema": {
@@ -29,11 +29,11 @@
       },
       "keyRef": {
         "type": "string",
-        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        "pattern": "^(env:[A-Z][A-Z0-9_]*|local:[a-f0-9-]{36})$"
       },
       "webhookSecretRef": {
         "type": "string",
-        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        "pattern": "^(env:[A-Z][A-Z0-9_]*|local:[a-f0-9-]{36})$"
       },
       "livemode": {
         "type": "boolean"
@@ -45,6 +45,17 @@
           "pattern": "^env:[A-Z][A-Z0-9_]*$"
         },
         "uniqueItems": true
+      },
+      "previousWebhookSecretRef": {
+        "type": "string",
+        "pattern": "^(env:[A-Z][A-Z0-9_]*|local:[a-f0-9-]{36})$"
+      },
+      "portalEnabled": {
+        "type": "boolean"
+      },
+      "portalConfiguration": {
+        "type": "string",
+        "pattern": "^bpc_[A-Za-z0-9]+$"
       }
     }
   },

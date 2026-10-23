@@ -26,8 +26,8 @@ const expressionLicense: Plugin = {
 };
 for (const entry of await readdir(root, { withFileTypes: true })) {
   if (!entry.isDirectory()) continue;
-  if (entry.name === "subscription-accounts") continue; // Retired aggregate; retained only as migration history.
   const directory = resolve(root, entry.name);
+  if (!existsSync(resolve(directory, "manifest.json"))) continue;
   const out = resolve(directory, "dist");
   if (!out.startsWith(root.endsWith(sep) ? root : root + sep))
     throw new Error("Build output is outside the plugin workspace");
@@ -56,18 +56,17 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
       jsx: "automatic",
       minify: true,
       plugins: [expressionLicense],
-      banner:
-        entry.name === "model-catalog"
-          ? {
-              js:
-                "/*!\n" +
-                (await readFile(
-                  resolve(directory, "THIRD_PARTY_NOTICES.md"),
-                  "utf8",
-                )) +
-                "\n*/",
-            }
-          : undefined,
+      banner: ["model-catalog", "console"].includes(entry.name)
+        ? {
+            js:
+              "/*!\n" +
+              (await readFile(
+                resolve(root, "model-catalog", "THIRD_PARTY_NOTICES.md"),
+                "utf8",
+              )) +
+              "\n*/",
+          }
+        : undefined,
       loader: { ".svg": "text" },
       define: { "process.env.NODE_ENV": '"production"' },
     });

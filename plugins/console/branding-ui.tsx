@@ -5,6 +5,7 @@ import { Notice, useLoad } from "../../lib/ui/mount.js";
 import { Icon } from "../../lib/ui/components.js";
 import { Select } from "../../lib/ui/select.js";
 import type { Locale } from "@pluhub/ui-sdk";
+import { siteThemes, themeVariables, type SiteTheme } from "./site-themes.js";
 import {
   defaultBranding,
   readBranding,
@@ -60,6 +61,11 @@ export function useBranding(client: UIHost, version: number, dark: boolean) {
   }, [client, version]);
   React.useEffect(() => {
     document.title = brand.name;
+    document.documentElement.dataset.siteTheme = brand.siteTheme;
+    for (const [key, value] of Object.entries(
+      themeVariables(brand.siteTheme, dark),
+    ))
+      document.documentElement.style.setProperty(key, value!);
     const colors = brandColors(brand.accentColor, dark);
     document.documentElement.style.setProperty("--accent", colors.accent);
     document.documentElement.style.setProperty("--accent-soft", colors.soft);
@@ -79,6 +85,7 @@ export function BrandingSettings({ host }: { host: UIHost }) {
   const [saved, setSaved] = React.useState(defaultBranding);
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
+  const [tab, setTab] = React.useState("identity");
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const find = (config: any) =>
     config.plugins.find((plugin: any) =>
@@ -210,9 +217,31 @@ export function BrandingSettings({ host }: { host: UIHost }) {
         <p className="muted">{tr("正在读取站点设置…")}</p>
       ) : (
         <form onSubmit={(event) => void save(event)}>
+          <div className="tabs" role="tablist" aria-label={tr("站点与品牌")}>
+            {[
+              ["identity", "品牌标识"],
+              ["appearance", "外观主题"],
+              ["login", "登录页面"],
+              ["links", "联系与链接"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                className={tab === id ? "active" : ""}
+                onClick={() => setTab(id!)}
+              >
+                {tr(label!)}
+              </button>
+            ))}
+          </div>
           <div className="branding-layout">
             <div className="branding-fields">
-              <section className="settings-form-section">
+              <section
+                className="settings-form-section"
+                hidden={tab !== "identity"}
+              >
                 <div>
                   <h2>{tr("品牌标识")}</h2>
                 </div>
@@ -235,19 +264,45 @@ export function BrandingSettings({ host }: { host: UIHost }) {
                   </label>
                   {input("name", tr("站点名称"))}
                   {input("description", tr("站点简介"))}
-                  {input("accentColor", tr("主题色"), "#635bff")}
                   <div className="full">
                     {imageInput("logoUrl", "Logo")}
                     {imageInput("faviconUrl", tr("浏览器图标"))}
-                    <p className="field-note">
-                      {tr(
-                        "PNG、JPEG、WebP，最大 64 KiB；或填写 HTTPS / 站内图片地址。",
-                      )}
-                    </p>
                   </div>
                 </div>
               </section>
-              <section className="settings-form-section">
+              <section
+                className="settings-form-section"
+                hidden={tab !== "appearance"}
+              >
+                <h2>{tr("外观主题")}</h2>
+                <div className="form-grid">
+                  <label>
+                    {tr("站点主题")}
+                    <Select
+                      value={draft.siteTheme}
+                      onChange={(event) => {
+                        const siteTheme = event.target.value as SiteTheme;
+                        setDraft({
+                          ...draft,
+                          siteTheme,
+                          accentColor: siteThemes[siteTheme].accent,
+                        });
+                      }}
+                    >
+                      {Object.entries(siteThemes).map(([id, theme]) => (
+                        <option key={id} value={id}>
+                          {tr(theme.name)}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  {input("accentColor", tr("主题色"), "#635bff")}
+                </div>
+              </section>
+              <section
+                className="settings-form-section"
+                hidden={tab !== "login"}
+              >
                 <div>
                   <h2>{tr("登录页面")}</h2>
                 </div>
@@ -276,7 +331,10 @@ export function BrandingSettings({ host }: { host: UIHost }) {
                   </label>
                 </div>
               </section>
-              <section className="settings-form-section">
+              <section
+                className="settings-form-section"
+                hidden={tab !== "links"}
+              >
                 <div>
                   <h2>{tr("联系与链接")}</h2>
                 </div>
@@ -293,6 +351,7 @@ export function BrandingSettings({ host }: { host: UIHost }) {
               className="brand-preview"
               style={
                 {
+                  ...themeVariables(draft.siteTheme, false),
                   "--accent": colors.accent,
                   "--accent-soft": colors.soft,
                   "--accent-contrast": colors.ink,

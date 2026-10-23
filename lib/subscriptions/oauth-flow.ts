@@ -4,7 +4,10 @@ import {
   subscriptionDefaults,
   subscriptionKind,
   type SubscriptionKind,
+  type SubscriptionToken,
 } from "../ai/subscription-auth.js";
+import { grokDiscovery, grokDeviceRequest, grokScope } from "./grok-oauth.js";
+import { siwcProfile, siwcHostId, siwcResource, verifySiwc } from "./siwc.js";
 import { oauthConfig, responseObject, tokenRequest } from "./oauth.js";
 import { subscriptionIdentity } from "./overview.js";
 
@@ -29,6 +32,8 @@ type Flow = Scope & {
   interval: number;
   nextPollAt: number;
   task?: Promise<any>;
+  tokenEndpoint?: string;
+  siwc?: { clientId: string; nonce: string; previous?: SubscriptionToken };
 };
 const failure = (code: string, message: string, status = 400): never => {
   throw new HostError(code, message, status);
@@ -43,6 +48,7 @@ export function createSubscriptionOAuth(
     signal?: AbortSignal,
   ) => unknown,
   kind: SubscriptionKind,
+  existing: (id: string, owner: string) => SubscriptionToken,
 ) {
   const callbackPath = `/api/plugins/official.upstream-${kind}/oauth/callback`;
   const flows = new Map<string, Flow>();
@@ -73,14 +79,15 @@ export function createSubscriptionOAuth(
   function deviceSupported(provider: SubscriptionKind) {
     const profile = oauthConfig(host, provider);
     return (
-      provider === "codex" &&
-      ["authorizeUrl", "tokenUrl", "clientId"].every(
-        (field) =>
-          profile[field] ===
-          subscriptionDefaults.codex[
-            field as keyof typeof subscriptionDefaults.codex
-          ],
-      )
+      provider === "grok" ||
+      (provider === "codex" &&
+        ["authorizeUrl", "tokenUrl", "clientId"].every(
+          (field) =>
+            profile[field] ===
+            subscriptionDefaults.codex[
+              field as keyof typeof subscriptionDefaults.codex
+            ],
+        ))
     );
   }
   function automatic(redirectUri: string, requestUrl: string) {
@@ -122,7 +129,7 @@ export function createSubscriptionOAuth(
     verifier = flow.verifier,
     redirectUri = flow.redirectUri,
   ) {
-    const token = await tokenRequest(
+    let token = await tokenRequest(
       host,
       flow.provider,
       {
@@ -130,12 +137,28 @@ export function createSubscriptionOAuth(
         code,
         ...(flow.provider === "antigravity" ? {} : { code_verifier: verifier }),
         redirect_uri: redirectUri,
+        ...(flow.siwc ? { resource: siwcResource } : {}),
         ...(flow.provider === "claude-subscription"
           ? { state: flow.state }
           : {}),
       },
       signal(flow),
+      flow.siwc
+        ? { clientId: flow.siwc.clientId, tokenUrl: siwcProfile.tokenUrl }
+        : undefined,
     );
+    if (flow.siwc)
+      token = await verifySiwc(
+        host,
+        token,
+        flow.siwc.clientId,
+        signal(flow),
+        flow.siwc.nonce,
+        flow.siwc.previous,
+      );
+    return saveToken(id, flow, token);
+  }
+  async function saveToken(id: string, flow: Flow, token: any) {
     flow.controller.signal.throwIfAborted();
     if (flows.get(id) !== flow || flow.expiresAt <= Date.now())
       failure("oauth_session", "授权会话已过期，请重新开始", 409);
@@ -167,8 +190,17 @@ export function createSubscriptionOAuth(
     scope: Scope,
     requestUrl: string,
   ) {
-    const provider = subscriptionKind(input.provider ?? kind),
-      config = oauthConfig(host, provider);
+    const provider = subscriptionKind(input.provider ?? kind);
+    const previous = input.id ? existing(input.id, scope.owner) : undefined;
+    const siwc =
+      provider === "codex" &&
+      (previous?.auth_mode === "siwc" || input.authMode === "siwc");
+    const config = siwc
+      ? {
+          ...siwcProfile,
+          clientId: previous?.client_id ?? siwcProfile.clientId,
+        }
+      : oauthConfig(host, provider);
     if (provider !== kind)
       failure("subscription_provider", "订阅账号与提供商不匹配");
     if (
@@ -206,7 +238,7 @@ export function createSubscriptionOAuth(
         maxConcurrency: input.maxConcurrency,
         redirectUri: config.redirectUri,
         mode:
-          input.mode === "device"
+          provider === "grok" || (input.mode === "device" && !siwc)
             ? "device"
             : input.mode !== "manual" &&
                 automatic(config.redirectUri, requestUrl)
@@ -215,10 +247,73 @@ export function createSubscriptionOAuth(
         controller: new AbortController(),
         interval: 5000,
         nextPollAt: 0,
+        ...(siwc
+          ? {
+              siwc: {
+                clientId: config.clientId,
+                nonce: randomBytes(32).toString("base64url"),
+                previous,
+              },
+            }
+          : {}),
       };
     flows.set(id, flow);
     try {
       if (flow.mode === "device") {
+        if (provider === "grok") {
+          const endpoints = await grokDiscovery(host, signal(flow));
+          const result = await grokDeviceRequest(
+            host,
+            endpoints.device,
+            { scope: grokScope },
+            signal(flow),
+          );
+          flow.deviceId = requiredString(
+            result.device_code,
+            "device_code",
+            8192,
+          );
+          flow.userCode = requiredString(result.user_code, "user_code", 128);
+          flow.tokenEndpoint = endpoints.token;
+          const interval = Number(result.interval ?? 5),
+            expiry = Number(result.expires_in ?? 600);
+          if (
+            !Number.isFinite(interval) ||
+            interval < 0 ||
+            interval > 300 ||
+            !Number.isFinite(expiry) ||
+            expiry <= 0
+          )
+            failure(
+              "oauth_response",
+              "Invalid device authorization expiry",
+              502,
+            );
+          flow.interval = Math.max(5000, interval * 1000);
+          flow.expiresAt = Date.now() + Math.min(1800, expiry) * 1000;
+          flow.nextPollAt = Date.now() + flow.interval;
+          const url = new URL(
+            result.verification_uri_complete ?? result.verification_uri,
+          );
+          if (
+            url.protocol !== "https:" ||
+            !(
+              url.hostname.endsWith(".x.ai") ||
+              url.hostname === "x.ai" ||
+              url.hostname === "grok.com" ||
+              url.hostname.endsWith(".grok.com")
+            )
+          )
+            failure("oauth_response", "Invalid xAI verification URL", 502);
+          return {
+            id,
+            mode: "device",
+            url: url.href,
+            userCode: flow.userCode,
+            expiresAt: flow.expiresAt,
+            retryAfterMs: flow.interval,
+          };
+        }
         const s = signal(flow),
           response = await deviceRequest(
             "/usercode",
@@ -276,7 +371,16 @@ export function createSubscriptionOAuth(
             }),
       }))
         url.searchParams.set(key, String(value));
-      if (provider === "codex") {
+      if (flow.siwc) {
+        url.searchParams.set("resource", siwcResource);
+        url.searchParams.set("nonce", flow.siwc.nonce);
+        url.searchParams.set("ext_agent_host_id", siwcHostId(host));
+        if (!previous?.client_id)
+          url.searchParams.set("agent_name_hint", "PluHub");
+        if (previous?.id_token)
+          url.searchParams.set("id_token_hint", previous.id_token);
+        if (previous?.email) url.searchParams.set("login_hint", previous.email);
+      } else if (provider === "codex") {
         url.searchParams.set("prompt", "login");
         url.searchParams.set("id_token_add_organizations", "true");
         url.searchParams.set("codex_cli_simplified_flow", "true");
@@ -311,6 +415,21 @@ export function createSubscriptionOAuth(
         failure("oauth_redirect", "授权回调地址不匹配");
       code = url.searchParams.get("code");
       state = url.searchParams.get("state");
+      if (state === flow.state && flow.siwc && !url.searchParams.has("error")) {
+        const issued =
+          url.searchParams.get("client_id") ?? flow.siwc.previous?.client_id;
+        if (
+          !issued ||
+          issued === siwcProfile.clientId ||
+          (flow.siwc.previous?.client_id &&
+            issued !== flow.siwc.previous.client_id)
+        )
+          failure(
+            "oauth_registration",
+            "SIWC client registration does not match",
+          );
+        flow.siwc.clientId = issued!;
+      }
       if (url.searchParams.has("error") && state === flow.state) {
         remove(id);
         failure("oauth_denied", "授权已取消，请重新开始");
@@ -342,6 +461,25 @@ export function createSubscriptionOAuth(
           redirectUri = flow.redirectUri;
         if (flow.mode === "device") {
           flow.nextPollAt = Date.now() + flow.interval;
+          if (flow.provider === "grok") {
+            const result = await grokDeviceRequest(
+              host,
+              flow.tokenEndpoint!,
+              {
+                grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+                device_code: flow.deviceId!,
+              },
+              signal(flow),
+            );
+            if (result.error === "slow_down") {
+              flow.interval += 5000;
+              flow.nextPollAt = Date.now() + flow.interval;
+            }
+            if (result.error) return waiting();
+            const account = await saveToken(id, flow, result);
+            flows.delete(id);
+            return { status: "complete", account };
+          }
           const s = signal(flow),
             response = await deviceRequest(
               "/token",

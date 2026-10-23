@@ -34,7 +34,12 @@ export class SubscriptionFailure extends HostError {
     );
   }
 }
-function failure(raw: any, status = 502, retryAfter?: string | null) {
+function failure(
+  raw: any,
+  status = 502,
+  retryAfter?: string | null,
+  provider?: SubscriptionKind,
+) {
   const error = raw?.error ?? raw?.response?.error ?? raw ?? {};
   const kind =
     typeof error === "string"
@@ -43,7 +48,19 @@ function failure(raw: any, status = 502, retryAfter?: string | null) {
           .filter((v) => typeof v === "string")
           .join(" ");
   const message = typeof error.message === "string" ? error.message : "";
+  const grokCode =
+    provider === "grok" ? JSON.stringify(raw ?? {}).toLowerCase() : "";
+  const grokExhausted = /free-usage-exhausted|included free usage/.test(
+    grokCode,
+  );
+  if (
+    provider === "grok" &&
+    /bad-credentials|access token could not be validated/.test(grokCode)
+  )
+    status = 401;
+  if (grokExhausted) retryAfter ??= "86400";
   const exhausted =
+    grokExhausted ||
     /usage_limit|insufficient_quota|quota_exceeded|credit_balance|daily_limit|weekly_limit/i.test(
       kind,
     ) ||
@@ -99,6 +116,7 @@ function failure(raw: any, status = 502, retryAfter?: string | null) {
 export async function rejectedSubscription(
   response: Response,
   signal: AbortSignal,
+  kind?: SubscriptionKind,
 ) {
   let raw: unknown;
   try {
@@ -106,7 +124,12 @@ export async function rejectedSubscription(
   } catch {
     signal.throwIfAborted();
   }
-  return failure(raw, response.status, response.headers.get("retry-after"));
+  return failure(
+    raw,
+    response.status,
+    response.headers.get("retry-after"),
+    kind,
+  );
 }
 function streamBody(kind: SubscriptionKind, body: ReadableStream<Uint8Array>) {
   const iterator = (async function* () {
@@ -123,7 +146,7 @@ function streamBody(kind: SubscriptionKind, body: ReadableStream<Uint8Array>) {
         value.type === "error" ||
         value.type === "response.failed"
       )
-        throw failure(value);
+        throw failure(value, 502, undefined, kind);
       const data = kind === "antigravity" ? (value.response ?? value) : value;
       yield encoder.encode(
         `event: ${frame.event}\ndata: ${JSON.stringify(data)}\n\n`,
@@ -174,7 +197,7 @@ export async function* subscriptionEvents(
   // Some gateways return a JSON error with HTTP 200 even when streaming was requested.
   const raw = await responseObject(response, signal, 16 * 1024 * 1024);
   const data = kind === "antigravity" ? (raw.response ?? raw) : raw;
-  if (data.error) throw failure(data);
+  if (data.error) throw failure(data, 502, undefined, kind);
   if (expectedStream)
     throw new HostError(
       "upstream_protocol",

@@ -5,7 +5,7 @@
   "name": "智能路由",
   "description": "根据任务选择模型和思考强度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.13",
+  "version": "0.1.0-alpha.14",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -20,7 +20,8 @@
     "ai.upstream.gemini@1",
     "ai.upstream.codex@1",
     "ai.upstream.claude-subscription@1",
-    "ai.upstream.antigravity@1"
+    "ai.upstream.antigravity@1",
+    "ai.upstream.grok@1"
   ],
   "permissions": ["api.register", "secrets.read"],
   "configReload": "snapshot",

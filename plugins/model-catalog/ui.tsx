@@ -73,7 +73,9 @@ function Page({ host }: { host: UIHost }) {
       ),
     [channel, guest],
   );
-  const [search, setSearch] = React.useState("");
+  const [search, setSearch] = React.useState(
+    () => new URLSearchParams(location.hash.split("?")[1]).get("q") ?? "",
+  );
   const [provider, setProvider] = React.useState("");
   const [sort, setSort] = React.useState("name");
   const [selected, setSelected] = React.useState<CatalogModel>();

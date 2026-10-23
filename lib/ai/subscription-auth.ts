@@ -1,8 +1,17 @@
 import { HostError } from "@pluhub/sdk";
 import type { SubscriptionQuota } from "@pluhub/contracts/subscription";
 
-export type SubscriptionKind = "codex" | "claude-subscription" | "antigravity";
+export type SubscriptionKind =
+  "codex" | "claude-subscription" | "antigravity" | "grok";
 export const subscriptionDefaults = {
+  grok: {
+    baseUrl: "https://cli-chat-proxy.grok.com/v1",
+    authorizeUrl: "https://auth.x.ai/authorize",
+    tokenUrl: "https://auth.x.ai/token",
+    clientId: "b1a00492-073a-47ea-816f-4c329264a828",
+    redirectUri: "http://127.0.0.1:1456/auth/callback",
+    scope: "openid profile email offline_access grok-cli:access api:access",
+  },
   codex: {
     baseUrl: "https://chatgpt.com/backend-api/codex",
     authorizeUrl: "https://auth.openai.com/oauth/authorize",
@@ -37,6 +46,12 @@ export function subscriptionKind(value: unknown): SubscriptionKind {
   return value as SubscriptionKind;
 }
 export interface SubscriptionToken {
+  auth_mode?: "siwc";
+  client_id?: string;
+  ext_agent_host_id?: string;
+  id_token?: string;
+  subject?: string;
+  scopes?: string[];
   access_token?: string;
   refresh_token?: string;
   expires_at?: number;
@@ -52,6 +67,40 @@ export function subscriptionQuota(
   headers: Headers,
   now = Date.now(),
 ): SubscriptionQuota[] {
+  if (kind === "grok") {
+    return ["requests", "tokens"].flatMap((window) => {
+      const read = (field: string) =>
+        headers.get(`x-ratelimit-${field}-${window}`) ??
+        headers.get(`x-rate-limit-${field}-${window}`);
+      const limit = read("limit"),
+        remaining = read("remaining"),
+        reset = read("reset");
+      if (
+        !limit ||
+        !remaining ||
+        !Number.isFinite(Number(limit)) ||
+        Number(limit) <= 0 ||
+        !Number.isFinite(Number(remaining))
+      )
+        return [];
+      const resetAt =
+        reset && /^\d+(\.\d+)?$/.test(reset)
+          ? Number(reset) * 1000
+          : reset
+            ? Date.parse(reset)
+            : NaN;
+      return [
+        {
+          window,
+          usedPercent: Math.max(
+            0,
+            Math.min(100, (1 - Number(remaining) / Number(limit)) * 100),
+          ),
+          ...(Number.isFinite(resetAt) ? { resetAt } : {}),
+        },
+      ];
+    });
+  }
   if (kind !== "codex") return [];
   const result: SubscriptionQuota[] = [];
   for (const window of ["primary", "secondary"] as const) {
@@ -121,6 +170,8 @@ export function normalizeSubscriptionToken(
   const value = object(
     root.tokens ?? root.claudeAiOauth ?? root.credentials ?? root,
   );
+  if (value.client_id && value.ext_agent_host_id && value.id_token)
+    value.auth_mode = "siwc";
   const access_token = text(value.access_token ?? value.accessToken);
   const refresh_token = text(value.refresh_token ?? value.refreshToken);
   if (!access_token && !refresh_token)
@@ -162,6 +213,18 @@ export function normalizeSubscriptionToken(
   )
     throw new HostError("invalid_credential", "令牌到期时间无效");
   return {
+    ...(value.auth_mode === "siwc"
+      ? {
+          auth_mode: "siwc" as const,
+          client_id: text(value.client_id, 512),
+          ext_agent_host_id: text(value.ext_agent_host_id, 512),
+          id_token: text(value.id_token),
+          subject: text(value.subject, 512),
+          scopes: Array.isArray(value.scopes)
+            ? value.scopes.filter((s: unknown) => typeof s === "string")
+            : [],
+        }
+      : {}),
     access_token,
     refresh_token,
     expires_at: expiry,

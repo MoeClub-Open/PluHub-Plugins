@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.29",
+  "version": "0.1.0-alpha.30",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -45,7 +45,8 @@
                 "claude-subscription",
                 "antigravity",
                 "auto-router",
-                "workflow"
+                "workflow",
+                "grok"
               ]
             },
             "baseUrl": {
@@ -374,7 +375,8 @@
                                   "gemini",
                                   "codex",
                                   "claude-subscription",
-                                  "antigravity"
+                                  "antigravity",
+                                  "grok"
                                 ]
                               },
                               "baseUrl": {
@@ -784,7 +786,8 @@
                       "gemini",
                       "codex",
                       "claude-subscription",
-                      "antigravity"
+                      "antigravity",
+                      "grok"
                     ]
                   }
                 },
@@ -1042,6 +1045,8 @@
     "ai.upstream-models.anthropic@1",
     "ai.upstream-models.gemini@1",
     "ai.media.openai-chat@1",
-    "ai.media.openai-responses@1"
+    "ai.media.openai-responses@1",
+    "ai.upstream.grok@1",
+    "ai.subscription.grok@1"
   ]
 }

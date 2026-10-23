@@ -5,21 +5,16 @@
   "name": "输出速度控制",
   "description": "限制单个请求的输出 Token 速度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "ai.output-pace@1",
-    "ai.output-pace@2"
-  ],
+  "provides": ["ai.output-pace@1", "ai.output-pace@2"],
   "requires": [],
   "optionalRequires": [],
-  "permissions": [
-    "api.register"
-  ],
+  "permissions": ["api.register"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -28,9 +23,7 @@
       "default": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "tokenizer"
-        ],
+        "required": ["tokenizer"],
         "properties": {
           "tps": {
             "type": "number",
@@ -55,11 +48,7 @@
         "items": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "tokenizer",
-            "channel",
-            "model"
-          ],
+          "required": ["tokenizer", "channel", "model"],
           "properties": {
             "tps": {
               "type": "number",
@@ -96,30 +85,20 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "kind",
-                "encoding"
-              ],
+              "required": ["kind", "encoding"],
               "properties": {
                 "kind": {
                   "const": "tiktoken"
                 },
                 "encoding": {
-                  "enum": [
-                    "cl100k_base",
-                    "o200k_base"
-                  ]
+                  "enum": ["cl100k_base", "o200k_base"]
                 }
               }
             },
             {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "kind",
-                "tokenizerPath",
-                "configPath"
-              ],
+              "required": ["kind", "tokenizerPath", "configPath"],
               "properties": {
                 "kind": {
                   "const": "huggingface"

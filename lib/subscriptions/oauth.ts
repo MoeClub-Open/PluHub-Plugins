@@ -1,6 +1,7 @@
 import { responseObject } from "../ai/json-response.js";
 import type { Host } from "@pluhub/sdk";
 import { HostError } from "@pluhub/sdk";
+import { grokDiscovery } from "./grok-oauth.js";
 import {
   subscriptionDefaults,
   type SubscriptionKind,
@@ -57,8 +58,11 @@ export async function tokenRequest(
   kind: SubscriptionKind,
   fields: Record<string, string>,
   signal: AbortSignal,
+  profile?: { clientId: string; tokenUrl: string },
 ) {
-  const config = oauthConfig(host, kind);
+  const config = profile ? ({ ...profile } as any) : oauthConfig(host, kind);
+  if (kind === "grok")
+    config.tokenUrl = (await grokDiscovery(host, signal)).token;
   const body = { ...fields, client_id: config.clientId };
   if (config.clientSecretRef)
     (body as any).client_secret = host.secret(config.clientSecretRef);

@@ -76,9 +76,12 @@ function Page({ host }: { host: UIHost }) {
   const [modelPickerOpen, setModelPickerOpen] = React.useState(false);
   const [modelQuery, setModelQuery] = React.useState("");
   const [pickedModels, setPickedModels] = React.useState<string[]>([]);
-  const subscription = ["codex", "claude-subscription", "antigravity"].includes(
-    editing?.protocol,
-  );
+  const subscription = [
+    "codex",
+    "claude-subscription",
+    "antigravity",
+    "grok",
+  ].includes(editing?.protocol);
   React.useEffect(() => {
     let cancelled = false;
     setModelCatalog([]);
@@ -342,7 +345,10 @@ function Page({ host }: { host: UIHost }) {
                 presets.data?.find((p) => p.id === account.provider)?.baseUrl ??
                 "",
               subscriptionAccountId: account.id,
-              authMode: account.provider === "codex" ? "cli" : undefined,
+              authMode:
+                account.provider === "codex"
+                  ? (account.authMode ?? "cli")
+                  : undefined,
               enabled: true,
               consumptionMode: "auto",
               consumptionMultiplier: 1,

@@ -31,7 +31,7 @@ export function checkProtocolConversion(
 ) {
   if (policy?.conversion !== "disabled") return;
   const wireProtocol =
-    provider === "codex"
+    provider === "codex" || provider === "grok"
       ? "openai-responses"
       : provider === "claude-subscription"
         ? "anthropic"

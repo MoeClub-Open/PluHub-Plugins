@@ -5,7 +5,7 @@
   "name": "邮件服务",
   "description": "发送注册、登录及安全验证邮件。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.8",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

@@ -51,6 +51,7 @@ async function* execute(
           accountId?: string;
           projectId?: string;
           version?: number;
+          authMode?: "siwc";
         }
       | undefined;
     let body: ReadableStream<Uint8Array> | null | undefined;
@@ -97,6 +98,7 @@ async function* execute(
             ids,
             model: request.model,
             sessionId: request.sessionId,
+            authMode: upstream.authMode,
             excludeIds: [...attempted],
             ...(upstream.credentialId
               ? {
@@ -191,7 +193,14 @@ async function* execute(
           await refresh();
           continue;
         }
-        if (!response.ok) throw await rejectedSubscription(response, signal);
+        if (!response.ok) {
+          const error = await rejectedSubscription(response, signal, kind);
+          if (error.upstreamStatus === 401 && lease && !refreshed) {
+            await refresh();
+            continue;
+          }
+          throw error;
+        }
         await report({
           status: response.status,
           quota: subscriptionQuota(kind, response.headers),

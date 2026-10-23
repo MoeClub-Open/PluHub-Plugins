@@ -5,8 +5,8 @@
   "name": "控制台",
   "description": "提供站点门户、登录页面及管理界面。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.50",
-  "host": ">=0.1.0-alpha.7 <0.2.0-0",
+  "version": "0.1.0-alpha.51",
+  "host": ">=0.1.0-alpha.14 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
@@ -78,6 +78,10 @@
           "privacyUrl": {
             "type": "string",
             "maxLength": 2048
+          },
+          "siteTheme": {
+            "type": "string",
+            "enum": ["graphite", "ocean", "violet"]
           }
         }
       },
@@ -178,6 +182,20 @@
                   "maxLength": 20000
                 }
               }
+            }
+          },
+          "layout": {
+            "type": "string",
+            "enum": ["split", "centered"]
+          },
+          "featuredModels": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
             }
           }
         }

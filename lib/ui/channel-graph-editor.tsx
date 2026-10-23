@@ -6,6 +6,7 @@ import { Select } from "./select.js";
 import { ChannelExtension } from "./channel-extension.js";
 import { Dialog } from "./components.js";
 import React from "react";
+import { subscriptionDefaults } from "../ai/subscription-auth.js";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
 import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
@@ -31,6 +32,7 @@ const subscriptionProtocols = new Set([
   "codex",
   "claude-subscription",
   "antigravity",
+  "grok",
 ]);
 const routerConfig = (config: any) =>
   config.plugins.find((p: any) =>
@@ -136,6 +138,7 @@ export function ChannelGraphEditor({
     "codex",
     "claude-subscription",
     "antigravity",
+    "grok",
   ];
   function changeProtocol(protocol: string) {
     if (node?.type !== "provider") return;
@@ -799,6 +802,7 @@ export function ChannelGraphEditor({
                             "codex",
                             "claude-subscription",
                             "antigravity",
+                            "grok",
                           ].includes(node.upstream?.protocol ?? "") && (
                             <>
                               <label>
@@ -852,11 +856,33 @@ export function ChannelGraphEditor({
                                           )}
                                           onCheckedChange={(e) =>
                                             connection({
+                                              ...(a.provider === "codex" &&
+                                              e === true
+                                                ? {
+                                                    authMode:
+                                                      a.authMode ?? "cli",
+                                                    baseUrl:
+                                                      a.authMode === "siwc"
+                                                        ? "https://api.openai.com/v1"
+                                                        : subscriptionDefaults
+                                                            .codex.baseUrl,
+                                                  }
+                                                : {}),
                                               subscriptionAccountIds:
                                                 e === true
                                                   ? [
-                                                      ...node.upstream!
-                                                        .subscriptionAccountIds!,
+                                                      ...node.upstream!.subscriptionAccountIds!.filter(
+                                                        (id) =>
+                                                          a.provider !==
+                                                            "codex" ||
+                                                          (subscriptionAccounts.data?.find(
+                                                            (item) =>
+                                                              item.id === id,
+                                                          )?.authMode ??
+                                                            "cli") ===
+                                                            (a.authMode ??
+                                                              "cli"),
+                                                      ),
                                                       a.id,
                                                     ]
                                                   : node.upstream!.subscriptionAccountIds!.filter(
