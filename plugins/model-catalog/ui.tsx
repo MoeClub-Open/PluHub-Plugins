@@ -121,7 +121,7 @@ function Page({ host }: { host: UIHost }) {
       ? "/login?next=" + encodeURIComponent(playPath(model))
       : playPath(model);
   const snippet = (model: CatalogModel) =>
-    `curl ${location.origin}/v1/chat/completions \\\n  -H "Authorization: Bearer $PLUHUB_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify({ model: model.id, messages: [{ role: "user", content: "Hello" }], stream: true })}'`;
+    `curl ${location.origin}/v1/chat/completions \\\n  -H "Authorization: Bearer $PLUHUB_API_KEY" \\\n  -H "Content-Type: application/json" \\\n${model.channel ? `  -H "x-pluhub-channel: ${model.channel.id}" \\\n` : ""}  -d '${JSON.stringify({ model: model.id, messages: [{ role: "user", content: "Hello" }], stream: true })}'`;
   return (
     <div className="model-directory">
       <PageHeading title={tr("模型目录")}>

@@ -82,6 +82,7 @@ export function migrateLegacyChannels(config: {
       "authMode",
       "credentialId",
       "credentialOwner",
+      "interfaces",
     ] as const)
       delete channel[key];
     channel.flow = next;

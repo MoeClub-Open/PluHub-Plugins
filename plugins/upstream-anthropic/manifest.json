@@ -5,21 +5,15 @@
   "name": "Anthropic Messages 上游",
   "description": "调用 Anthropic Messages 兼容服务并解析结果。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": [
-    "ai.upstream.anthropic@1"
-  ],
-  "requires": [
-    "http.transport@1"
-  ],
-  "permissions": [
-    "secrets.read"
-  ],
+  "provides": ["ai.upstream.anthropic@1", "ai.upstream-models.anthropic@1"],
+  "requires": ["http.transport@1"],
+  "permissions": ["secrets.read"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -35,8 +29,5 @@
       }
     }
   },
-  "optionalRequires": [
-    "ai.converter@1",
-    "credentials.resolve@1"
-  ]
+  "optionalRequires": ["ai.converter@1", "credentials.resolve@1"]
 }

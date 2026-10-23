@@ -1,3 +1,4 @@
+import { UpstreamInterfaces } from "./upstream-interfaces.js";
 import { Checkbox } from "./checkbox.js";
 import { listSubscriptionAccounts } from "./subscription-providers.js";
 import { t as tr, textValue } from "./i18n.js";
@@ -7,7 +8,7 @@ import { Dialog } from "./components.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
-import type { Protocol } from "@pluhub/contracts/ai";
+import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
 import { useLoad, Notice } from "./mount.js";
 import { syncChannelSecrets } from "../ai/channel-list.js";
 import type { ChannelPanel } from "./channel-location.js";
@@ -59,6 +60,8 @@ export function ChannelGraphEditor({
   );
   const [channelName, setChannelName] = React.useState("");
   const [enabled, setEnabled] = React.useState(false);
+  const [personalInterfaces, setPersonalInterfaces] =
+    React.useState<UpstreamInterface[]>();
   const [flow, setFlow] = React.useState<ChannelWorkflow>();
   const [selected, select] = React.useState("start");
   const [message, setMessage] = React.useState("");
@@ -68,6 +71,7 @@ export function ChannelGraphEditor({
     personal ? undefined : initialPanel,
   );
   const [busy, setBusy] = React.useState(false);
+  const editor = React.useRef<HTMLElement>(null);
   const subscriptionAccounts = useLoad<any[]>(
     () => (personal ? Promise.resolve([]) : listSubscriptionAccounts(host)),
     [personal],
@@ -110,6 +114,7 @@ export function ChannelGraphEditor({
     if (channel) {
       setChannelName(channel.name ?? "");
       setEnabled(channel.enabled !== false);
+      setPersonalInterfaces(channel.interfaces);
       const next = structuredClone(channel.flow ?? defaultChannelFlow());
       setFlow(next);
       select(next.entry);
@@ -301,6 +306,13 @@ export function ChannelGraphEditor({
   }
   async function save() {
     if (!flow) return;
+    const invalid = editor.current?.querySelector<
+      HTMLInputElement | HTMLTextAreaElement
+    >("input:invalid, textarea:invalid");
+    if (invalid) {
+      invalid.reportValidity();
+      return;
+    }
     setBusy(true);
     setMessage("");
     try {
@@ -309,6 +321,7 @@ export function ChannelGraphEditor({
           method: "PUT",
           body: JSON.stringify({
             ...channel,
+            interfaces: personalInterfaces,
             flow,
             name: channelName,
             enabled,
@@ -365,7 +378,12 @@ export function ChannelGraphEditor({
               ...(personal ? { id: channelId } : { upstream: channelId }),
               ingressProtocol,
               request: {
-                model: "preview",
+                model:
+                  (personal
+                    ? targets[0]
+                    : Object.keys(router?.models ?? {}).find(
+                        (id) => router.models[id].upstream === channelId,
+                      )) ?? "preview",
                 messages: [{ role: "user", text: task }],
                 tools: toolTask
                   ? [{ name: "preview_tool", parameters: { type: "object" } }]
@@ -385,7 +403,7 @@ export function ChannelGraphEditor({
     }
   }
   return (
-    <section aria-label={tr("渠道流程编辑器")}>
+    <section ref={editor} aria-label={tr("渠道流程编辑器")}>
       <style>{`.workflow-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,290px);gap:16px;margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-side label{display:block;margin:10px 0}.workflow-side input,.workflow-side select,.workflow-side textarea{width:100%}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}.workflow-panel{margin-top:14px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
       <div className="page-heading">
         <div>
@@ -904,6 +922,23 @@ export function ChannelGraphEditor({
                           )}
                         </>
                       )}
+                      <UpstreamInterfaces
+                        protocol={
+                          personal
+                            ? channel.protocol
+                            : (node.upstream?.protocol ?? "openai-chat")
+                        }
+                        value={
+                          personal
+                            ? personalInterfaces
+                            : node.upstream?.interfaces
+                        }
+                        onChange={(interfaces) =>
+                          personal
+                            ? setPersonalInterfaces(interfaces)
+                            : connection({ interfaces })
+                        }
+                      />
                       <label>
                         {tr("上游模型（可选）")}
                         <input
@@ -1033,7 +1068,10 @@ export function ChannelGraphEditor({
                     </>
                   )}
                   {node.type !== "start" && (
-                    <button className="secondary" onClick={() => removeNode(selected)}>
+                    <button
+                      className="secondary"
+                      onClick={() => removeNode(selected)}
+                    >
                       {tr("删除节点")}
                     </button>
                   )}

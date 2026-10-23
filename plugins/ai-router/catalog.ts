@@ -13,6 +13,7 @@ export interface CatalogScope {
   principalId?: string;
   channelId?: string;
   channelIds?: readonly string[];
+  includePersonal?: boolean;
 }
 function catalog(
   config: Record<string, any>,
@@ -69,8 +70,12 @@ export async function readCatalog(
     ? input.channelId.startsWith("personal:")
       ? [input.channelId]
       : []
-    : (allowed?.filter((id) => id.startsWith("personal:")) ?? []);
-  if (!personal.length) return models;
+    : allowed?.filter((id) => id.startsWith("personal:"));
+  if (
+    !personal?.length &&
+    !(input.includePersonal && !input.channelId && !allowed)
+  )
+    return models;
   if (!input.principalId)
     throw new HostError("unauthorized", "个人渠道需要用户身份", 401);
   if (!host.hasCapability("ai.user-channels@1")) {
@@ -83,7 +88,7 @@ export async function readCatalog(
     { userId: input.principalId },
     signal,
   );
-  for (const id of personal) {
+  for (const id of personal ?? channels.map((channel) => channel.id)) {
     const channel = channels.find((item) => item.id === id);
     if (!channel) {
       if (id === input.channelId)

@@ -13,6 +13,7 @@ import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { providerSession } from "../../lib/ai/session.js";
 import { geminiEffort } from "../../lib/ai/reasoning.js";
 import { readCatalog } from "./catalog.js";
+import { resolveInterface } from "../../lib/ai/upstream-interfaces.js";
 import {
   bindPricingContext,
   capturePricingContext,
@@ -191,6 +192,12 @@ export async function planRoute(
         "invalid_route",
         "Channel graph has no provider",
         503,
+      );
+    if (!profile)
+      connection = resolveInterface(
+        connection,
+        input.ingressProtocol,
+        providerModel,
       );
     if (
       ["gemini", "antigravity"].includes(connection.protocol ?? "") &&

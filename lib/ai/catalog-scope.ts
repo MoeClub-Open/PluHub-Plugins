@@ -5,6 +5,7 @@ export function catalogScope(request: Request, ctx: RequestContext) {
     new URL(request.url).searchParams.get("channel") || undefined;
   return {
     principalId: ctx.principal?.id,
+    includePersonal: !!ctx.principal?.session,
     ...channelScope(ctx.principal, selected),
   };
 }

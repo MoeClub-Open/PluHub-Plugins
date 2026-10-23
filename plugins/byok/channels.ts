@@ -13,6 +13,7 @@ import type {
   AIPlan,
   PersonalChannel,
   Protocol,
+  UpstreamInterface,
 } from "@pluhub/contracts/ai";
 import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { channelPresets } from "../../lib/ai/channel-presets.js";
@@ -35,7 +36,11 @@ import {
   type SubscriptionKind,
 } from "../../lib/ai/subscription-auth.js";
 import { subscriptionModels } from "../../lib/ai/subscription-models.js";
-import { directoryModels } from "../../lib/ai/model-directory.js";
+import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
+import {
+  validateInterfaces,
+  resolveInterface,
+} from "../../lib/ai/upstream-interfaces.js";
 
 type Model = {
   model: string;
@@ -48,6 +53,7 @@ type Model = {
 type Settings = {
   protocol: Protocol | SubscriptionKind;
   baseUrl: string;
+  interfaces?: UpstreamInterface[];
   models: Record<string, Model>;
   flow: ChannelWorkflow;
   consumptionMode: "auto" | "manual";
@@ -219,6 +225,21 @@ export function installPersonalChannels(
       !host.hasCapability(`ai.subscription.${body.protocol}@1`)
     )
       throw new HostError("adapter_unavailable", "请先安装订阅账号插件", 503);
+    const interfaces = validateInterfaces(body.interfaces);
+    if (interfaces) {
+      if (subscription)
+        throw new HostError(
+          "invalid_interfaces",
+          "订阅授权不支持自定义 API 接口",
+        );
+      for (const route of interfaces)
+        if (!host.hasCapability("ai.upstream." + route.protocol + "@1"))
+          throw new HostError(
+            "adapter_unavailable",
+            "接口对应的上游适配器未安装",
+            503,
+          );
+    }
     const defaultUrl = subscription
       ? subscriptionDefaults[body.protocol as SubscriptionKind].baseUrl
       : undefined;
@@ -294,6 +315,7 @@ export function installPersonalChannels(
     return {
       protocol: body.protocol,
       baseUrl: base.baseUrl,
+      interfaces,
       models,
       flow: validateFlow(body.flow, models),
       consumptionMode,
@@ -363,6 +385,7 @@ export function installPersonalChannels(
       upstream: {
         ...base,
         protocol: config.protocol,
+        interfaces: config.interfaces,
         flow: config.flow,
         credentialId: row.id,
         credentialOwner: row.user_id,
@@ -665,29 +688,23 @@ export function installPersonalChannels(
           "invalid_protocol",
           "请选择已安装的 API 上游适配器",
         );
-      const base = endpoint(requiredString(body.baseUrl, "baseUrl", 2048)),
-        url = new URL(base.baseUrl);
-      const secret = requiredString(body.key, "key", 16384);
-      const protocol = body.protocol;
-      const prefix = url.pathname
-        .replace(/\/$/, "")
-        .replace(protocol === "gemini" ? /\/v1beta$/ : /\/v1$/, "");
-      url.pathname =
-        prefix + (protocol === "gemini" ? "/v1beta/models" : "/v1/models");
-      const headers: Record<string, string> =
-        protocol === "gemini"
-          ? { "x-goog-api-key": secret }
-          : protocol === "anthropic"
-            ? { "x-api-key": secret, "anthropic-version": "2023-06-01" }
-            : { authorization: "Bearer " + secret };
-      const raw = await getJSON(
-        url,
-        headers,
-        base.publicOnly,
-        AbortSignal.any([ctx.signal, AbortSignal.timeout(15000)]),
+      const base = endpoint(requiredString(body.baseUrl, "baseUrl", 2048));
+      const interfaces = validateInterfaces(body.interfaces);
+      const result = await discoverConnectionModels(
+        host,
+        { ...base, protocol: body.protocol, interfaces },
+        ctx.signal,
+        requiredString(body.key, "key", 16384),
       );
+      if (!result.models.length && result.errors.length)
+        throw new HostError(
+          "upstream_error",
+          result.errors.map((error) => error.message).join("; "),
+          502,
+        );
       return json({
-        models: directoryModels(protocol, raw).map((model) => model.id),
+        models: result.models.map((model) => model.id),
+        errors: result.errors,
       });
     },
   });
@@ -699,8 +716,8 @@ export function installPersonalChannels(
       const userId = session(ctx.principal),
         body = await readObject(request);
       const row = rowFor(requiredString(body.id, "id"), userId),
-        channel = runtime(row),
         config = JSON.parse(row.settings_json) as Settings;
+      runtime(row);
       const base = endpoint(config.baseUrl),
         url = new URL(base.baseUrl);
       const signal = AbortSignal.any([ctx.signal, AbortSignal.timeout(15000)]);
@@ -733,21 +750,21 @@ export function installPersonalChannels(
         { id: row.id, userId },
         signal,
       );
-      const protocol = channel.upstream.protocol;
-      const suffix = protocol === "gemini" ? "/v1beta/models" : "/v1/models";
-      let prefix = url.pathname.replace(/\/$/, "");
-      if (prefix.endsWith(protocol === "gemini" ? "/v1beta" : "/v1"))
-        prefix = prefix.replace(/\/v1(?:beta)?$/, "");
-      url.pathname = prefix + suffix;
-      const headers: Record<string, string> =
-        protocol === "gemini"
-          ? { "x-goog-api-key": secret }
-          : protocol === "anthropic"
-            ? { "x-api-key": secret, "anthropic-version": "2023-06-01" }
-            : { authorization: "Bearer " + secret };
-      const raw = await getJSON(url, headers, base.publicOnly, signal);
+      const result = await discoverConnectionModels(
+        host,
+        { ...base, protocol: config.protocol, interfaces: config.interfaces },
+        signal,
+        secret,
+      );
+      if (!result.models.length && result.errors.length)
+        throw new HostError(
+          "upstream_error",
+          result.errors.map((error) => error.message).join("; "),
+          502,
+        );
       return json({
-        models: directoryModels(protocol!, raw).map((model) => model.id),
+        models: result.models.map((model) => model.id),
+        errors: result.errors,
       });
     },
   });
@@ -770,12 +787,25 @@ export function installPersonalChannels(
         ctx.signal,
         { ingressProtocol },
       );
-      if (result.provider)
+      if (result.provider) {
+        const node = config.flow.nodes.find(
+          (node) => node.id === result.providerId,
+        );
+        const model =
+          (node?.type === "provider" ? node.model : undefined) ||
+          config.models[body.request?.model]?.model ||
+          body.request?.model ||
+          "";
         checkProtocolConversion(
           ingressProtocol,
-          config.protocol,
+          resolveInterface(
+            { protocol: config.protocol, interfaces: config.interfaces },
+            ingressProtocol,
+            model,
+          ).protocol,
           result.protocolPolicy,
         );
+      }
       return json(result);
     },
   });

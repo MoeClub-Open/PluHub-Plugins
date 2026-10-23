@@ -1,4 +1,4 @@
-import { definePlugin, json } from "@pluhub/sdk";
+import { definePlugin } from "@pluhub/sdk";
 import type { CatalogModel } from "@pluhub/contracts/ai";
 import type { ModelMetrics } from "@pluhub/contracts/analytics";
 import { catalogScope } from "../../lib/ai/catalog-scope.js";
@@ -66,10 +66,16 @@ export default definePlugin({
         );
         const allowed = ctx.principal?.attributes?.models as
           string[] | undefined;
-        return json(
+        return Response.json(
           await withMetrics(
             models.filter((m) => !allowed?.length || allowed.includes(m.id)),
           ),
+          {
+            headers: {
+              "cache-control": "private, no-store",
+              vary: "Cookie, Authorization",
+            },
+          },
         );
       },
     });

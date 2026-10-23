@@ -35,6 +35,11 @@ function Page({ host }: { host: UIHost }) {
   const [model, setModel] = React.useState(
     new URLSearchParams(location.hash.split("?")[1]).get("model") ?? "",
   );
+  const [modelChannel, setModelChannel] = React.useState(channel);
+  const selectedModel = models.data?.find(
+    (item) => item.id === model && item.channel?.id === modelChannel,
+  );
+  const selection = selectedModel ? JSON.stringify([modelChannel, model]) : "";
   const [prompt, setPrompt] = React.useState("");
   const [system, setSystem] = React.useState("");
   const [temperature, setTemperature] = React.useState("0.7");
@@ -55,7 +60,15 @@ function Page({ host }: { host: UIHost }) {
   const transcript = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => () => controller.current?.abort(), []);
   React.useEffect(() => {
-    if (!model && models.data?.length) setModel(models.data[0]!.id);
+    if (!models.data?.length) return;
+    const match =
+      models.data.find(
+        (item) =>
+          item.id === model &&
+          (!modelChannel || item.channel?.id === modelChannel),
+      ) ?? models.data[0]!;
+    setModel(match.id);
+    setModelChannel(match.channel?.id ?? "");
   }, [models.data]);
   React.useEffect(() => {
     if (transcript.current)
@@ -63,7 +76,7 @@ function Page({ host }: { host: UIHost }) {
   }, [messages]);
   async function send(e: React.FormEvent) {
     e.preventDefault();
-    if (busy || !prompt.trim() || !model) return;
+    if (busy || !prompt.trim() || !selectedModel) return;
     const history = [
       ...messages.filter((m) => !m.incomplete),
       { role: "user" as const, content: prompt },
@@ -86,7 +99,7 @@ function Page({ host }: { host: UIHost }) {
         headers: {
           "content-type": "application/json",
           "x-pluhub-session-id": session.current,
-          ...(channel ? { "x-pluhub-channel": channel } : {}),
+          ...(modelChannel ? { "x-pluhub-channel": modelChannel } : {}),
         },
         body: JSON.stringify({
           model,
@@ -177,11 +190,12 @@ function Page({ host }: { host: UIHost }) {
                 session.current = crypto.randomUUID();
                 setChannel(e.target.value);
                 setModel("");
+                setModelChannel("");
                 setMessages([]);
                 setMeta({});
               }}
             >
-              <option value="">{tr("平台模型")}</option>
+              <option value="">{tr("全部渠道")}</option>
               {channels.data?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
@@ -241,11 +255,15 @@ function Page({ host }: { host: UIHost }) {
               <div className="chat-composer-actions">
                 <Select
                   aria-label={tr("选择模型")}
-                  value={model}
+                  value={selection}
                   disabled={busy}
                   onChange={(e) => {
                     session.current = crypto.randomUUID();
-                    setModel(e.target.value);
+                    const [selectedChannel, selectedId] = JSON.parse(
+                      e.target.value,
+                    ) as [string, string];
+                    setModel(selectedId);
+                    setModelChannel(selectedChannel);
                     setMessages([]);
                     setMeta({});
                   }}
@@ -254,8 +272,12 @@ function Page({ host }: { host: UIHost }) {
                     {tr("请选择模型")}
                   </option>
                   {models.data?.map((m) => (
-                    <option key={m.id} value={m.id}>
+                    <option
+                      key={JSON.stringify([m.channel?.id, m.id])}
+                      value={JSON.stringify([m.channel?.id ?? "", m.id])}
+                    >
                       {m.name}
+                      {!channel && m.channel ? " · " + m.channel.name : ""}
                     </option>
                   ))}
                 </Select>
@@ -269,7 +291,10 @@ function Page({ host }: { host: UIHost }) {
                     {tr("停止生成")}
                   </button>
                 ) : (
-                  <button type="submit" disabled={!prompt.trim() || !model}>
+                  <button
+                    type="submit"
+                    disabled={!prompt.trim() || !selectedModel}
+                  >
                     {tr("发送")}
                     <Icon name="arrow" size={15} />
                   </button>

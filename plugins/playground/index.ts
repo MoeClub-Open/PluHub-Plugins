@@ -1,4 +1,4 @@
-import { definePlugin, json } from "@pluhub/sdk";
+import { definePlugin } from "@pluhub/sdk";
 import type { CatalogModel } from "@pluhub/contracts/ai";
 import { catalogScope } from "../../lib/ai/catalog-scope.js";
 export default definePlugin({
@@ -13,10 +13,15 @@ export default definePlugin({
           catalogScope(request, ctx),
         );
         const allowed = ctx.principal?.attributes?.models as
-          | string[]
-          | undefined;
-        return json(
+          string[] | undefined;
+        return Response.json(
           models.filter((m) => !allowed?.length || allowed.includes(m.id)),
+          {
+            headers: {
+              "cache-control": "private, no-store",
+              vary: "Cookie, Authorization",
+            },
+          },
         );
       },
     });

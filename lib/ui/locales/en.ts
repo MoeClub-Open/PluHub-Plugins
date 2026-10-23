@@ -1,5 +1,21 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  接口组合: "Interface routing",
+  入口接口: "Incoming interfaces",
+  添加接口路由: "Add interface route",
+  上游接口: "Upstream interface",
+  匹配模型: "Model pattern",
+  接口路径: "Endpoint path",
+  流式接口路径: "Streaming endpoint path",
+  模型目录路径: "Model directory path",
+  接口默认: "Protocol default",
+  自定义请求头: "Custom header",
+  查询参数: "Query parameter",
+  无认证: "No authentication",
+  认证字段名: "Credential field name",
+  高级参数: "Advanced parameters",
+  "请输入 JSON 对象": "Enter a JSON object",
+
   年份: "Year",
   表达式计价: "Expression pricing",
   计价档位: "Pricing tier",

@@ -1,4 +1,5 @@
 import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
+import { connectionInterfaces } from "./upstream-interfaces.js";
 import { channelConnections } from "./channel-config.js";
 
 export function filterChannels(
@@ -14,7 +15,9 @@ export function filterChannels(
     if (status === "disabled" && channel.enabled !== false) return false;
     if (
       protocol &&
-      !channelConnections(channel).some((u) => u.protocol === protocol) &&
+      !channelConnections(channel)
+        .flatMap(connectionInterfaces)
+        .some((u) => u.protocol === protocol) &&
       channel.protocol !== protocol
     )
       return false;
@@ -26,7 +29,9 @@ export function filterChannels(
       channel.name,
       channel.protocol,
       channel.baseUrl,
-      ...channelConnections(channel).flatMap((u) => [u.protocol, u.baseUrl]),
+      ...channelConnections(channel)
+        .flatMap(connectionInterfaces)
+        .flatMap((u) => [u.protocol, u.baseUrl]),
       ...routes.flatMap(([alias, model]) => [alias, model.name, model.model]),
     ]
       .join(" ")
@@ -57,6 +62,7 @@ export function syncChannelSecrets(
     new Set(
       Object.values(channels)
         .flatMap(channelConnections)
+        .flatMap(connectionInterfaces)
         .filter((channel) => channel.protocol === protocol)
         .map((channel) => channel.keyRef)
         .filter((ref): ref is string => !!ref),

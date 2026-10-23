@@ -19,6 +19,10 @@ import type {
   ProviderConnection,
 } from "@pluhub/contracts/ai";
 import { readCatalog, type CatalogScope } from "./catalog.js";
+import {
+  resolveInterface,
+  validateInterfaces,
+} from "../../lib/ai/upstream-interfaces.js";
 import { channelScope } from "../../lib/ai/channel-scope.js";
 import { redirectModel } from "./redirects.js";
 import { routePricing } from "../../lib/commerce/pricing.js";
@@ -32,7 +36,7 @@ import {
 import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
-import { discoverApiModels } from "../../lib/ai/model-directory.js";
+import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
 import { subscriptionModels } from "../../lib/ai/subscription-models.js";
 export { migrateLegacyChannels } from "../../lib/ai/channel-config.js";
 export default definePlugin({
@@ -61,7 +65,9 @@ export default definePlugin({
             ).map((c) => ({
               id: c.id,
               name: c.name,
-              protocol: c.upstream.protocol,
+              protocol:
+                channelConnections(c.upstream)[0]?.protocol ??
+                c.upstream.protocol,
               acceptsCredentials: false,
               scope: "personal",
               consumptionMultiplier: c.upstream.consumptionMultiplier ?? 1,
@@ -109,14 +115,15 @@ export default definePlugin({
                 );
               }),
             );
-            return providers.flat().map((model) => ({
-              ...model,
-              protocol: connection.protocol,
-            }));
+            return {
+              models: providers.flat().map((model) => ({
+                ...model,
+                protocols: [connection.protocol],
+              })),
+              errors: [],
+            };
           }
-          return (await discoverApiModels(host, connection, signal)).map(
-            (model) => ({ ...model, protocol: connection.protocol }),
-          );
+          return discoverConnectionModels(host, connection, signal);
         }),
       );
       const models = new Map<
@@ -141,7 +148,8 @@ export default definePlugin({
           });
           continue;
         }
-        for (const model of result.value) {
+        errors.push(...result.value.errors);
+        for (const model of result.value.models) {
           const previous = models.get(model.id);
           models.set(model.id, {
             ...previous,
@@ -157,7 +165,7 @@ export default definePlugin({
                 model.maxOutputTokens ?? 0,
               ) || undefined,
             protocols: [
-              ...new Set([...(previous?.protocols ?? []), model.protocol]),
+              ...new Set([...(previous?.protocols ?? []), ...model.protocols]),
             ],
           });
         }
@@ -256,6 +264,7 @@ export default definePlugin({
           "routing_cycle",
           "Automatic router candidates must resolve to provider nodes",
         );
+      upstream = resolveInterface(upstream, ingressProtocol, providerModel);
       checkProtocolConversion(
         ingressProtocol,
         upstream.protocol,
@@ -327,6 +336,21 @@ export default definePlugin({
         }));
     });
     function validateConnection(upstream: Upstream) {
+      const interfaces = validateInterfaces(upstream.interfaces);
+      if (interfaces) {
+        if (
+          !["openai-chat", "openai-responses", "anthropic", "gemini"].includes(
+            upstream.protocol ?? "",
+          )
+        )
+          throw new HostError(
+            "invalid_config",
+            "订阅授权不支持自定义 API 接口",
+          );
+        for (const route of interfaces)
+          if (!host.hasCapability("ai.upstream." + route.protocol + "@1"))
+            throw new HostError("invalid_config", "接口对应的上游适配器未安装");
+      }
       if (upstream.subscriptionAccountIds) {
         if (!Object.hasOwn(subscriptionDefaults, upstream.protocol!))
           throw new HostError(
@@ -483,6 +507,7 @@ export default definePlugin({
         const visible = new Map<string, CatalogModel>();
         for (const model of await getCatalog({
           principalId: ctx.principal?.id,
+          includePersonal: !!ctx.principal?.session,
           ...scope,
         }))
           if (
@@ -490,15 +515,23 @@ export default definePlugin({
             !visible.has(model.id)
           )
             visible.set(model.id, model);
-        return json({
-          object: "list",
-          data: [...visible.values()].map((model) => ({
-            id: model.id,
-            object: "model",
-            created: 0,
-            owned_by: model.provider,
-          })),
-        });
+        return Response.json(
+          {
+            object: "list",
+            data: [...visible.values()].map((model) => ({
+              id: model.id,
+              object: "model",
+              created: 0,
+              owned_by: model.provider,
+            })),
+          },
+          {
+            headers: {
+              "cache-control": "private, no-store",
+              vary: "Cookie, Authorization, x-pluhub-channel",
+            },
+          },
+        );
       },
     });
     host.provide("ai.routing@2", (request: RoutingRequest, signal) =>
@@ -571,11 +604,22 @@ export default definePlugin({
         });
         if (result.provider) {
           const node = flow.nodes.find((n) => n.id === result.providerId);
+          const connection =
+            node?.type === "provider" && node.upstream
+              ? node.upstream
+              : upstream;
+          const model =
+            (node?.type === "provider" ? node.model : undefined) ||
+            (host.config().models as Record<string, ModelRoute> | undefined)?.[
+              body.request.model
+            ]?.model;
           checkProtocolConversion(
             ingressProtocol,
-            node?.type === "provider"
-              ? (node.upstream?.protocol ?? upstream.protocol)
-              : upstream.protocol,
+            resolveInterface(
+              connection,
+              ingressProtocol,
+              model || body.request.model,
+            ).protocol,
             result.protocolPolicy,
           );
         }
@@ -672,6 +716,9 @@ export default definePlugin({
             signal,
           );
         }
+        const direct = !plan
+          ? resolveInterface(upstream, body.ingressProtocol, model!)
+          : undefined;
         const events = plan
           ? await host.call<AsyncIterable<AIEvent>>(
               "ai.execution@1",
@@ -679,9 +726,9 @@ export default definePlugin({
               signal,
             )
           : await host.call<AsyncIterable<AIEvent>>(
-              "ai.upstream." + upstream.protocol + "@1",
+              "ai.upstream." + direct!.protocol + "@1",
               {
-                upstream,
+                upstream: direct,
                 request: task,
               },
               signal,

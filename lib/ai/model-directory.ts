@@ -1,10 +1,12 @@
 import type { ProviderConnection } from "@pluhub/contracts/ai";
-import {
-  HostError,
-  requiredString,
-  type Host,
-} from "@pluhub/sdk";
+import { HostError, requiredString, type Host } from "@pluhub/sdk";
 import { responseObject } from "./json-response.js";
+import {
+  connectionInterfaces,
+  interfaceHeaders,
+  interfaceMatches,
+  upstreamUrl,
+} from "./upstream-interfaces.js";
 
 export type DirectoryModel = {
   id: string;
@@ -44,12 +46,7 @@ export function directoryModels(
       protocol === "gemini" && typeof item.name === "string"
         ? item.name.replace(/^models\//, "")
         : item.id;
-    if (
-      typeof id !== "string" ||
-      !id ||
-      id.length > 256 ||
-      id.trim() !== id
-    )
+    if (typeof id !== "string" || !id || id.length > 256 || id.trim() !== id)
       continue;
     const name =
       typeof item.display_name === "string" && item.display_name.trim()
@@ -81,36 +78,11 @@ export function directoryModels(
         Math.max(previous?.contextLength ?? 0, model.contextLength ?? 0) ||
         undefined,
       maxOutputTokens:
-        Math.max(
-          previous?.maxOutputTokens ?? 0,
-          model.maxOutputTokens ?? 0,
-        ) || undefined,
+        Math.max(previous?.maxOutputTokens ?? 0, model.maxOutputTokens ?? 0) ||
+        undefined,
     });
   }
   return [...models.values()].slice(0, 512);
-}
-
-function directoryUrl(protocol: string, baseUrl: string) {
-  let url: URL;
-  try {
-    url = new URL(requiredString(baseUrl, "upstream URL", 2048));
-  } catch {
-    throw new HostError("invalid_upstream", "无效的上游地址");
-  }
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw new HostError("invalid_upstream", "无效的上游地址");
-  const suffix = protocol === "gemini" ? "/v1beta/models" : "/v1/models";
-  const prefix = url.pathname
-    .replace(/\/$/, "")
-    .replace(protocol === "gemini" ? /\/v1beta$/ : /\/v1$/, "");
-  url.pathname = prefix + suffix;
-  return url;
 }
 
 async function upstreamSecret(
@@ -129,34 +101,27 @@ async function upstreamSecret(
         signal,
       )
     ).secret;
-  return host.secret(
-    requiredString(upstream.keyRef, "upstream keyRef"),
-  );
+  return host.secret(requiredString(upstream.keyRef, "upstream keyRef"));
 }
 
 export async function discoverApiModels(
   host: Host,
   upstream: ProviderConnection,
   parentSignal: AbortSignal,
+  suppliedSecret?: string,
 ) {
   const protocol = upstream.protocol;
   if (!apiProtocols.has(protocol))
-    throw new HostError(
-      "unsupported_operation",
-      "该上游不支持模型目录查询",
-    );
-  const signal = AbortSignal.any([
-    parentSignal,
-    AbortSignal.timeout(15_000),
-  ]);
-  const secret = await upstreamSecret(host, upstream, signal);
-  const url = directoryUrl(protocol, upstream.baseUrl ?? "");
-  const headers: Record<string, string> =
-    protocol === "gemini"
-      ? { "x-goog-api-key": secret }
-      : protocol === "anthropic"
-        ? { "x-api-key": secret, "anthropic-version": "2023-06-01" }
-        : { authorization: "Bearer " + secret };
+    throw new HostError("unsupported_operation", "该上游不支持模型目录查询");
+  const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(15_000)]);
+  const secret =
+    suppliedSecret ?? (await upstreamSecret(host, upstream, signal));
+  const url = upstreamUrl(
+    upstream.baseUrl ?? "",
+    upstream.http?.modelsPath ??
+      (protocol === "gemini" ? "/v1beta/models" : "/v1/models"),
+  );
+  const headers = interfaceHeaders(protocol, upstream.http, secret, url);
   const response = await host.call<Response>(
     "http.transport@1",
     {
@@ -175,4 +140,67 @@ export async function discoverApiModels(
     protocol,
     await responseObject(response, signal, 2_000_000),
   );
+}
+
+export async function discoverConnectionModels(
+  host: Host,
+  connection: ProviderConnection,
+  signal: AbortSignal,
+  secret?: string,
+) {
+  const interfaces = connectionInterfaces(connection);
+  // Chat and Responses usually share /models. Avoid duplicate discovery calls.
+  const tasks = new Map<string, Promise<DirectoryModel[]>>();
+  const results = await Promise.allSettled(
+    interfaces.map(async (upstream, index) => {
+      const key = JSON.stringify([
+        upstream.protocol === "openai-responses"
+          ? "openai-chat"
+          : upstream.protocol,
+        upstream.baseUrl,
+        upstream.http?.modelsPath,
+        upstream.http?.auth,
+        upstream.http?.headers,
+      ]);
+      let task = tasks.get(key);
+      if (!task) {
+        task = host.call<DirectoryModel[]>(
+          "ai.upstream-models." + upstream.protocol + "@1",
+          { upstream, secret },
+          signal,
+        );
+        tasks.set(key, task);
+      }
+      const models = await task;
+      const route = connection.interfaces?.[index];
+      return models
+        .filter((model) => !route || interfaceMatches(route, model.id))
+        .map((model) => ({ ...model, protocols: [upstream.protocol] }));
+    }),
+  );
+  const models = new Map<string, DirectoryModel & { protocols: string[] }>();
+  const errors: { protocol: string; message: string }[] = [];
+  for (const [index, result] of results.entries()) {
+    if (result.status === "rejected") {
+      errors.push({
+        protocol: interfaces[index]!.protocol,
+        message:
+          result.reason instanceof Error
+            ? result.reason.message
+            : "模型目录查询失败",
+      });
+      continue;
+    }
+    for (const model of result.value) {
+      const previous = models.get(model.id);
+      models.set(model.id, {
+        ...previous,
+        ...model,
+        protocols: [
+          ...new Set([...(previous?.protocols ?? []), ...model.protocols]),
+        ],
+      });
+    }
+  }
+  return { models: [...models.values()], errors };
 }

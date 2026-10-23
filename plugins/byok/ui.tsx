@@ -1,4 +1,5 @@
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
+import { UpstreamInterfaces } from "../../lib/ui/upstream-interfaces.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -46,7 +47,12 @@ function Page({ host }: { host: UIHost }) {
     listSubscriptionAccounts(host, true),
   );
   const referenceModels = useLoad<any[]>(() =>
-    host.request("/api/plugins/official.model-catalog/models").catch(() => []),
+    host
+      .request<any[]>("/api/plugins/official.model-catalog/models")
+      .then((models) =>
+        models.filter((model) => model.channel?.scope === "platform"),
+      )
+      .catch(() => []),
   );
   const [tab, setTab] = React.useState("channels"),
     [query, setQuery] = React.useState("");
@@ -109,9 +115,10 @@ function Page({ host }: { host: UIHost }) {
       .includes(query.trim().toLowerCase()),
   );
   const filteredCatalog = modelCatalog.filter((model) =>
-    [model.id, model.name].join(" ").toLowerCase().includes(
-      modelQuery.trim().toLowerCase(),
-    ),
+    [model.id, model.name]
+      .join(" ")
+      .toLowerCase()
+      .includes(modelQuery.trim().toLowerCase()),
   );
   const usedModels = new Set(models.map((model) => model.model));
   const pickableCatalog = filteredCatalog.filter(
@@ -268,6 +275,7 @@ function Page({ host }: { host: UIHost }) {
                 ? { id: editing.id, action }
                 : {
                     protocol: editing.protocol,
+                    interfaces: editing.interfaces,
                     baseUrl: editing.baseUrl,
                     key: editing.key,
                   },
@@ -393,7 +401,15 @@ function Page({ host }: { host: UIHost }) {
                         </small>
                         <small>
                           {c.subscriptionAccountId ? "BYOSUB" : "BYOAPI"} ·{" "}
-                          {c.protocol}
+                          {c.interfaces
+                            ? [
+                                ...new Set(
+                                  c.interfaces.map(
+                                    (route: any) => route.protocol,
+                                  ),
+                                ),
+                              ].join(" · ")
+                            : c.protocol}
                         </small>
                       </td>
                       <td>
@@ -637,6 +653,7 @@ function Page({ host }: { host: UIHost }) {
                       ...editing,
                       preset: p.id,
                       protocol: p.protocol,
+                      interfaces: undefined,
                       baseUrl: p.baseUrl,
                       name: editing.name || (p.id === "custom" ? "" : p.name),
                       key: "",
@@ -673,6 +690,7 @@ function Page({ host }: { host: UIHost }) {
                   setEditing({
                     ...editing,
                     protocol: e.target.value,
+                    interfaces: undefined,
                     key: "",
                     subscriptionAccountId: undefined,
                     authMode: e.target.value === "codex" ? "cli" : undefined,
@@ -778,6 +796,15 @@ function Page({ host }: { host: UIHost }) {
                   />
                 </label>
               </>
+            )}
+            {!subscription && (
+              <UpstreamInterfaces
+                protocol={editing.protocol}
+                value={editing.interfaces}
+                onChange={(interfaces) =>
+                  setEditing({ ...editing, interfaces })
+                }
+              />
             )}
             {!subscription && (
               <>
@@ -1161,6 +1188,12 @@ function Page({ host }: { host: UIHost }) {
             )}
             {synced && (
               <div className="card">
+                {synced.errors?.map((error: any, index: number) => (
+                  <Notice
+                    key={index}
+                    message={error.protocol + ": " + error.message}
+                  />
+                ))}
                 {synced.models ? (
                   <>
                     <p>

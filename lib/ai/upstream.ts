@@ -6,10 +6,29 @@ import type {
   AIResult,
 } from "@pluhub/contracts/ai";
 import { encodeRequest, decodeResult, resultEvents } from "./protocols.js";
+import { discoverApiModels } from "./model-directory.js";
 import { upstreamEvents } from "./streams.js";
+import {
+  interfaceHeaders,
+  requestPath,
+  upstreamUrl,
+} from "./upstream-interfaces.js";
 export function createUpstream(protocol: Protocol) {
   return definePlugin({
     setup(host) {
+      host.provide(
+        "ai.upstream-models." + protocol + "@1",
+        (input: { upstream: Upstream; secret?: string }, signal) => {
+          if (input.upstream.protocol !== protocol)
+            throw new HostError("adapter_mismatch", "Wrong upstream adapter");
+          return discoverApiModels(
+            host,
+            { ...input.upstream, protocol },
+            signal,
+            input.secret,
+          );
+        },
+      );
       host.provide(
         "ai.upstream." + protocol + "@1",
         async (input: { request: AIRequest; upstream: Upstream }, signal) => {
@@ -35,55 +54,36 @@ export function createUpstream(protocol: Protocol) {
                 signal,
               )
             : encodeRequest(protocol, request);
-          const url = new URL(
+          const url = upstreamUrl(
             requiredString(upstream.baseUrl, "upstream URL", 2048),
+            requestPath(protocol, upstream.http, request.stream),
+            request.model,
           );
           if (
-            !["http:", "https:"].includes(url.protocol) ||
-            url.username ||
-            url.password ||
-            url.search ||
-            url.hash
+            protocol === "gemini" &&
+            request.stream &&
+            !url.searchParams.has("alt")
           )
-            throw new HostError(
-              "invalid_upstream",
-              "Invalid upstream base URL",
-            );
-          let suffix =
-            protocol === "openai-chat"
-              ? "/v1/chat/completions"
-              : protocol === "openai-responses"
-                ? "/v1/responses"
-                : protocol === "anthropic"
-                  ? "/v1/messages"
-                  : "/v1beta/models/" +
-                    encodeURIComponent(request.model.replace(/^models\//, "")) +
-                    ":" +
-                    (request.stream
-                      ? "streamGenerateContent"
-                      : "generateContent");
-          let prefix = url.pathname.replace(/\/$/, "");
-          if (suffix.startsWith("/v1/") && prefix.endsWith("/v1"))
-            suffix = suffix.slice(3);
-          if (suffix.startsWith("/v1beta/") && prefix.endsWith("/v1beta"))
-            suffix = suffix.slice(7);
-          url.pathname = prefix + suffix;
-          if (protocol === "gemini" && request.stream)
             url.searchParams.set("alt", "sse");
-          const headers: Record<string, string> = {
-            "content-type": "application/json",
-          };
-          if (protocol === "anthropic") {
-            headers["x-api-key"] = key;
-            headers["anthropic-version"] = "2023-06-01";
-          } else if (protocol === "gemini") headers["x-goog-api-key"] = key;
-          else headers.authorization = "Bearer " + key;
+          const headers = interfaceHeaders(protocol, upstream.http, key, url);
           const response = await host.call<Response>(
             "http.transport@1",
             {
               url: url.href,
               headers,
-              body: JSON.stringify(body),
+              body: JSON.stringify({
+                ...(body as Record<string, unknown>),
+                ...upstream.http?.params,
+                ...(protocol === "gemini" &&
+                upstream.http?.params?.generationConfig
+                  ? {
+                      generationConfig: {
+                        ...(body as any).generationConfig,
+                        ...(upstream.http.params.generationConfig as object),
+                      },
+                    }
+                  : {}),
+              }),
               publicOnly: upstream.publicOnly,
             },
             signal,
