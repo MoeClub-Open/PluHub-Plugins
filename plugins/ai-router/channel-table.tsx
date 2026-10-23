@@ -198,43 +198,41 @@ export function ChannelTable({
               return (
                 <tr
                   key={id}
-                  className={
-                    selected.includes(id) ? "row-selected" : undefined
-                  }
+                  className={selected.includes(id) ? "row-selected" : undefined}
                 >
-                <td className="selection-cell">
-                  <Checkbox
-                    className="table-check"
-                    aria-label={tr("选择渠道 ") + (channel.name || id)}
-                    checked={selected.includes(id)}
-                    disabled={busy}
-                    onCheckedChange={() =>
-                      setSelection((old) =>
-                        old.includes(id)
-                          ? old.filter((key) => key !== id)
-                          : [...old, id],
-                      )
-                    }
-                  />
-                </td>
-                <td>
-                  <strong>{channel.name || id}</strong>
-                  {channel.name && channel.name !== id && <small>{id}</small>}
-                </td>
-                <td>
-                  <span>
-                    {tr("{0} 个节点 · {1} 个上游", {
-                      "0": textValue(channel.flow?.nodes.length ?? 2),
-                      "1": textValue(channelConnections(channel).length),
-                    })}
-                  </span>
-                  <small className="channel-address">
-                    {channelConnections(channel)
-                      .map((u) => u.baseUrl)
-                      .filter(Boolean)
-                      .join(" · ") || tr("按流程选择目标")}
-                  </small>
-                </td>
+                  <td className="selection-cell">
+                    <Checkbox
+                      className="table-check"
+                      aria-label={tr("选择渠道 ") + (channel.name || id)}
+                      checked={selected.includes(id)}
+                      disabled={busy}
+                      onCheckedChange={() =>
+                        setSelection((old) =>
+                          old.includes(id)
+                            ? old.filter((key) => key !== id)
+                            : [...old, id],
+                        )
+                      }
+                    />
+                  </td>
+                  <td>
+                    <strong>{channel.name || id}</strong>
+                    {channel.name && channel.name !== id && <small>{id}</small>}
+                  </td>
+                  <td>
+                    <span>
+                      {tr("{0} 个节点 · {1} 个上游", {
+                        "0": textValue(channel.flow?.nodes.length ?? 2),
+                        "1": textValue(channelConnections(channel).length),
+                      })}
+                    </span>
+                    <small className="channel-address">
+                      {channelConnections(channel)
+                        .map((u) => u.baseUrl)
+                        .filter(Boolean)
+                        .join(" · ") || tr("按流程选择目标")}
+                    </small>
+                  </td>
                   <td>
                     <button
                       type="button"
@@ -243,73 +241,72 @@ export function ChannelTable({
                       onClick={() => modelsFor(id)}
                     >
                       <Icon name="eye" size={14} />
-                      {tr("查看模型")}
+                      {tr("模型与定价")}
                       <span className="badge">{channelModels.length}</span>
                     </button>
                     <small title={channelModels.join("、")}>
-                      {channelModels.slice(0, 3).join("、") ||
-                        tr("读取上游可用模型")}
+                      {channelModels.slice(0, 3).join("、") || tr("未添加模型")}
                       {channelModels.length > 3 &&
                         tr(" 等 {0} 个", {
                           "0": textValue(channelModels.length),
                         })}
                     </small>
                   </td>
-                <td>
-                  <span
-                    className={
-                      "badge " + (channel.enabled !== false ? "ready" : "")
-                    }
-                  >
-                    {channel.enabled === false ? tr("已停用") : tr("已启用")}
-                  </span>
-                  <small>{tests[id] || tr("尚未测试")}</small>
-                </td>
-                <td>
-                  <div className="actions">
-                    <button
-                      className="ghost"
-                      disabled={busy}
-                      onClick={() => graph(id)}
-                    >
-                      {tr("编辑流程")}
-                    </button>
-                    <button
-                      className="ghost"
-                      disabled={busy}
-                      onClick={() => edit(id)}
-                    >
-                      {tr("设置")}
-                    </button>
-                    <button
-                      className="ghost"
-                      disabled={busy}
-                      onClick={() => toggle(id, channel.enabled === false)}
-                    >
-                      {channel.enabled === false ? tr("启用") : tr("停用")}
-                    </button>
-                    <button
-                      className="ghost"
-                      disabled={busy || !!testing}
-                      title={tr("真实调用，最多 256 Token，按上游计费")}
-                      onClick={() => test(id)}
-                    >
-                      {testing === id ? tr("测试中…") : tr("发送测试请求")}
-                    </button>
-                    <button
-                      className="ghost danger"
-                      disabled={
-                        busy ||
-                        Object.values(models).some(
-                          (model) => model.upstream === id,
-                        )
+                  <td>
+                    <span
+                      className={
+                        "badge " + (channel.enabled !== false ? "ready" : "")
                       }
-                      onClick={() => remove(id)}
                     >
-                      {tr("删除")}
-                    </button>
-                  </div>
-                </td>
+                      {channel.enabled === false ? tr("已停用") : tr("已启用")}
+                    </span>
+                    <small>{tests[id] || tr("尚未测试")}</small>
+                  </td>
+                  <td>
+                    <div className="actions">
+                      <button
+                        className="ghost"
+                        disabled={busy}
+                        onClick={() => graph(id)}
+                      >
+                        {tr("编辑流程")}
+                      </button>
+                      <button
+                        className="ghost"
+                        disabled={busy}
+                        onClick={() => edit(id)}
+                      >
+                        {tr("设置")}
+                      </button>
+                      <button
+                        className="ghost"
+                        disabled={busy}
+                        onClick={() => toggle(id, channel.enabled === false)}
+                      >
+                        {channel.enabled === false ? tr("启用") : tr("停用")}
+                      </button>
+                      <button
+                        className="ghost"
+                        disabled={busy || !!testing}
+                        title={tr("真实调用，最多 256 Token，按上游计费")}
+                        onClick={() => test(id)}
+                      >
+                        {testing === id ? tr("测试中…") : tr("发送测试请求")}
+                      </button>
+                      <button
+                        className="ghost danger"
+                        disabled={
+                          busy ||
+                          Object.values(models).some(
+                            (model) => model.upstream === id,
+                          )
+                        }
+                        onClick={() => remove(id)}
+                      >
+                        {tr("删除")}
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}

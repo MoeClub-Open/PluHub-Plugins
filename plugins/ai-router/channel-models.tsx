@@ -1,8 +1,14 @@
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import type { ModelRoute } from "@pluhub/contracts/ai";
+import type { ModelRoute, Upstream } from "@pluhub/contracts/ai";
 import { Checkbox } from "../../lib/ui/checkbox.js";
-import { Dialog, Empty, Icon, number } from "../../lib/ui/components.js";
+import { Select } from "../../lib/ui/select.js";
+import {
+  Dialog,
+  Empty,
+  Icon,
+  ListPagination,
+} from "../../lib/ui/components.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Notice } from "../../lib/ui/mount.js";
 
@@ -22,16 +28,22 @@ type Response = {
 export function ChannelModels({
   host,
   channelId,
-  channelName,
+  upstreams,
   models,
+  changeChannel,
   add,
+  edit,
+  create,
   close,
 }: {
   host: UIHost;
   channelId: string;
-  channelName: string;
+  upstreams: Record<string, Upstream>;
   models: Record<string, ModelRoute>;
-  add: (models: ChannelModel[]) => Promise<void>;
+  changeChannel: (id: string) => void;
+  add: (id: string, models: ChannelModel[]) => Promise<void>;
+  edit: (id: string) => void;
+  create: (channelId: string, model?: ChannelModel) => void;
   close: () => void;
 }) {
   const [data, setData] = React.useState<Response>();
@@ -39,61 +51,90 @@ export function ChannelModels({
   const [selected, setSelected] = React.useState<string[]>([]);
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [revision, setRevision] = React.useState(0);
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(20);
 
   React.useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    setData(undefined);
     setMessage("");
+    setSelected([]);
     void host
       .request<Response>("/api/plugins/official.ai-router/channel-models", {
         method: "POST",
         body: JSON.stringify({ id: channelId }),
+        signal: controller.signal,
       })
       .then((result) => {
-        if (!cancelled) setData(result);
+        if (!controller.signal.aborted) setData(result);
       })
       .catch((error) => {
-        if (!cancelled) setMessage(tr((error as Error).message));
+        if (!controller.signal.aborted)
+          setMessage(tr((error as Error).message));
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [channelId, host]);
+    return () => controller.abort();
+  }, [channelId, host, revision]);
+  React.useEffect(() => setPage(1), [channelId, query, pageSize]);
 
-  const channelMappings = Object.values(models).filter(
-    (model) => model.upstream === channelId,
+  const mappings = Object.entries(models).filter(
+    ([, model]) => model.upstream === channelId,
   );
-  const mapped = new Set(channelMappings.map((model) => model.model));
-  const filtered = (data?.models ?? []).filter((model) =>
-    [model.id, model.name ?? "", ...model.protocols]
+  const mapped = new Set(mappings.map(([, model]) => model.model));
+  const directory = new Map(
+    (data?.models ?? []).map((model) => [model.id, model]),
+  );
+  for (const [, model] of mappings) {
+    if (!directory.has(model.model))
+      directory.set(model.model, {
+        id: model.model,
+        name: model.name,
+        protocols: [],
+      });
+  }
+  const filtered = [...directory.values()].filter((model) =>
+    [
+      model.id,
+      model.name ?? "",
+      ...model.protocols,
+      ...mappings
+        .filter(([, route]) => route.model === model.id)
+        .map(([id]) => id),
+    ]
       .join(" ")
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   );
-  const stateFor = (model: ChannelModel) =>
-    mapped.has(model.id)
-      ? "mapped"
-      : Object.hasOwn(models, model.id)
-        ? "conflict"
-        : "available";
-  const selectable = filtered.filter(
-    (model) => stateFor(model) === "available",
-  );
+  const selectable = filtered.filter((model) => !mapped.has(model.id));
   const visibleSelected = selectable.filter((model) =>
     selected.includes(model.id),
   ).length;
   const allSelected =
     selectable.length > 0 && visibleSelected === selectable.length;
+  const picked = (data?.models ?? []).filter(
+    (model) => selected.includes(model.id) && !mapped.has(model.id),
+  );
+  const rows = filtered.flatMap<{
+    model: ChannelModel;
+    id: string;
+    route: ModelRoute | undefined;
+  }>((model) => {
+    const routes = mappings.filter(([, route]) => route.model === model.id);
+    return routes.length
+      ? routes.map(([id, route]) => ({ model, id, route }))
+      : [{ model, id: "", route: undefined }];
+  });
+  const currentPage = Math.min(
+    page,
+    Math.max(1, Math.ceil(rows.length / pageSize)),
+  );
   async function submit() {
-    const picked = (data?.models ?? []).filter(
-      (model) =>
-        selected.includes(model.id) && stateFor(model) === "available",
-    );
     if (!picked.length) return;
     setBusy(true);
     setMessage("");
     try {
-      await add(picked);
-      close();
+      await add(channelId, picked);
+      setSelected([]);
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -102,9 +143,7 @@ export function ChannelModels({
   }
   return (
     <Dialog
-      title={tr("{0} · 模型", {
-        "0": channelName || channelId,
-      })}
+      title={tr("模型与定价")}
       close={() => {
         if (!busy) close();
       }}
@@ -122,15 +161,19 @@ export function ChannelModels({
           ""
         }
       />
-      <div className="channel-summary">
-        <span>
-          <strong>{data?.models.length ?? 0}</strong> {tr("上游可用模型")}
-        </span>
-        <span>
-          <strong>{channelMappings.length}</strong> {tr("已映射模型")}
-        </span>
-      </div>
       <div className="data-toolbar" role="search">
+        <Select
+          aria-label={tr("渠道")}
+          value={channelId}
+          disabled={busy}
+          onChange={(event) => changeChannel(event.target.value)}
+        >
+          {Object.entries(upstreams).map(([id, upstream]) => (
+            <option key={id} value={id}>
+              {upstream.name || id} · ×{upstream.consumptionMultiplier ?? 1}
+            </option>
+          ))}
+        </Select>
         <label className="data-search">
           <Icon name="search" size={17} />
           <input
@@ -141,120 +184,148 @@ export function ChannelModels({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <label className="checkbox">
-          <Checkbox
-            aria-label={tr("选择全部可用模型")}
-            checked={allSelected}
-            indeterminate={visibleSelected > 0 && !allSelected}
-            disabled={!selectable.length || busy}
-            onCheckedChange={(checked) =>
-              setSelected((current) =>
-                checked
-                  ? [
-                      ...new Set([
-                        ...current,
-                        ...selectable.map((model) => model.id),
-                      ]),
-                    ]
-                  : current.filter(
-                      (id) =>
-                        !selectable.some((model) => model.id === id),
-                    ),
-              )
-            }
-          />
-          {tr("全选")}
-        </label>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={tr("刷新模型")}
+          disabled={busy || (!data && !message)}
+          onClick={() => setRevision((value) => value + 1)}
+        >
+          <Icon name="refresh" size={15} />
+        </button>
       </div>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th className="selection-cell" />
+              <th className="selection-cell">
+                <Checkbox
+                  aria-label={tr("选择全部可用模型")}
+                  checked={allSelected}
+                  indeterminate={visibleSelected > 0 && !allSelected}
+                  disabled={!selectable.length || busy}
+                  onCheckedChange={(checked) =>
+                    setSelected((current) =>
+                      checked
+                        ? [
+                            ...new Set([
+                              ...current,
+                              ...selectable.map((model) => model.id),
+                            ]),
+                          ]
+                        : current.filter(
+                            (id) =>
+                              !selectable.some((model) => model.id === id),
+                          ),
+                    )
+                  }
+                />
+              </th>
               <th>{tr("模型")}</th>
-              <th>{tr("协议")}</th>
+              <th>{tr("原价 · USD")}</th>
               <th>{tr("状态")}</th>
+              <th>{tr("操作")}</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((model) => {
-              const state = stateFor(model);
-              return (
-                <tr key={model.id}>
+            {rows
+              .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+              .map(({ model, id, route }) => (
+                <tr key={model.id + ":" + id}>
                   <td className="selection-cell">
                     <Checkbox
                       aria-label={tr("选择模型 {0}", { "0": model.id })}
-                      checked={selected.includes(model.id)}
-                      disabled={state !== "available" || busy}
-                      onCheckedChange={() =>
+                      checked={selected.includes(model.id) && !route}
+                      disabled={!!route || busy}
+                      onCheckedChange={(checked) =>
                         setSelected((current) =>
-                          current.includes(model.id)
-                            ? current.filter((id) => id !== model.id)
-                            : [...current, model.id],
+                          checked
+                            ? [...current, model.id]
+                            : current.filter((value) => value !== model.id),
                         )
                       }
                     />
                   </td>
                   <td>
-                    <strong>{model.name || model.id}</strong>
-                    <small>
-                      {model.name && model.name !== model.id && model.id + " · "}
-                      {model.contextLength &&
-                        tr("上下文 {0}", {
-                          "0": number(model.contextLength),
-                        })}
-                      {model.maxOutputTokens &&
-                        " · " +
-                          tr("输出 {0}", {
-                            "0": number(model.maxOutputTokens),
-                          })}
-                    </small>
+                    <strong>{route?.name || model.name || model.id}</strong>
+                    {(route?.name || model.name || model.id) !==
+                      (id || model.id) && <small>{id || model.id}</small>}
+                    {id && id !== model.id && <small>{model.id}</small>}
                   </td>
-                  <td>{model.protocols.join(" / ")}</td>
+                  <td>
+                    {!route ? (
+                      "—"
+                    ) : route.pricing?.mode === "expression" ? (
+                      tr("动态定价")
+                    ) : route.pricing?.mode === "request" ? (
+                      "$" + route.pricing.request + " / " + tr("次")
+                    ) : route.inputPrice === undefined ||
+                      route.outputPrice === undefined ? (
+                      tr("未定价")
+                    ) : (
+                      <>
+                        {route.inputPrice} / {route.outputPrice}
+                        <small>{tr("USD / 百万 Token")}</small>
+                      </>
+                    )}
+                  </td>
                   <td>
                     <span
                       className={
-                        "badge " + (state === "available" ? "ready" : "")
+                        "badge " +
+                        (route?.enabled !== false && route ? "ready" : "")
                       }
                     >
-                      {state === "mapped"
-                        ? tr("已映射")
-                        : state === "conflict"
-                          ? tr("已被其他渠道映射")
-                          : tr("可添加")}
+                      {!route
+                        ? tr("可添加")
+                        : route.enabled === false
+                          ? tr("已停用")
+                          : tr("已添加")}
                     </span>
                   </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        route ? edit(id) : create(channelId, model)
+                      }
+                    >
+                      {route ? tr("编辑") : tr("添加并定价")}
+                    </button>
+                  </td>
                 </tr>
-              );
-            })}
+              ))}
           </tbody>
         </table>
         {!data && !message && <p className="muted">{tr("正在读取模型…")}</p>}
-        {data && !filtered.length && (
-          <Empty title={tr("没有匹配的模型")}>
-            {query && (
-              <button className="secondary" onClick={() => setQuery("")}>
-                {tr("清除筛选")}
-              </button>
-            )}
-          </Empty>
+        {(data || message) && !rows.length && (
+          <Empty title={tr("没有匹配的模型")} />
         )}
       </div>
+      <ListPagination
+        total={rows.length}
+        page={currentPage}
+        size={pageSize}
+        setPage={setPage}
+        setSize={setPageSize}
+      />
       <div className="form-actions">
         <span className="muted">
-          {tr("已选择 {0}", { "0": textValue(selected.length) })}
+          {tr("已选择 {0}", { "0": textValue(picked.length) })}
         </span>
         <button
           type="button"
           className="secondary"
           disabled={busy}
-          onClick={close}
+          onClick={() => create(channelId)}
         >
-          {tr("关闭")}
+          {tr("手动添加")}
         </button>
         <button
           type="button"
-          disabled={!selected.length || busy}
+          disabled={!picked.length || busy}
           onClick={() => void submit()}
         >
           {busy ? tr("正在添加…") : tr("添加选中模型")}

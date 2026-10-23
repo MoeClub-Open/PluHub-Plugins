@@ -154,7 +154,7 @@ const pageIcons: Record<string, string> = {
   "/account": "users",
   "/tickets": "support",
   "/settings/tickets": "support",
-  "/ai-router": "channels",
+  "/channels": "channels",
   "/users": "users",
   "/billing": "activity",
   "/commerce": "models",
@@ -383,7 +383,7 @@ function App() {
       return;
     }
     const destination = channelSettingsDestination(path!);
-    if (admin && destination && extensions.some((e) => e.path === "/ai-router"))
+    if (admin && destination && extensions.some((e) => e.path === "/channels"))
       client.navigate(destination);
   }, [admin, hash, path, client, extensions]);
   const modelCatalog = extensions.find(

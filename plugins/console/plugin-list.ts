@@ -15,7 +15,7 @@ export const pluginCategories = [
   {
     id: "routing",
     get title() {
-      return tr("渠道与路由");
+      return tr("模型服务");
     },
   },
   {

@@ -1,16 +1,13 @@
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
-import { Select } from "../../lib/ui/select.js";
-import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
 import React from "react";
+import { Select } from "../../lib/ui/select.js";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { Upstream, ModelRoute, ModelRedirect } from "@pluhub/contracts/ai";
 import { Redirects } from "./redirect-ui.js";
 import { ChannelTable } from "./channel-table.js";
 import { ChannelModels, type ChannelModel } from "./channel-models.js";
-import {
-  ModelPriceFields,
-  readModelPricing,
-} from "../../lib/ui/model-pricing.js";
+import { ModelEditor } from "./model-editor.js";
+import { availableModelId, discoveredModelRoute } from "./model-config.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { channelEditorTarget } from "../../lib/ui/channel-location.js";
 import {
@@ -62,7 +59,6 @@ function Page({ host }: { host: UIHost }) {
     return () => removeEventListener("hashchange", change);
   }, []);
   const [dialog, setDialog] = React.useState<{
-    type: "channel" | "model";
     id: string;
   }>();
   const [message, setMessage] = React.useState("");
@@ -71,6 +67,13 @@ function Page({ host }: { host: UIHost }) {
   const [tests, setTests] = React.useState<Record<string, string>>({});
   const [advanced, setAdvanced] = React.useState("");
   const [modelChannel, setModelChannel] = React.useState("");
+  const [modelQuery, setModelQuery] = React.useState("");
+  const [modelUpstream, setModelUpstream] = React.useState("");
+  const [modelDialog, setModelDialog] = React.useState<{
+    id?: string;
+    suggestedId: string;
+    model: ModelRoute;
+  }>();
   const normalized = React.useMemo(() => {
     if (!loaded.data) return undefined;
     const copy = structuredClone(loaded.data);
@@ -88,9 +91,18 @@ function Page({ host }: { host: UIHost }) {
       : { upstreams: {}, models: {} };
   const upstreams = router.upstreams ?? {};
   const models = router.models ?? {};
+  const filteredModels = Object.entries(models).filter(
+    ([id, model]) =>
+      (!modelUpstream || model.upstream === modelUpstream) &&
+      [id, model.model, model.name, upstreams[model.upstream]?.name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(modelQuery.trim().toLowerCase()),
+  );
   const graph = channelEditorTarget(page, upstreams);
   const openGraph = (id: string) =>
-    host.navigate("/ai-router?channel=" + encodeURIComponent(id));
+    host.navigate("/channels?channel=" + encodeURIComponent(id));
   React.useEffect(() => {
     setAdvanced(JSON.stringify(router, null, 2));
   }, [loaded.data]);
@@ -101,7 +113,7 @@ function Page({ host }: { host: UIHost }) {
       const config: any = await host.request("/api/host/config");
       migrateLegacyChannels(config);
       const i = routerIndex(config);
-      if (i < 0) throw new Error(tr("AI Router 插件配置不存在"));
+      if (i < 0) throw new Error(tr("渠道插件配置不存在"));
       const next = config.plugins[i].config;
       next.upstreams ??= {};
       next.models ??= {};
@@ -127,19 +139,39 @@ function Page({ host }: { host: UIHost }) {
   };
   async function addChannelModels(id: string, picked: ChannelModel[]) {
     await save((r) => {
+      if (!r.upstreams[id]) throw new Error(tr("渠道已被删除，请刷新。"));
       for (const model of picked) {
-        if (Object.hasOwn(r.models, model.id)) continue;
-        r.models[model.id] = {
-          upstream: id,
-          model: model.id,
-          ...(model.name && model.name !== model.id
-            ? { name: model.name }
-            : {}),
-          ...(model.protocols[0] ? { provider: model.protocols[0] } : {}),
-          enabled: true,
-        };
+        if (
+          Object.values(r.models).some(
+            (route) => route.upstream === id && route.model === model.id,
+          )
+        )
+          continue;
+        const alias = availableModelId(
+          [...Object.keys(r.models), ...Object.keys(r.redirects ?? {})],
+          id,
+          model.id,
+        );
+        r.models[alias] = discoveredModelRoute(id, model);
       }
     });
+  }
+  function createModel(channelId: string, model?: ChannelModel) {
+    setModelDialog({
+      suggestedId: model
+        ? availableModelId(
+            [...Object.keys(models), ...Object.keys(router.redirects ?? {})],
+            channelId,
+            model.id,
+          )
+        : "",
+      model: model
+        ? discoveredModelRoute(channelId, model)
+        : { upstream: channelId, model: "", enabled: true },
+    });
+  }
+  function editModel(id: string) {
+    if (models[id]) setModelDialog({ id, suggestedId: id, model: models[id] });
   }
   async function test(id: string) {
     const mapping = Object.entries(models).find(([, m]) => m.upstream === id);
@@ -168,20 +200,16 @@ function Page({ host }: { host: UIHost }) {
       setTesting("");
     }
   }
-  const existing: any =
-    dialog?.type === "channel"
-      ? upstreams[dialog.id]
-      : dialog?.type === "model"
-        ? models[dialog.id]
-        : undefined;
+  const existing = dialog ? upstreams[dialog.id] : undefined;
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const text = (key: string) => String(f.get(key) ?? "").trim();
-    let id = dialog?.id || text("id");
+    if (!dialog) return;
+    let id = dialog.id;
     try {
       await save((r) => {
-        if (dialog?.type === "channel" && !dialog.id) {
+        if (!dialog.id) {
           let next = BigInt(r.nextChannelId ?? "1");
           for (const current of Object.keys(r.upstreams)) {
             if (!/^\d+$/.test(current)) continue;
@@ -191,68 +219,92 @@ function Page({ host }: { host: UIHost }) {
           id = String(next);
           r.nextChannelId = String(next + 1n);
         }
-        const collection = dialog?.type === "channel" ? r.upstreams : r.models;
-        if (!dialog?.id && Object.hasOwn(collection, id))
+        if (!dialog.id && Object.hasOwn(r.upstreams, id))
           throw new Error(tr("该 ID 已存在，请使用不同的 ID。"));
-        if (dialog?.type === "channel") {
-          r.upstreams[id] = {
-            ...(existing ?? {}),
-            name: text("name"),
-            enabled: existing ? existing.enabled !== false : false,
-            flow: existing?.flow ?? defaultChannelFlow(),
-            consumptionMultiplier: Number(text("consumptionMultiplier") || 1),
-          };
-        } else {
-          const m: ModelRoute = {
-            ...(existing ?? {}),
-            upstream: text("upstream"),
-            model: text("model"),
-            name: text("name"),
-            provider: text("provider"),
-            description: text("description"),
-            enabled: existing?.enabled !== false,
-          };
-          for (const field of [
-            "inputPrice",
-            "outputPrice",
-            "contextWindow",
-          ] as const) {
-            if (text(field)) m[field] = Number(text(field));
-            else delete m[field];
-          }
-          if (!m.name) delete m.name;
-          m.pricing = readModelPricing(f);
-          m.operations = f.getAll("operations") as ModelRoute["operations"];
-          if (!m.pricing) delete m.pricing;
-          if (!m.provider) delete m.provider;
-          if (text("reasoningEfforts"))
-            m.reasoningEfforts = text("reasoningEfforts")
-              .split(",")
-              .map((s) => s.trim()) as ModelRoute["reasoningEfforts"];
-          else delete m.reasoningEfforts;
-          r.models[id] = m;
-        }
+        r.upstreams[id] = {
+          ...(existing ?? {}),
+          name: text("name"),
+          enabled: existing ? existing.enabled !== false : false,
+          flow: existing?.flow ?? defaultChannelFlow(),
+          consumptionMultiplier: Number(text("consumptionMultiplier") || 1),
+        };
       });
-      if (dialog?.type === "channel") openGraph(id);
+      openGraph(id);
     } catch {}
   }
+  const modelDialogs = (
+    <>
+      {modelChannel && (
+        <ChannelModels
+          host={host}
+          channelId={modelChannel}
+          upstreams={upstreams}
+          models={models}
+          changeChannel={setModelChannel}
+          add={addChannelModels}
+          edit={editModel}
+          create={createModel}
+          close={() => {
+            if (!busy) setModelChannel("");
+          }}
+        />
+      )}
+      {modelDialog && (
+        <ModelEditor
+          key={
+            modelDialog.id ||
+            modelDialog.model.upstream + ":" + modelDialog.model.model
+          }
+          {...modelDialog}
+          upstreams={upstreams}
+          save={(id, model) =>
+            save((r) => {
+              const alias =
+                id ||
+                availableModelId(
+                  [...Object.keys(r.models), ...Object.keys(r.redirects ?? {})],
+                  model.upstream,
+                  model.model,
+                );
+              if (
+                !modelDialog.id &&
+                (Object.hasOwn(r.models, alias) ||
+                  Object.hasOwn(r.redirects ?? {}, alias))
+              )
+                throw new Error(tr("该 ID 已存在，请使用不同的 ID。"));
+              if (modelDialog.id && !r.models[modelDialog.id])
+                throw new Error(tr("模型已被删除，请刷新。"));
+              if (!r.upstreams[model.upstream])
+                throw new Error(tr("渠道已被删除，请刷新。"));
+              r.models[alias] = model;
+            })
+          }
+          close={() => setModelDialog(undefined)}
+        />
+      )}
+    </>
+  );
   if (graph)
     return (
-      <ChannelGraphEditor
-        host={host}
-        key={graph.channelId}
-        channelId={graph.channelId}
-        initialPanel={graph.panel}
-        close={() => {
-          host.navigate("/ai-router");
-          loaded.reload();
-        }}
-        saved={() => loaded.reload()}
-      />
+      <>
+        {modelDialogs}
+        <ChannelGraphEditor
+          host={host}
+          key={graph.channelId}
+          channelId={graph.channelId}
+          initialPanel={graph.panel}
+          close={() => {
+            host.navigate("/channels");
+            loaded.reload();
+          }}
+          saved={() => loaded.reload()}
+          manageModels={() => setModelChannel(graph.channelId)}
+        />
+      </>
     );
   return (
     <>
-      <PageHeading title={tr("渠道与路由")}>
+      <PageHeading title={tr("渠道")}>
         <button
           className="secondary"
           disabled={busy}
@@ -263,12 +315,15 @@ function Page({ host }: { host: UIHost }) {
         </button>
         {(tab === "channels" || tab === "models") && (
           <button
-            disabled={!loaded.data || busy}
+            disabled={
+              !loaded.data ||
+              busy ||
+              (tab === "models" && !Object.keys(upstreams).length)
+            }
             onClick={() =>
-              setDialog({
-                type: tab === "models" ? "model" : "channel",
-                id: "",
-              })
+              tab === "models"
+                ? setModelChannel(modelUpstream || Object.keys(upstreams)[0]!)
+                : setDialog({ id: "" })
             }
           >
             <Icon name="plus" size={16} />
@@ -277,7 +332,7 @@ function Page({ host }: { host: UIHost }) {
         )}
       </PageHeading>
       <Notice message={message || loaded.error} />
-      <div className="tabs" role="tablist" aria-label={tr("路由配置")}>
+      <div className="tabs" role="tablist" aria-label={tr("渠道配置")}>
         <button
           role="tab"
           aria-selected={tab === "channels"}
@@ -331,7 +386,7 @@ function Page({ host }: { host: UIHost }) {
             busy={busy}
             testing={testing}
             tests={tests}
-            edit={(id) => setDialog({ type: "channel", id })}
+            edit={(id) => setDialog({ id })}
             graph={openGraph}
             toggle={(id, enabled) =>
               mutate((r) => setChannelState(r.upstreams, [id], enabled))
@@ -354,8 +409,34 @@ function Page({ host }: { host: UIHost }) {
         ) : (
           <Empty title={tr("暂无渠道")} />
         ))}
+      {tab === "models" && (
+        <div className="data-toolbar" role="search">
+          <label className="data-search">
+            <Icon name="search" size={17} />
+            <input
+              type="search"
+              aria-label={tr("搜索渠道模型")}
+              placeholder={tr("搜索模型 ID 或名称")}
+              value={modelQuery}
+              onChange={(event) => setModelQuery(event.target.value)}
+            />
+          </label>
+          <Select
+            aria-label={tr("渠道")}
+            value={modelUpstream}
+            onChange={(event) => setModelUpstream(event.target.value)}
+          >
+            <option value="">{tr("全部渠道")}</option>
+            {Object.entries(upstreams).map(([id, upstream]) => (
+              <option key={id} value={id}>
+                {upstream.name || id}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
       {tab === "models" &&
-        (Object.keys(models).length ? (
+        (filteredModels.length ? (
           <div className="table-wrap">
             <table>
               <thead>
@@ -363,12 +444,13 @@ function Page({ host }: { host: UIHost }) {
                   <th>{tr("公开模型 / 名称")}</th>
                   <th>{tr("渠道 / 实际模型")}</th>
                   <th>{tr("原价 · USD")}</th>
+                  <th>{tr("渠道消耗倍率")}</th>
                   <th>{tr("状态")}</th>
                   <th>{tr("操作")}</th>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(models).map(([id, m]) => (
+                {filteredModels.map(([id, m]) => (
                   <tr key={id}>
                     <td>
                       <strong>{m.name || id}</strong>
@@ -393,6 +475,9 @@ function Page({ host }: { host: UIHost }) {
                       )}
                     </td>
                     <td>
+                      ×{upstreams[m.upstream]?.consumptionMultiplier ?? 1}
+                    </td>
+                    <td>
                       <span
                         className={
                           "badge " +
@@ -409,10 +494,7 @@ function Page({ host }: { host: UIHost }) {
                       </span>
                     </td>
                     <td>
-                      <button
-                        className="ghost"
-                        onClick={() => setDialog({ type: "model", id })}
-                      >
+                      <button className="ghost" onClick={() => editModel(id)}>
                         {tr("编辑")}
                       </button>
                       <button
@@ -444,14 +526,11 @@ function Page({ host }: { host: UIHost }) {
             </table>
           </div>
         ) : (
-          <Empty title={tr("暂无模型映射")}>
-            <button
-              disabled={!Object.keys(upstreams).length}
-              onClick={() => setDialog({ type: "model", id: "" })}
-            >
-              {tr("添加模型映射")}
-            </button>
-          </Empty>
+          <Empty
+            title={tr(
+              modelQuery || modelUpstream ? "没有匹配的模型" : "暂无模型映射",
+            )}
+          />
         ))}
       {tab === "advanced" && (
         <form
@@ -471,11 +550,11 @@ function Page({ host }: { host: UIHost }) {
             }
           }}
         >
-          <h2>{tr("高级路由配置")}</h2>
+          <h2>{tr("高级渠道配置")}</h2>
 
           <textarea
             className="code"
-            aria-label={tr("AI 路由配置")}
+            aria-label={tr("渠道配置")}
             rows={19}
             value={advanced}
             onChange={(e) => setAdvanced(e.target.value)}
@@ -486,43 +565,18 @@ function Page({ host }: { host: UIHost }) {
         </form>
       )}
 
-      {modelChannel && (
-        <ChannelModels
-          host={host}
-          channelId={modelChannel}
-          channelName={upstreams[modelChannel]?.name || modelChannel}
-          models={models}
-          add={(picked) => addChannelModels(modelChannel, picked)}
-          close={() => {
-            if (!busy) setModelChannel("");
-          }}
-        />
-      )}
+      {modelDialogs}
 
       {dialog && (
         <Dialog
-          title={
-            (dialog.id ? tr("编辑") : tr("添加")) +
-            (dialog.type === "channel" ? tr("渠道") : tr("模型与定价"))
-          }
+          title={dialog.id ? tr("编辑渠道") : tr("添加渠道")}
           close={() => {
             if (!busy) setDialog(undefined);
           }}
         >
-          <form onSubmit={submit} key={dialog.type + dialog.id}>
+          <form onSubmit={submit} key={dialog.id}>
             <Notice message={message} />
             <div className="form-grid">
-              {!dialog.id && dialog.type === "model" && (
-                <label className="full">
-                  {tr("公开模型 ID")}
-                  <input
-                    name="id"
-                    required
-                    pattern={"[a-zA-Z0-9][a-zA-Z0-9._\\-\\/]{0,127}"}
-                    placeholder="my-chat-model"
-                  />
-                </label>
-              )}
               <label className="full">
                 {tr("显示名称")}
                 <input
@@ -532,97 +586,18 @@ function Page({ host }: { host: UIHost }) {
                   placeholder={tr("便于识别的名称（可选）")}
                 />
               </label>
-              {dialog.type === "model" && (
-                <>
-                  <label>
-                    {tr("渠道")}
-                    <Select
-                      name="upstream"
-                      required
-                      defaultValue={existing?.upstream ?? ""}
-                    >
-                      <option value="" disabled>
-                        {tr("选择渠道")}
-                      </option>
-                      {Object.entries(upstreams).map(([id, u]) => (
-                        <option key={id} value={id}>
-                          {u.name || id}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  <label>
-                    {tr("实际模型 ID")}
-                    <input
-                      name="model"
-                      required
-                      defaultValue={existing?.model ?? ""}
-                      placeholder={tr("服务商提供的模型 ID")}
-                    />
-                  </label>
-                  <label>
-                    {tr("供应商")}
-                    <input
-                      name="provider"
-                      defaultValue={existing?.provider ?? ""}
-                      placeholder={tr("OpenAI / Anthropic / 自定义")}
-                    />
-                  </label>
-                  <label>
-                    {tr("上下文长度")}
-                    <input
-                      name="contextWindow"
-                      type="number"
-                      min="1"
-                      max="100000000"
-                      step="1"
-                      defaultValue={existing?.contextWindow ?? ""}
-                      placeholder={tr("可选")}
-                    />
-                  </label>
-                  <fieldset className="full">
-                    <legend>{tr("模型定价")}</legend>
-                    <div className="form-grid">
-                      <ModelPriceFields model={existing} />
-                    </div>
-                  </fieldset>
-                  <ModelEndpoints value={existing?.operations} />
-                  <label className="full">
-                    {tr("支持的思考档位（逗号分隔）")}
-                    <input
-                      name="reasoningEfforts"
-                      defaultValue={existing?.reasoningEfforts?.join(",") ?? ""}
-                      placeholder={tr(
-                        "low,medium,high（按服务商实际支持填写）",
-                      )}
-                    />
-                  </label>
-                  <label className="full">
-                    {tr("模型描述")}
-                    <textarea
-                      name="description"
-                      rows={3}
-                      maxLength={1024}
-                      defaultValue={existing?.description ?? ""}
-                      placeholder={tr("向使用者说明模型适合的任务…")}
-                    />
-                  </label>
-                </>
-              )}
-              {dialog.type === "channel" && (
-                <label>
-                  {tr("渠道消耗倍率")}
-                  <input
-                    name="consumptionMultiplier"
-                    type="number"
-                    min="0"
-                    max="1000"
-                    step="any"
-                    defaultValue={existing?.consumptionMultiplier ?? 1}
-                    required
-                  />
-                </label>
-              )}
+              <label>
+                {tr("渠道消耗倍率")}
+                <input
+                  name="consumptionMultiplier"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="any"
+                  defaultValue={existing?.consumptionMultiplier ?? 1}
+                  required
+                />
+              </label>
             </div>
             <div className="modal-actions">
               <button
@@ -634,11 +609,7 @@ function Page({ host }: { host: UIHost }) {
                 {tr("取消")}
               </button>
               <button disabled={busy}>
-                {busy
-                  ? tr("保存中…")
-                  : dialog.type === "channel"
-                    ? tr("保存并编辑流程")
-                    : tr("保存并应用")}
+                {busy ? tr("保存中…") : tr("保存并编辑流程")}
               </button>
             </div>
           </form>

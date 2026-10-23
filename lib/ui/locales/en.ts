@@ -2263,4 +2263,18 @@ export const en: Record<string, string> = {
     "Use env:NAME for an environment variable reference",
   支付密钥存储不可用: "Payment key storage is unavailable",
   "支付密钥不存在，请重新填写": "Payment key is unavailable; enter it again",
+
+  渠道管理: "Channels",
+  渠道插件配置不存在: "Channel plugin configuration is missing",
+  渠道配置: "Channel settings",
+  高级渠道配置: "Advanced channel settings",
+  "模型已被删除，请刷新。": "The model was deleted. Refresh to continue.",
+  模型能力: "Model capabilities",
+  自动生成: "Generated automatically",
+  添加并定价: "Add and set price",
+  刷新模型: "Refresh models",
+  未定价: "Not priced",
+  未添加模型: "No models added",
+  已添加: "Added",
+  编辑渠道: "Edit channel",
 };

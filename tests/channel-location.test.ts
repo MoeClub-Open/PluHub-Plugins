@@ -24,20 +24,20 @@ const channels: Record<string, Upstream> = {
 };
 
 it("opens bookmarks in the corresponding channel editor and preserves old settings links", () => {
-  expect(channelEditorTarget("#/ai-router", channels)).toBeUndefined();
+  expect(channelEditorTarget("#/channels", channels)).toBeUndefined();
   expect(
-    channelEditorTarget("#/ai-router?channel=provider%2Fa", channels),
+    channelEditorTarget("#/channels?channel=provider%2Fa", channels),
   ).toEqual({
     channelId: "provider/a",
     panel: undefined,
   });
   for (const query of ["panel=limits", "tab=protection"])
-    expect(channelEditorTarget("#/ai-router?" + query, channels)).toEqual({
+    expect(channelEditorTarget("#/channels?" + query, channels)).toEqual({
       channelId: "provider/a",
       panel: "limits",
     });
   for (const query of ["panel=routing", "tab=policies"])
-    expect(channelEditorTarget("#/ai-router?" + query, channels)).toEqual({
+    expect(channelEditorTarget("#/channels?" + query, channels)).toEqual({
       channelId: "smart",
       panel: "routing",
     });
@@ -46,14 +46,14 @@ it("opens bookmarks in the corresponding channel editor and preserves old settin
 it("never silently substitutes another channel for a deleted or invalid bookmark", () => {
   for (const id of ["missing", "__proto__", "constructor", ""])
     expect(
-      channelEditorTarget("#/ai-router?panel=limits&channel=" + id, channels),
+      channelEditorTarget("#/channels?panel=limits&channel=" + id, channels),
     ).toBeUndefined();
-  expect(channelEditorTarget("#/ai-router?panel=limits", {})).toBeUndefined();
+  expect(channelEditorTarget("#/channels?panel=limits", {})).toBeUndefined();
   expect(
-    channelEditorTarget("#/ai-router?panel=unknown", channels),
+    channelEditorTarget("#/channels?panel=unknown", channels),
   ).toBeUndefined();
   expect(
-    channelEditorTarget("#/ai-router?panel=routing", {
+    channelEditorTarget("#/channels?panel=routing", {
       only: channels["provider/a"]!,
     }),
   ).toEqual({

@@ -30,9 +30,9 @@ export function channelSettingsDestination(path: string) {
   return path === "/rate-limit" ||
     path === "/token-speed" ||
     path === "/settings/traffic"
-    ? "/ai-router?panel=limits"
+    ? "/channels?panel=limits"
     : path === "/auto-router"
-      ? "/ai-router?panel=routing"
+      ? "/channels?panel=routing"
       : undefined;
 }
 export const systemPages: Extension[] = [
@@ -110,7 +110,7 @@ export const groups = [
   {
     id: "routing",
     get title() {
-      return tr("渠道与路由");
+      return tr("模型服务");
     },
     icon: "channels",
     get description() {
@@ -201,10 +201,10 @@ export function navigation(
         e.group !== paymentAdapterGroup &&
         e.group !== verificationProviderGroup &&
         (e.group !== channelSettingsGroup ||
-          !available.some((p) => p.path === "/ai-router")),
+          !available.some((p) => p.path === "/channels")),
     )
     .map((entry) =>
-      entry.path === "/ai-router"
+      entry.path === "/channels"
         ? {
             ...entry,
             searchTerms: [

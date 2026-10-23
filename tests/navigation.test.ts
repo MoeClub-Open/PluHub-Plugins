@@ -68,37 +68,37 @@ const pages = [
 });
 
 it("keeps channel execution settings under channels and preserves legacy links", () => {
-  const nav = navigation(pages, true, "/ai-router");
+  const nav = navigation(pages, true, "/channels");
   expect(nav.section?.id).toBe("routing");
   expect(nav.section?.pages.map((p) => p.path)).toEqual([
-    "/ai-router",
+    "/channels",
     "/settings/user-channels",
   ]);
   expect(nav.searchEntries.map((p) => p.path)).not.toEqual(
     expect.arrayContaining(["/rate-limit", "/token-speed", "/auto-router"]),
   );
   expect(channelSettingsDestination("/rate-limit")).toBe(
-    "/ai-router?panel=limits",
+    "/channels?panel=limits",
   );
   expect(channelSettingsDestination("/token-speed")).toBe(
-    "/ai-router?panel=limits",
+    "/channels?panel=limits",
   );
   expect(channelSettingsDestination("/auto-router")).toBe(
-    "/ai-router?panel=routing",
+    "/channels?panel=routing",
   );
   expect(channelSettingsDestination("/billing")).toBeUndefined();
   expect(channelSettingsDestination("/settings/traffic")).toBe(
-    "/ai-router?panel=limits",
+    "/channels?panel=limits",
   );
   for (const query of ["限流", "TPS", "自动路由"])
     expect(
       searchSettings(nav.sections, query).flatMap((section) =>
         section.pages.map((page) => page.path),
       ),
-    ).toEqual(["/ai-router"]);
+    ).toEqual(["/channels"]);
   expect(
     navigation(
-      pages.filter((p) => p.path !== "/ai-router"),
+      pages.filter((p) => p.path !== "/channels"),
       true,
       "/rate-limit",
     ).selected?.path,

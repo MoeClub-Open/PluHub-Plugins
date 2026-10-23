@@ -43,6 +43,7 @@ export function ChannelGraphEditor({
   saved,
   personal = false,
   initialPanel,
+  manageModels,
 }: {
   host: UIHost;
   channelId: string;
@@ -50,6 +51,7 @@ export function ChannelGraphEditor({
   saved: () => void;
   personal?: boolean;
   initialPanel?: ChannelPanel;
+  manageModels?: () => void;
 }) {
   const loaded = useLoad<any>(() =>
     host.request(
@@ -305,13 +307,13 @@ export function ChannelGraphEditor({
       setMessage(tr("流程节点已删除，请重新连接受影响的出口。"));
   }
   async function save() {
-    if (!flow) return;
+    if (!flow) return false;
     const invalid = editor.current?.querySelector<
       HTMLInputElement | HTMLTextAreaElement
     >("input:invalid, textarea:invalid");
     if (invalid) {
       invalid.reportValidity();
-      return;
+      return false;
     }
     setBusy(true);
     setMessage("");
@@ -330,7 +332,7 @@ export function ChannelGraphEditor({
         setMessage(tr("流程已保存。"));
         loaded.reload();
         saved();
-        return;
+        return true;
       }
       const config: any = await host.request("/api/host/config");
       migrateLegacyChannels(config);
@@ -358,8 +360,10 @@ export function ChannelGraphEditor({
       setMessage(tr("已保存"));
       loaded.reload();
       saved();
+      return true;
     } catch (e) {
       setMessage((e as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -425,6 +429,22 @@ export function ChannelGraphEditor({
           <button className="secondary" disabled={busy} onClick={close}>
             {tr("返回渠道")}
           </button>
+          {manageModels && (
+            <button
+              className="secondary"
+              disabled={busy || !flow}
+              onClick={async () => {
+                const changed =
+                  channelName !== (channel?.name ?? "") ||
+                  enabled !== (channel?.enabled !== false) ||
+                  JSON.stringify(flow) !==
+                    JSON.stringify(channel?.flow ?? defaultChannelFlow());
+                if (!changed || (await save())) manageModels();
+              }}
+            >
+              {tr("模型与定价")}
+            </button>
+          )}
           <button disabled={busy || !flow} onClick={() => void save()}>
             {tr("保存流程")}
           </button>

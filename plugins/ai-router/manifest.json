@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "official.ai-router",
   "category": "routing",
-  "name": "渠道与模型路由",
+  "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.28",
+  "version": "0.1.0-alpha.29",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -1011,8 +1011,8 @@
   },
   "ui": {
     "entry": "dist/ui.js",
-    "title": "渠道与模型",
-    "path": "/ai-router",
+    "title": "渠道",
+    "path": "/channels",
     "public": false,
     "group": "routing",
     "order": 10
