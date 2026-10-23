@@ -1,5 +1,6 @@
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { UpstreamInterfaces } from "../../lib/ui/upstream-interfaces.js";
+import { apiProtocols } from "../../lib/ai/upstream-interfaces.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -18,7 +19,11 @@ import { parseApiConnection } from "../../lib/ai/personal-api.js";
 import { listSubscriptionAccounts } from "../../lib/ui/subscription-providers.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
-import type { ModelRoute, ModelDefinition } from "@pluhub/contracts/ai";
+import type {
+  ModelRoute,
+  ModelDefinition,
+  Protocol,
+} from "@pluhub/contracts/ai";
 import type { SubscriptionModel } from "../../lib/ai/subscription-models.js";
 const api = "/api/plugins/official.byok";
 type Model = {
@@ -674,7 +679,9 @@ function Page({ host }: { host: UIHost }) {
                       ...editing,
                       preset: p.id,
                       protocol: p.protocol,
-                      interfaces: undefined,
+                      interfaces: apiProtocols.includes(p.protocol)
+                        ? editing.interfaces
+                        : undefined,
                       baseUrl: p.baseUrl,
                       name: editing.name || (p.id === "custom" ? "" : p.name),
                       key: "",
@@ -711,7 +718,11 @@ function Page({ host }: { host: UIHost }) {
                   setEditing({
                     ...editing,
                     protocol: e.target.value,
-                    interfaces: undefined,
+                    interfaces: apiProtocols.includes(
+                      e.target.value as Protocol,
+                    )
+                      ? editing.interfaces
+                      : undefined,
                     key: "",
                     subscriptionAccountId: undefined,
                     authMode: e.target.value === "codex" ? "cli" : undefined,
