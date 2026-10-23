@@ -284,7 +284,21 @@ export interface Summary {
   outputTokens: number;
   usageKnownRequests: number;
   pricedRequests: number;
-  estimatedCostUSD: number | null;
+  consumption: {
+    source: string;
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    usageKnownRequests: number;
+    pricedRequests: number;
+    estimatedCostUSD: number | null;
+  }[];
+  wallet: {
+    chargedUSD: number | null;
+    heldUSD: number | null;
+    pendingRequests: number | null;
+    unknownRequests: number;
+  };
   avgLatencyMs: number | null;
   avgFirstTokenMs: number | null;
   series: { at: number; requests: number; errors: number }[];

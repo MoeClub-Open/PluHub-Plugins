@@ -2,6 +2,7 @@ import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
+import { ConsumptionBreakdown, walletNote } from "../../lib/ui/consumption.js";
 import {
   PageHeading,
   Stat,
@@ -159,19 +160,13 @@ export function Dashboard({
           icon="clock"
         />
         <Stat
-          title={tr("估算成本")}
-          value={money(d?.estimatedCostUSD)}
-          note={
-            d
-              ? tr("{0}/{1} 次请求具有价格与用量", {
-                  "0": textValue(d.pricedRequests),
-                  "1": textValue(d.requests),
-                })
-              : tr("按配置价格估算 · USD")
-          }
+          title={tr("余额扣费")}
+          value={money(d?.wallet.chargedUSD)}
+          note={walletNote(d?.wallet)}
           icon="money"
         />
       </div>
+      <ConsumptionBreakdown value={d?.consumption} />
       <div className="dashboard-grid">
         <section className="panel chart-panel">
           <div className="panel-heading">

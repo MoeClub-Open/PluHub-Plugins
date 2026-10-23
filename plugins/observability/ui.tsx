@@ -10,6 +10,12 @@ import { fixedPricing } from "../../lib/commerce/expression.js";
 import { PriceReceiptView } from "../../lib/ui/price-receipt.js";
 import { RoutingDetails } from "./routing-details.js";
 import {
+  ConsumptionBreakdown,
+  consumptionLabel,
+  consumptionSources,
+  walletNote,
+} from "../../lib/ui/consumption.js";
+import {
   PageHeading,
   Icon,
   Empty,
@@ -39,7 +45,7 @@ const billingStatus = (status: string) =>
         review: "待核账",
         reserved: "预留中",
         released: "已释放",
-        personal: "个人渠道",
+        personal: "不扣余额",
         disabled: "未启用计费",
         unavailable: "计费记录不可用",
         unknown: "无结算记录",
@@ -100,6 +106,7 @@ function Page({ host }: { host: UIHost }) {
   const initialFilters = Object.fromEntries(
     [
       "protocol",
+      "source",
       "upstream",
       "keyId",
       "errorCode",
@@ -262,12 +269,13 @@ function Page({ host }: { host: UIHost }) {
           icon="models"
         />
         <Stat
-          title={tr("消耗成本")}
-          value={money(stats.data?.estimatedCostUSD)}
-          note={tr("按配置价格估算 · USD")}
+          title={tr("余额扣费")}
+          value={money(stats.data?.wallet.chargedUSD)}
+          note={walletNote(stats.data?.wallet)}
           icon="money"
         />
       </div>
+      <ConsumptionBreakdown value={stats.data?.consumption} />
       <form
         className="list-toolbar runtime-log-filters"
         onSubmit={(e) => {
@@ -317,6 +325,27 @@ function Page({ host }: { host: UIHost }) {
           <option value="success">{tr("成功")}</option>
           <option value="error">{tr("失败")}</option>
           <option value="cancelled">{tr("已取消")}</option>
+        </Select>
+        <Select
+          aria-label={tr("消耗来源")}
+          value={filters.source ?? ""}
+          onChange={(e) => {
+            const source = e.target.value;
+            const update = ({
+              source: _old,
+              ...rest
+            }: Record<string, string>) => (source ? { ...rest, source } : rest);
+            setFilters(update);
+            setDraft(update);
+            setOffset(0);
+          }}
+        >
+          <option value="">{tr("全部消耗来源")}</option>
+          {Object.keys(consumptionSources).map((source) => (
+            <option key={source} value={source}>
+              {consumptionLabel(source)}
+            </option>
+          ))}
         </Select>
         {scope.data?.scope !== "self" && scope.data && (
           <Select
@@ -458,13 +487,16 @@ function Page({ host }: { host: UIHost }) {
                       from: "开始时间",
                       to: "结束时间",
                       scope: "查看范围",
+                      source: "消耗来源",
                     } as Record<string, string>
                   )[key!] ?? key!,
                 )}
                 :{" "}
                 {key === "from" || key === "to"
                   ? new Date(Number(value)).toLocaleString(getLocale())
-                  : value}
+                  : key === "source"
+                    ? consumptionLabel(value)
+                    : value}
               </span>
               <Icon name="close" size={12} />
             </button>
@@ -483,6 +515,7 @@ function Page({ host }: { host: UIHost }) {
                 <th>{tr("状态")}</th>
                 <th>{tr("耗时 / 首 Token")}</th>
                 <th>Token</th>
+                <th>{tr("估算消耗")}</th>
                 <th>{tr("实际扣费")}</th>
                 <th>{tr("详情")}</th>
               </tr>
@@ -501,6 +534,7 @@ function Page({ host }: { host: UIHost }) {
                   </td>
                   <td>
                     <strong>{r.model || "—"}</strong>
+                    <small>{consumptionLabel(r.consumption_source)}</small>
                     <small>
                       {r.protocol}
                       {r.stream ? " · stream" : ""}
@@ -530,6 +564,13 @@ function Page({ host }: { host: UIHost }) {
                     {r.input_tokens == null
                       ? tr("未知")
                       : number(r.input_tokens + r.output_tokens)}
+                  </td>
+                  <td>
+                    {money(
+                      r.cost_micro_usd == null
+                        ? null
+                        : r.cost_micro_usd / 1000000,
+                    )}
                   </td>
                   <td>
                     {money(
@@ -589,6 +630,7 @@ function Page({ host }: { host: UIHost }) {
               "密钥 ID": selected.key_id || "—",
               模型: selected.model || "—",
               渠道: selected.upstream || "—",
+              消耗来源: consumptionLabel(selected.consumption_source),
               入口协议: selected.protocol,
               状态: names[selected.status],
               "HTTP 状态": selected.http_status,
@@ -596,7 +638,7 @@ function Page({ host }: { host: UIHost }) {
               "首 Token 延迟": latency(selected.first_token_ms),
               "输入 Token": number(selected.input_tokens),
               "输出 Token": number(selected.output_tokens),
-              "估算成本 (USD)": money(
+              "估算消耗 (USD)": money(
                 selected.cost_micro_usd == null
                   ? null
                   : selected.cost_micro_usd / 1000000,

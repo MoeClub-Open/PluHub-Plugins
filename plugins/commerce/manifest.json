@@ -5,7 +5,7 @@
   "name": "商品与订阅",
   "description": "管理商品、订单、订阅和支付入账。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.16",
+  "version": "0.1.0-alpha.17",
   "host": ">=0.1.0-alpha.15 <0.2.0-0",
   "runtime": {
     "kind": "native",

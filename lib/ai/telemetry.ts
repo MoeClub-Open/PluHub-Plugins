@@ -2,6 +2,10 @@ import { HostError, type RequestContext } from "@pluhub/sdk";
 import type { AIEvent, AIPlan, AIRequest } from "@pluhub/contracts/ai";
 import type { Usage, RequestPricing } from "@pluhub/contracts/ai";
 import type { OutputBudget } from "./output-budget.js";
+import {
+  consumptionSource,
+  type ConsumptionSource,
+} from "../commerce/consumption.js";
 export interface AIObservation {
   startedAt: number;
   protocol: string;
@@ -12,6 +16,7 @@ export interface AIObservation {
   generationMs?: number;
   usage?: Usage;
   pricing?: RequestPricing;
+  consumptionSource?: ConsumptionSource;
   finished?: boolean;
   errorCode?: string;
   routing?: {
@@ -45,6 +50,7 @@ export function planObservation(
     stream: request.stream,
     upstream: plan.upstreamId,
     pricing: plan.pricing,
+    consumptionSource: consumptionSource(plan),
     ...(plan.decision || plan.reasoning || plan.redirection || plan.workflows
       ? {
           routing: {

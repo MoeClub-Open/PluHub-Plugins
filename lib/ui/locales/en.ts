@@ -1,5 +1,17 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  历史个人渠道: "Historical personal channels",
+  未分类: "Unclassified",
+  不扣余额: "No wallet charge",
+  余额扣费: "Wallet charges",
+  消耗来源: "Usage source",
+  全部消耗来源: "All usage sources",
+  消耗分类: "Usage breakdown",
+  估算消耗: "Estimated usage cost",
+  "估算消耗 (USD)": "Estimated usage cost (USD)",
+  "{0} 笔待结算": "{0} pending settlements",
+  "{0} 笔结算未知": "{0} unknown settlements",
+  "已计价 {0}/{1} 笔": "{0}/{1} requests priced",
   "Stripe 账单门户": "Stripe billing portal",
   "Webhook 签名密钥": "Webhook signing secret",
   分类标签: "Category label",

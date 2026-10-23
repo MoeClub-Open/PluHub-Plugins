@@ -1,4 +1,4 @@
-import { attachCharges } from "./charges.js";
+import { attachCharges, consumptionSummary } from "./charges.js";
 import { join } from "node:path";
 import { definePlugin, HostError, json } from "@pluhub/sdk";
 import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
@@ -28,6 +28,10 @@ export default definePlugin({
       "ALTER TABLE requests ADD COLUMN generation_ms INTEGER; CREATE INDEX requests_model_upstream_time ON requests(model,upstream,created_at);",
       retirePricingFactors("requests", "pricing_json"),
       "ALTER TABLE requests ADD COLUMN billing_mode TEXT;",
+      `ALTER TABLE requests ADD COLUMN consumption_source TEXT;
+       UPDATE requests SET consumption_source=CASE
+         WHEN billing_mode IN ('platform','disabled') THEN 'platform'
+         WHEN billing_mode='personal' THEN 'personal' END;`,
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -232,7 +236,7 @@ export default definePlugin({
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -257,6 +261,7 @@ export default definePlugin({
               prices,
               state.generationMs ?? null,
               (ctx.state.get("billing.mode") as string | undefined) ?? null,
+              state.consumptionSource ?? null,
             );
             recordRanking(db, {
               at: state.startedAt,
@@ -380,6 +385,17 @@ export default definePlugin({
         where.push("status=?");
         params.push(status);
       }
+      if (query.has("source")) {
+        const source = query.get("source")!;
+        if (
+          !["platform", "byoapi", "byosub", "personal", "unknown"].includes(
+            source,
+          )
+        )
+          throw new HostError("invalid_request", "Invalid consumption source");
+        where.push("COALESCE(consumption_source,'unknown')=?");
+        params.push(source);
+      }
       return { query, hours, from, to, sql: where.join(" AND "), params };
     }
     const guardExport = exportGuard();
@@ -412,6 +428,7 @@ export default definePlugin({
           "input_tokens",
           "output_tokens",
           "estimated_cost_micro_usd",
+          "consumption_source",
           "charged_micro_usd",
           "held_micro_usd",
           "billing_status",
@@ -486,7 +503,6 @@ export default definePlugin({
         COALESCE(SUM(status='cancelled'),0) cancelled,
         COALESCE(SUM(input_tokens),0) inputTokens, COALESCE(SUM(output_tokens),0) outputTokens,
         COUNT(input_tokens) usageKnownRequests, COUNT(cost_micro_usd) pricedRequests,
-        SUM(cost_micro_usd)/1000000.0 estimatedCostUSD,
         AVG(latency_ms) avgLatencyMs, AVG(first_token_ms) avgFirstTokenMs
         FROM requests WHERE ${f.sql}`,
           )
@@ -513,7 +529,14 @@ export default definePlugin({
             `SELECT model,COUNT(*) requests,SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)) tokens FROM requests WHERE ${f.sql} GROUP BY model ORDER BY requests DESC LIMIT 6`,
           )
           .all(...f.params);
-        return json({ ...summary, series, models, retentionDays, maxRows });
+        return json({
+          ...summary,
+          ...(await consumptionSummary(host, db, f, ctx.signal)),
+          series,
+          models,
+          retentionDays,
+          maxRows,
+        });
       },
     });
   },

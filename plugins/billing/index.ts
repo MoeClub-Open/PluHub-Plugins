@@ -1,4 +1,5 @@
 import { installRequestCharges } from "./request-charges.js";
+import { consumptionSource } from "../../lib/commerce/consumption.js";
 import { join } from "node:path";
 import {
   definePlugin,
@@ -144,15 +145,16 @@ export default definePlugin({
         const request = ctx.state.get("ai.request") as AIRequest | undefined;
         const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
         if (!request || !plan) return;
+        const personal = consumptionSource(plan) !== "platform";
         ctx.state.set(
           "billing.mode",
-          plan.credentialId
+          personal
             ? "personal"
             : host.config().enabled
               ? "platform"
               : "disabled",
         );
-        if (!host.config().enabled || plan.credentialId) return;
+        if (personal || !host.config().enabled) return;
         if (!plan.pricing)
           throw new HostError(
             "price_unavailable",
@@ -213,7 +215,11 @@ export default definePlugin({
       id: "settle",
       phase: "Finalize",
       handle(ctx) {
-        if (!ctx.state.get("billing.reserved")) return;
+        if (
+          ctx.state.get("billing.mode") !== "platform" ||
+          !ctx.state.get("billing.reserved")
+        )
+          return;
         transaction(db, () => {
           const row = db
             .prepare("SELECT * FROM reservations WHERE id=?")

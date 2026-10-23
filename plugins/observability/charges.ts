@@ -1,5 +1,98 @@
 import type { Host } from "@pluhub/sdk";
-import type { RequestCharge } from "@pluhub/contracts/commerce";
+import type {
+  RequestCharge,
+  RequestChargeTotals,
+} from "@pluhub/contracts/commerce";
+import type { DatabaseSync } from "node:sqlite";
+
+const exemptSql =
+  "(consumption_source IN ('byoapi','byosub','personal') OR billing_mode IN ('personal','disabled'))";
+
+export async function consumptionSummary(
+  host: Host,
+  db: DatabaseSync,
+  filter: { sql: string; params: (string | number)[] },
+  signal: AbortSignal,
+) {
+  const consumption = db
+    .prepare(
+      `SELECT COALESCE(consumption_source,'unknown') source,
+    COUNT(*) requests, COALESCE(SUM(input_tokens),0) inputTokens,
+    COALESCE(SUM(output_tokens),0) outputTokens, COUNT(input_tokens) usageKnownRequests,
+    COUNT(cost_micro_usd) pricedRequests, SUM(cost_micro_usd)/1000000.0 estimatedCostUSD
+    FROM requests WHERE ${filter.sql} GROUP BY consumption_source`,
+    )
+    .all(...filter.params);
+  const scope = `${filter.sql} AND NOT COALESCE(${exemptSql},0)`;
+  const pending = db
+    .prepare(
+      `SELECT COUNT(*) count, MAX(rowid) last FROM requests WHERE ${scope}`,
+    )
+    .get(...filter.params) as { count: number; last: number | null };
+  const totals: RequestChargeTotals = {
+    knownRequests: 0,
+    pendingRequests: 0,
+    charged: 0,
+    held: 0,
+  };
+  let available =
+    !pending.count || host.hasCapability("billing.request-totals@1");
+  if (available && pending.count) {
+    try {
+      const page =
+        db.prepare(`SELECT rowid, id, user_id FROM requests WHERE ${scope}
+        AND rowid>? AND rowid<=? ORDER BY rowid LIMIT 5000`);
+      let cursor = 0;
+      while (cursor < pending.last!) {
+        signal.throwIfAborted();
+        const rows = page.all(...filter.params, cursor, pending.last!) as {
+          rowid: number;
+          id: string;
+          user_id: string | null;
+        }[];
+        if (!rows.length) break;
+        cursor = rows.at(-1)!.rowid;
+        const requests = rows.flatMap((row) =>
+          row.user_id ? [{ id: row.id, userId: row.user_id }] : [],
+        );
+        if (!requests.length) continue;
+        const result = await host.call<RequestChargeTotals>(
+          "billing.request-totals@1",
+          { requests },
+          signal,
+        );
+        for (const key of [
+          "knownRequests",
+          "pendingRequests",
+          "charged",
+          "held",
+        ] as const)
+          totals[key] += result[key];
+      }
+    } catch {
+      signal.throwIfAborted();
+      available = false;
+      host.log("warn", "Request charge totals are temporarily unavailable");
+    }
+  }
+  return {
+    consumption,
+    wallet: {
+      chargedUSD:
+        available && (!pending.count || totals.knownRequests > 0)
+          ? totals.charged / 1000000
+          : null,
+      heldUSD: available ? totals.held / 1000000 : null,
+      pendingRequests: available ? totals.pendingRequests : null,
+      unknownRequests: available
+        ? Math.max(
+            0,
+            pending.count - totals.knownRequests - totals.pendingRequests,
+          )
+        : pending.count,
+    },
+  };
+}
 
 export async function attachCharges(
   host: Host,
@@ -32,7 +125,10 @@ export async function attachCharges(
   }
   return rows.map((row) => {
     const charge = charges.get(row.id);
-    const exempt = ["personal", "disabled"].includes(row.billing_mode);
+    const personal =
+      ["byoapi", "byosub", "personal"].includes(row.consumption_source) ||
+      row.billing_mode === "personal";
+    const exempt = personal || row.billing_mode === "disabled";
     return {
       ...row,
       charged_micro_usd: charge?.charged ?? (exempt ? 0 : null),
@@ -40,7 +136,9 @@ export async function attachCharges(
       billing_status:
         charge?.status ??
         (exempt
-          ? row.billing_mode
+          ? personal
+            ? "personal"
+            : "disabled"
           : !available || failed
             ? "unavailable"
             : "unknown"),
