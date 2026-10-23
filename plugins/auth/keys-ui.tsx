@@ -21,8 +21,7 @@ type Key = {
   requests_per_minute: number;
   expires_at?: number | null;
   last_used_at?: number;
-  channel_id?: string;
-  channelIds?: string[];
+  channelIds: string[];
 };
 export function Keys({ host }: { host: UIHost }) {
   const keys = useLoad<Key[]>(() => host.request(api));
@@ -59,9 +58,7 @@ export function Keys({ host }: { host: UIHost }) {
         key.name,
         key.prefix,
         ...(key.models ?? []),
-        ...(key.channelIds ?? (key.channel_id ? [key.channel_id] : [])).map(
-          channelLabel,
-        ),
+        ...key.channelIds.map(channelLabel),
       ]
         .join(" ")
         .toLowerCase()
@@ -161,10 +158,8 @@ export function Keys({ host }: { host: UIHost }) {
                       : tr("全部模型")}
                   </span>
                   <div className="key-bound-channels">
-                    {(
-                      key.channelIds ?? (key.channel_id ? [key.channel_id] : [])
-                    ).length ? (
-                      (key.channelIds ?? [key.channel_id!]).map((id) => (
+                    {key.channelIds.length ? (
+                      key.channelIds.map((id) => (
                         <span className="feature-pill" key={id}>
                           {channelLabel(id)}
                         </span>
@@ -384,11 +379,7 @@ export function Keys({ host }: { host: UIHost }) {
                 host={host}
                 initialChannels={
                   editing?.channelIds ??
-                  (editing?.channel_id
-                    ? [editing.channel_id]
-                    : initialChannel && !editing
-                      ? [initialChannel]
-                      : [])
+                  (initialChannel && !editing ? [initialChannel] : [])
                 }
                 disabled={busy}
               />

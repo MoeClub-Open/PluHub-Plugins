@@ -9,6 +9,7 @@ import { decode, collect, encodeResult, protocolError } from "./protocols.js";
 import { encodeStream } from "./streams.js";
 import { clientSession } from "./session.js";
 import { channelScope } from "./channel-scope.js";
+import { capturePricingContext } from "../commerce/expression.js";
 import {
   beginObservation,
   planObservation,
@@ -104,6 +105,11 @@ export function createIngress(protocol: Protocol) {
                   ...(decoded.stream ? ["stream"] : []),
                 ],
                 principalId: ctx.principal?.id,
+                pricingContext: capturePricingContext(
+                  input,
+                  request.headers,
+                  observation(ctx)!.startedAt,
+                ),
                 ...channels,
               },
               ctx.signal,

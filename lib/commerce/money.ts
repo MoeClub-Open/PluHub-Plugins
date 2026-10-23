@@ -1,6 +1,4 @@
 import { HostError } from "@pluhub/sdk";
-import { priceUsage } from "./pricing.js";
-import type { RequestPricing, Usage } from "@pluhub/contracts/ai";
 export function integer(value: unknown, name = "amount", min = 0): number {
   if (!Number.isSafeInteger(value) || Number(value) < min)
     throw new HostError("invalid_amount", "Invalid integer " + name);
@@ -14,6 +12,3 @@ export function minorAmount(value: string): number {
 }
 export const decimalAmount = (minor: number) =>
   (integer(minor) / 100).toFixed(2);
-export function costMicros(usage: Usage, price: RequestPricing): number {
-  return priceUsage(usage, price).amount;
-}

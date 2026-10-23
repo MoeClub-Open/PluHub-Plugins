@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-ingress-openai-chat",
-  "version": "0.1.0-alpha.12",
+  "version": "0.1.0-alpha.13",
   "type": "module",
   "license": "Apache-2.0",
   "files": [

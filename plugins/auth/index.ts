@@ -8,6 +8,7 @@ import {
   installKeys,
   keysMigration,
   channelBindingsMigration,
+  removeSingleBindingMigration,
   keyChannelIds,
 } from "./keys.js";
 import { sessionMigration } from "./sessions.js";
@@ -65,6 +66,7 @@ export default definePlugin({
       "UPDATE api_keys SET expires_at=0 WHERE credential_id IS NOT NULL AND (channel_id IS NULL OR channel_id NOT LIKE 'personal:%'); UPDATE api_keys SET credential_id=NULL;",
       keysMigration,
       channelBindingsMigration,
+      removeSingleBindingMigration,
     ]);
     rawHost.cleanup(() => db.close());
     const history = installSecurityHistory(rawHost, db),
@@ -202,8 +204,6 @@ export default definePlugin({
                 models: JSON.parse(row.models_json),
                 requestsPerMinute: row.requests_per_minute,
                 channelIds: boundChannels,
-                // Older ingress plugins retain a restrictive first-channel binding.
-                channelId: boundChannels[0],
               },
             }
           : {}),

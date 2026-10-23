@@ -8,11 +8,13 @@ export function PriceQuote({
   model,
   channelId,
   requestPriced = false,
+  expression,
 }: {
   host: UIHost;
   model: string;
   channelId?: string;
   requestPriced?: boolean;
+  expression?: string;
 }) {
   const [receipt, setReceipt] = React.useState<string>();
   const [message, setMessage] = React.useState("");
@@ -41,7 +43,24 @@ export function PriceQuote({
               "/api/plugins/official.billing/quote",
               {
                 method: "POST",
-                body: JSON.stringify({ model, channelId, usage }),
+                body: JSON.stringify({
+                  model,
+                  channelId,
+                  usage,
+                  ...(expression
+                    ? {
+                        context: {
+                          at: new Date(String(fields.get("at"))).getTime(),
+                          params: JSON.parse(
+                            String(fields.get("params") || "{}"),
+                          ),
+                          headers: JSON.parse(
+                            String(fields.get("headers") || "{}"),
+                          ),
+                        },
+                      }
+                    : {}),
+                }),
               },
             );
             setReceipt(JSON.stringify(result));
@@ -76,6 +95,52 @@ export function PriceQuote({
               </label>
             ))}
           </div>
+        )}
+        {expression && (
+          <>
+            <label className="full">
+              {tr("计价时间")}
+              <input
+                name="at"
+                type="datetime-local"
+                required
+                defaultValue={new Date(
+                  Date.now() - new Date().getTimezoneOffset() * 60000,
+                )
+                  .toISOString()
+                  .slice(0, 16)}
+              />
+            </label>
+            {/\b(?:param|header)\s*\(/.test(expression) && (
+              <details className="full">
+                <summary>{tr("请求条件")}</summary>
+                <div className="form-grid">
+                  {/\bparam\s*\(/.test(expression) && (
+                    <label>
+                      {tr("请求参数")}
+                      <textarea
+                        name="params"
+                        rows={3}
+                        defaultValue="{}"
+                        spellCheck={false}
+                      />
+                    </label>
+                  )}
+                  {/\bheader\s*\(/.test(expression) && (
+                    <label>
+                      {tr("请求头")}
+                      <textarea
+                        name="headers"
+                        rows={3}
+                        defaultValue="{}"
+                        spellCheck={false}
+                      />
+                    </label>
+                  )}
+                </div>
+              </details>
+            )}
+          </>
         )}
         <button disabled={busy}>{tr("计算费用")}</button>
       </form>

@@ -1,9 +1,29 @@
-import { build } from "esbuild";
+import { build, type Plugin } from "esbuild";
 import { readdir, rm, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../plugins/", import.meta.url));
+const jsepLicense = await readFile(
+  new URL("../node_modules/jsep/LICENSE", import.meta.url),
+  "utf8",
+);
+const expressionLicense: Plugin = {
+  name: "billing-expression-license",
+  setup(builder) {
+    builder.onLoad(
+      { filter: /[\\/]jsep[\\/]dist[\\/].*\.js$/ },
+      async (args) => ({
+        contents:
+          "/*!\n" +
+          jsepLicense +
+          "\n*/\n" +
+          (await readFile(args.path, "utf8")),
+        loader: "js",
+      }),
+    );
+  },
+};
 for (const entry of await readdir(root, { withFileTypes: true })) {
   if (!entry.isDirectory()) continue;
   if (entry.name === "subscription-accounts") continue; // Retired aggregate; retained only as migration history.
@@ -23,6 +43,7 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
     format: "esm",
     target: "node24",
     sourcemap: true,
+    plugins: [expressionLicense],
   });
   if (existsSync(resolve(directory, "ui.tsx")))
     await build({
@@ -34,6 +55,7 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
       target: "es2023",
       jsx: "automatic",
       minify: true,
+      plugins: [expressionLicense],
       banner:
         entry.name === "model-catalog"
           ? {

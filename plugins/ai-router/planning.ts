@@ -14,6 +14,10 @@ import { providerSession } from "../../lib/ai/session.js";
 import { geminiEffort } from "../../lib/ai/reasoning.js";
 import { readCatalog } from "./catalog.js";
 import {
+  bindPricingContext,
+  capturePricingContext,
+} from "../../lib/commerce/expression.js";
+import {
   runWorkflow,
   checkProtocolConversion,
 } from "../../lib/ai/channel-graph.js";
@@ -223,6 +227,7 @@ export async function planRoute(
           principalId: input.principalId,
           ingressProtocol: input.ingressProtocol,
           protocolPolicy,
+          pricingContext: input.pricingContext,
         },
         signal,
       );
@@ -360,6 +365,14 @@ export async function planRoute(
     };
   return {
     ...resolved,
+    ...(resolved.pricing
+      ? {
+          pricing: bindPricingContext(
+            resolved.pricing,
+            input.pricingContext ?? capturePricingContext(input.request),
+          ),
+        }
+      : {}),
     ...(decision ? { decision, logicalUpstreamId } : {}),
     ...(prepared ? { preparedRequest: prepared } : {}),
     upstream: credentialId

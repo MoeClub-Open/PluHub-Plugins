@@ -6,7 +6,8 @@ import {
   canonical,
   stripeVerify,
 } from "../lib/commerce/signatures.js";
-import { minorAmount, costMicros } from "../lib/commerce/money.js";
+import { minorAmount } from "../lib/commerce/money.js";
+import { priceUsage } from "../lib/commerce/pricing.js";
 import { subscriptionRequest } from "../lib/ai/subscription.js";
 import { throttle } from "../plugins/rate-limit/throttle.js";
 import { nextPeriod } from "../plugins/commerce/period.js";
@@ -57,11 +58,11 @@ it("checks Stripe original bytes, multiple v1 signatures, timestamps and exact i
   ).toThrow();
   expect(minorAmount("0.10")).toBe(10);
   expect(() => minorAmount("1e3")).toThrow();
-  expect(costMicros({ input: 1, output: 1 }, { input: 0.1, output: 0.2 })).toBe(
-    1,
-  );
+  expect(
+    priceUsage({ input: 1, output: 1 }, { input: 0.1, output: 0.2 }).amount,
+  ).toBe(1);
   expect(() =>
-    costMicros({ input: NaN, output: 0 }, { input: 1, output: 1 }),
+    priceUsage({ input: NaN, output: 0 }, { input: 1, output: 1 }),
   ).toThrow();
 });
 it("builds explicit Codex, Claude OAuth and Antigravity envelopes without forwarding client authorization", () => {

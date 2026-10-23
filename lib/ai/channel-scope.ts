@@ -6,12 +6,7 @@ export function channelScope(
 ) {
   const policy = principal?.attributes;
   const channels = policy?.channelIds as string[] | undefined;
-  const legacy = policy?.channelId as string | undefined;
-  const channelIds = channels?.length
-    ? channels
-    : legacy
-      ? [legacy]
-      : undefined;
+  const channelIds = channels?.length ? channels : undefined;
   if (requested && channelIds && !channelIds.includes(requested))
     throw new HostError("channel_forbidden", "渠道不在密钥授权范围内", 403);
   return {

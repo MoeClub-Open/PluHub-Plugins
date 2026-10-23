@@ -1,4 +1,4 @@
-import { t as tr } from "./i18n.js";
+import { t as tr, getLocale } from "./i18n.js";
 import type { PriceReceipt } from "../commerce/pricing.js";
 export function PriceReceiptView({
   value,
@@ -21,16 +21,10 @@ export function PriceReceiptView({
     cacheWrite: tr("缓存写入 · 5 分钟"),
     cacheWrite1h: tr("缓存写入 · 1 小时"),
     request: tr("请求"),
+    expression: tr("表达式计价"),
   };
   const p = receipt.pricing;
-  const historical = p as typeof p & {
-    groupMultiplier?: number;
-    userMultiplier?: number;
-  };
-  const multiplier =
-    (p.multiplier ?? 1) *
-    (historical.groupMultiplier ?? 1) *
-    (historical.userMultiplier ?? 1);
+  const multiplier = p.multiplier ?? 1;
   return (
     <details>
       <summary>{title ?? tr("计费明细")}</summary>
@@ -41,9 +35,11 @@ export function PriceReceiptView({
               <th>{tr("项目")}</th>
               <th>{tr("数量")}</th>
               <th>
-                {receipt.mode === "request"
-                  ? tr("USD / 次")
-                  : tr("USD / 百万 Token")}
+                {receipt.expression
+                  ? "USD"
+                  : receipt.mode === "request"
+                    ? tr("USD / 次")
+                    : tr("USD / 百万 Token")}
               </th>
             </tr>
           </thead>
@@ -65,6 +61,30 @@ export function PriceReceiptView({
         <p>
           {tr("输入 Token 超过")} {receipt.tierAbove}
         </p>
+      )}
+      {receipt.tier && (
+        <p>
+          {tr("计价档位")} · {receipt.tier}
+        </p>
+      )}
+      {receipt.pricing.context && (
+        <p>
+          {tr("计价时间")} ·{" "}
+          {new Date(receipt.pricing.context.at).toLocaleString(getLocale())}
+        </p>
+      )}
+      {receipt.expression && (
+        <details>
+          <summary>{tr("定价规则")}</summary>
+          <pre>{receipt.expression}</pre>
+          <div className="detail-grid">
+            {Object.entries(receipt.variables ?? {}).map(([name, value]) => (
+              <span key={name}>
+                {name} · {value}
+              </span>
+            ))}
+          </div>
+        </details>
       )}
       <strong>${(receipt.amount / 1e6).toFixed(6)}</strong>
     </details>

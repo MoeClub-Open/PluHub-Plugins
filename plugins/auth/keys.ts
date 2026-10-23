@@ -12,15 +12,10 @@ import {
 export const keysMigration = "ALTER TABLE api_keys ADD COLUMN secret TEXT;";
 export const channelBindingsMigration = `ALTER TABLE api_keys ADD COLUMN channel_ids_json TEXT NOT NULL DEFAULT '[]';
  UPDATE api_keys SET channel_ids_json=json_array(channel_id) WHERE channel_id IS NOT NULL;`;
-export const keyChannelIds = (row: {
-  channel_ids_json?: string;
-  channel_id?: string | null;
-}): string[] =>
-  row.channel_ids_json
-    ? JSON.parse(row.channel_ids_json)
-    : row.channel_id
-      ? [row.channel_id]
-      : [];
+export const removeSingleBindingMigration =
+  "ALTER TABLE api_keys DROP COLUMN channel_id; ALTER TABLE api_keys DROP COLUMN credential_id;";
+export const keyChannelIds = (row: { channel_ids_json: string }): string[] =>
+  JSON.parse(row.channel_ids_json);
 type Vault = {
   encrypt: (value: string, aad: string) => string;
   decrypt: (value: string, aad: string) => string;
@@ -56,10 +51,7 @@ export function installKeys(
     return row;
   };
   async function keyBinding(body: any, userId: string, previous?: any) {
-    if (body.credentialId)
-      throw new HostError("unsupported_credential", "平台渠道凭证已移除");
-    const requested =
-      body.channelIds ?? (body.channelId ? [body.channelId] : []);
+    const requested = body.channelIds ?? [];
     if (
       !Array.isArray(requested) ||
       requested.some(
@@ -126,7 +118,7 @@ export function installKeys(
       return safeJson(
         db
           .prepare(
-            "SELECT id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id,channel_ids_json,secret IS NOT NULL AS can_copy FROM api_keys WHERE user_id=? ORDER BY created_at DESC,id",
+            "SELECT id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_ids_json,secret IS NOT NULL AS can_copy FROM api_keys WHERE user_id=? ORDER BY created_at DESC,id",
           )
           .all(owner(ctx))
           .map((row: any) => {
@@ -152,7 +144,7 @@ export function installKeys(
         id = randomUUID();
       const secret = vault.encrypt(token, `api-key:${userId}:${id}`);
       db.prepare(
-        "INSERT INTO api_keys(id,user_id,name,hash,prefix,created_at,models_json,expires_at,requests_per_minute,channel_id,secret,channel_ids_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO api_keys(id,user_id,name,hash,prefix,created_at,models_json,expires_at,requests_per_minute,secret,channel_ids_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         id,
         userId,
@@ -163,7 +155,6 @@ export function installKeys(
         config.models,
         config.expires,
         config.rpm,
-        config.channel[0] ?? null,
         secret,
         JSON.stringify(config.channel),
       );
@@ -180,13 +171,12 @@ export function installKeys(
         row = ownKey(ctx, requiredString(body.id, "id"));
       const config = await settings(body, row.user_id, row);
       db.prepare(
-        "UPDATE api_keys SET name=?,models_json=?,expires_at=?,requests_per_minute=?,channel_id=?,channel_ids_json=? WHERE id=? AND user_id=?",
+        "UPDATE api_keys SET name=?,models_json=?,expires_at=?,requests_per_minute=?,channel_ids_json=? WHERE id=? AND user_id=?",
       ).run(
         config.name,
         config.models,
         config.expires,
         config.rpm,
-        config.channel[0] ?? null,
         JSON.stringify(config.channel),
         row.id,
         row.user_id,
@@ -230,20 +220,6 @@ export function installKeys(
         row.user_id,
       );
       return safeJson({ id: row.id, token });
-    },
-  });
-  host.api({
-    method: "PUT",
-    path: "/keys/binding",
-    access: "authenticated",
-    async handle(request, ctx) {
-      const body = await readObject(request),
-        row = ownKey(ctx, requiredString(body.id, "id"));
-      const channels = await keyBinding(body, row.user_id, row);
-      db.prepare(
-        "UPDATE api_keys SET channel_id=?,channel_ids_json=? WHERE id=? AND user_id=?",
-      ).run(channels[0] ?? null, JSON.stringify(channels), row.id, row.user_id);
-      return safeJson({ ok: true });
     },
   });
   host.api({

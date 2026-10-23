@@ -1,5 +1,6 @@
 import type { AIPlan, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { HostError } from "@pluhub/sdk";
+import { fixedPricing } from "../commerce/expression.js";
 
 export type OutputBudgetMode = "automatic" | "bounded" | "estimate";
 export interface OutputBudget {
@@ -50,7 +51,7 @@ export function outputBudget(
   const gemini = protocol === "gemini" || protocol === "antigravity";
   const cli = !supportsOutputLimit(plan.upstream);
   const mode = (config.outputBudgetMode ?? "automatic") as OutputBudgetMode;
-  const fixed = plan.pricing?.mode === "request";
+  const fixed = plan.pricing ? fixedPricing(plan.pricing) : false;
   const bounded = mode !== "estimate" && !cli;
   if (mode === "bounded" && cli && !fixed)
     throw new HostError(

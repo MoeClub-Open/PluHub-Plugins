@@ -4,7 +4,8 @@ import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { downloadCsv } from "../../lib/ui/download.js";
-import { priceSnapshotUsage } from "../../lib/commerce/pricing.js";
+import { priceUsage } from "../../lib/commerce/pricing.js";
+import { fixedPricing } from "../../lib/commerce/expression.js";
 import { PriceReceiptView } from "../../lib/ui/price-receipt.js";
 import { RoutingDetails } from "./routing-details.js";
 import {
@@ -43,10 +44,14 @@ function estimateReceipt(row: any) {
     const pricing = JSON.parse(row.pricing_json);
     const usage = row.usage_json
       ? JSON.parse(row.usage_json)
-      : pricing.mode === "request"
+      : fixedPricing(pricing)
         ? { input: 0, output: 0 }
         : null;
-    return usage ? JSON.stringify(priceSnapshotUsage(usage, pricing)) : null;
+    if (!usage) return null;
+    const receipt = priceUsage(usage, pricing);
+    if (row.cost_micro_usd !== null && row.cost_micro_usd !== undefined)
+      receipt.amount = row.cost_micro_usd;
+    return JSON.stringify(receipt);
   } catch {
     return null;
   }

@@ -6,6 +6,9 @@ import type {
   Upstream,
   TokenPrices,
 } from "@pluhub/contracts/ai";
+import { decimal, add, multiply, rounded } from "./decimal.js";
+import { compileExpression } from "./expression-program.js";
+import { expressionCost, expressionDollars } from "./expression.js";
 
 const rateKeys = [
   "input",
@@ -33,12 +36,31 @@ export function validatePricing(price: RequestPricing) {
     if (key === "input" || key === "output" || price[key] !== undefined)
       validRate(price[key], key);
   }
-  if (price.mode !== undefined && !["tokens", "request"].includes(price.mode))
+  if (
+    price.mode !== undefined &&
+    !["tokens", "request", "expression"].includes(price.mode)
+  )
     throw new HostError("invalid_price", "Invalid billing mode");
+  if (price.mode === "expression") {
+    compileExpression(price.expression!);
+    if (
+      price.request !== undefined ||
+      price.tiers !== undefined ||
+      rateKeys.slice(2).some((key) => price[key] !== undefined)
+    )
+      throw new HostError(
+        "invalid_price",
+        "Expression pricing cannot include additional rate tables",
+      );
+  } else if (price.expression !== undefined)
+    throw new HostError(
+      "invalid_price",
+      "Select expression pricing to use an expression",
+    );
   if (price.mode === "request" || price.request !== undefined)
     validRate(price.request, "request price");
   if (price.multiplier !== undefined)
-    validRate(price.multiplier, "multiplier", 1000);
+    validRate(price.multiplier, "multiplier", 1_000_000_000);
   let previous = -1;
   if (
     price.tiers !== undefined &&
@@ -67,7 +89,7 @@ export function routePricing(
   upstream?: Upstream,
 ): RequestPricing | undefined {
   if (
-    route.pricing?.mode !== "request" &&
+    !["request", "expression"].includes(route.pricing?.mode ?? "tokens") &&
     (route.inputPrice === undefined || route.outputPrice === undefined)
   )
     return;
@@ -107,40 +129,14 @@ export function validateUsage(usage: Usage) {
       502,
     );
 }
-// Decimal numbers become exact fractions before money is summed or multiplied.
-// Round upward only once, at the final micro-USD boundary.
-type Decimal = { n: bigint; d: bigint };
-function decimal(value: number): Decimal {
-  const [mantissa, exponent = "0"] = value.toString().split("e");
-  const [whole, fraction = ""] = mantissa!.split(".");
-  const scale = fraction.length - Number(exponent);
-  const n = BigInt(whole! + fraction);
-  return scale >= 0
-    ? { n, d: 10n ** BigInt(scale) }
-    : { n: n * 10n ** BigInt(-scale), d: 1n };
-}
-const add = (a: Decimal, b: Decimal): Decimal => ({
-  n: a.n * b.d + b.n * a.d,
-  d: a.d * b.d,
-});
-const multiply = (a: Decimal, b: Decimal): Decimal => ({
-  n: a.n * b.n,
-  d: a.d * b.d,
-});
-function rounded(value: Decimal): number {
-  const n = (value.n + value.d - 1n) / value.d;
-  if (n > BigInt(Number.MAX_SAFE_INTEGER))
-    throw new HostError(
-      "invalid_amount",
-      "Cost exceeds supported integer range",
-    );
-  return Number(n);
-}
 export interface PriceReceipt {
   amount: number;
   originalAmount: number;
   mode: "tokens" | "request";
   tierAbove?: number;
+  tier?: string;
+  expression?: string;
+  variables?: Record<string, number>;
   usage: Usage;
   pricing: RequestPricing;
   lines: { kind: string; quantity: number; rate: number }[];
@@ -149,31 +145,30 @@ export function priceUsage(
   usage: Usage,
   pricing: RequestPricing,
 ): PriceReceipt {
-  return calculateUsage(usage, pricing);
-}
-
-/** Only persisted pre-migration snapshots may contain retired pricing factors. */
-export function priceSnapshotUsage(
-  usage: Usage,
-  pricing: RequestPricing,
-): PriceReceipt {
-  const legacy = pricing as RequestPricing & {
-    groupMultiplier?: number;
-    userMultiplier?: number;
-  };
-  const factors = [legacy.groupMultiplier, legacy.userMultiplier]
-    .filter((factor): factor is number => factor !== undefined)
-    .map((factor) => validRate(factor, "historical multiplier", 1000));
-  return calculateUsage(usage, pricing, factors);
-}
-
-function calculateUsage(
-  usage: Usage,
-  pricing: RequestPricing,
-  historicalFactors: number[] = [],
-): PriceReceipt {
   validatePricing(pricing);
   validateUsage(usage);
+  if (pricing.mode === "expression") {
+    const result = expressionCost(usage, pricing);
+    let total = result.amount;
+    total = multiply(total, decimal(pricing.multiplier ?? 1));
+    return {
+      amount: rounded(total),
+      originalAmount: rounded(result.amount),
+      mode: result.mode,
+      tier: result.tier,
+      expression: pricing.expression,
+      variables: result.variables,
+      usage: structuredClone(usage),
+      pricing: structuredClone(pricing),
+      lines: [
+        {
+          kind: "expression",
+          quantity: 1,
+          rate: expressionDollars(result.amount),
+        },
+      ],
+    };
+  }
   let rates: TokenPrices = pricing;
   let tierAbove: number | undefined;
   for (const tier of pricing.tiers ?? [])
@@ -219,8 +214,7 @@ function calculateUsage(
       ),
     );
   const originalAmount = rounded(total);
-  for (const factor of [pricing.multiplier ?? 1, ...historicalFactors])
-    total = multiply(total, decimal(factor));
+  total = multiply(total, decimal(pricing.multiplier ?? 1));
   return {
     amount: rounded(total),
     originalAmount,
@@ -238,6 +232,13 @@ export function reserveCost(
   pricing: RequestPricing,
 ): number {
   validatePricing(pricing);
+  if (pricing.mode === "expression")
+    return rounded(
+      multiply(
+        expressionCost({ input, output }, pricing, true).amount,
+        decimal(pricing.multiplier ?? 1),
+      ),
+    );
   if (pricing.mode === "request")
     return priceUsage({ input: 0, output: 0 }, pricing).amount;
   const tiers = [

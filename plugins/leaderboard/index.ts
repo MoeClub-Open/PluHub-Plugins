@@ -32,7 +32,7 @@ export default definePlugin({
         const [users, models] = await Promise.all([
           host.call<PublicUserProfile[]>("users.directory@1", {}),
           kind === "models"
-            ? host.call<CatalogModel[]>("ai.catalog@1", {})
+            ? host.call<CatalogModel[]>("ai.catalog@2", {})
             : Promise.resolve([] as CatalogModel[]),
         ]);
         const names = new Map(users.map((user) => [user.id, user.name]));

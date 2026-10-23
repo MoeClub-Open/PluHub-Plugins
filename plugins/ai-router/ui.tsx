@@ -5,10 +5,7 @@ import type { UIHost } from "@pluhub/ui-sdk";
 import type { Upstream, ModelRoute, ModelRedirect } from "@pluhub/contracts/ai";
 import { Redirects } from "./redirect-ui.js";
 import { ChannelTable } from "./channel-table.js";
-import {
-  ChannelModels,
-  type ChannelModel,
-} from "./channel-models.js";
+import { ChannelModels, type ChannelModel } from "./channel-models.js";
 import {
   ModelPriceFields,
   readModelPricing,
@@ -380,7 +377,9 @@ function Page({ host }: { host: UIHost }) {
                       <small>{m.model}</small>
                     </td>
                     <td>
-                      {m.pricing?.mode === "request" ? (
+                      {m.pricing?.mode === "expression" ? (
+                        tr("动态定价")
+                      ) : m.pricing?.mode === "request" ? (
                         "$" + m.pricing.request + " / " + tr("次")
                       ) : (
                         <>

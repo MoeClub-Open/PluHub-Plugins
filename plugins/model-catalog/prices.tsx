@@ -2,6 +2,7 @@ import React from "react";
 import type { CatalogModel, TokenPrices } from "@pluhub/contracts/ai";
 import { t as tr, getLocale } from "../../lib/ui/i18n.js";
 import { number } from "../../lib/ui/components.js";
+import { ExpressionPrices } from "./expression-prices.js";
 
 export const formatPrice = (value?: number) =>
   value === undefined
@@ -16,6 +17,7 @@ export const consumptionPrice = (
   model: CatalogModel,
   kind: "input" | "output" | "request",
 ) => {
+  if (model.pricing?.mode === "expression") return undefined;
   const base =
     model.billing?.[kind] ??
     (kind === "request"
@@ -30,6 +32,14 @@ export const consumptionPrice = (
 
 export function ModelPrices({ model }: { model: CatalogModel }) {
   const factor = model.billing?.multiplier ?? model.consumptionMultiplier ?? 1;
+  if (model.pricing?.mode === "expression")
+    return (
+      <ExpressionPrices
+        source={model.pricing.expression!}
+        multiplier={factor}
+        formatPrice={formatPrice}
+      />
+    );
   const original = {
     input: model.inputPrice,
     output: model.outputPrice,

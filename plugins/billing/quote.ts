@@ -8,6 +8,7 @@ import {
 import type { CatalogModel, RequestPricing } from "@pluhub/contracts/ai";
 import { priceUsage } from "../../lib/commerce/pricing.js";
 import { channelScope } from "../../lib/ai/channel-scope.js";
+import { freezePricing } from "../../lib/commerce/expression.js";
 
 export function installPriceQuote(host: Host) {
   host.api({
@@ -31,7 +32,9 @@ export function installPriceQuote(host: Host) {
       const selected = models.find((entry) => entry.id === model);
       if (
         !selected ||
-        (selected.pricing?.mode !== "request" &&
+        (!["request", "expression"].includes(
+          selected.pricing?.mode ?? "tokens",
+        ) &&
           (selected.inputPrice === undefined ||
             selected.outputPrice === undefined))
       )
@@ -48,7 +51,23 @@ export function installPriceQuote(host: Host) {
       };
       if (!body.usage || typeof body.usage !== "object")
         throw new HostError("invalid_usage", "Usage is required");
-      return json(priceUsage(body.usage, pricing));
+      const context = body.context ?? {};
+      if (
+        context.headers &&
+        (typeof context.headers !== "object" || Array.isArray(context.headers))
+      )
+        throw new HostError("invalid_request", "Invalid billing headers");
+      return json(
+        priceUsage(
+          body.usage,
+          freezePricing(
+            pricing,
+            context.at ?? Date.now(),
+            context.params,
+            new Headers(context.headers),
+          ),
+        ),
+      );
     },
   });
 }

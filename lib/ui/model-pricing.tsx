@@ -2,6 +2,7 @@ import React from "react";
 import type { ModelRoute, ModelPricing } from "@pluhub/contracts/ai";
 import { Select } from "./select.js";
 import { t as tr } from "./i18n.js";
+import { ExpressionPriceFields } from "./expression-price-fields.js";
 
 const cacheFields = ["cacheRead", "cacheWrite", "cacheWrite1h"] as const;
 const labels = () => ({
@@ -10,7 +11,14 @@ const labels = () => ({
   cacheWrite1h: tr("缓存写入 · 1 小时"),
 });
 export function readModelPricing(f: FormData): ModelPricing | undefined {
-  const mode = String(f.get("billingMode") ?? "tokens") as "tokens" | "request";
+  const mode = String(f.get("billingMode") ?? "tokens") as NonNullable<
+    ModelPricing["mode"]
+  >;
+  if (mode === "expression")
+    return {
+      mode,
+      expression: String(f.get("billingExpression") ?? "").trim(),
+    };
   if (mode === "request")
     return { mode, request: Number(f.get("requestPrice")) };
   const pricing: ModelPricing = {};
@@ -75,9 +83,16 @@ export function ModelPriceFields({ model }: { model?: ModelRoute }) {
         >
           <option value="tokens">{tr("按 Token 计费")}</option>
           <option value="request">{tr("按次计费")}</option>
+          <option value="expression">{tr("表达式计价")}</option>
         </Select>
       </label>
-      {mode === "request" ? (
+      {mode === "expression" ? (
+        <>
+          {rate("inputPrice", tr("输入原价 / 百万 Token"), model?.inputPrice)}
+          {rate("outputPrice", tr("输出原价 / 百万 Token"), model?.outputPrice)}
+          <ExpressionPriceFields model={model} />
+        </>
+      ) : mode === "request" ? (
         rate(
           "requestPrice",
           tr("每次原价 · USD"),

@@ -16,6 +16,8 @@ import {
   type PriceReceipt,
 } from "../../lib/commerce/pricing.js";
 import { installPriceQuote } from "./quote.js";
+import { fixedPricing } from "../../lib/commerce/expression.js";
+import { retirePricingFactors } from "../../lib/commerce/migrations.js";
 import { observation } from "../../lib/ai/telemetry.js";
 import { requireAdmin, adminTarget } from "../../lib/admin/access.js";
 import { installBillingAdmin } from "./admin.js";
@@ -41,6 +43,9 @@ export default definePlugin({
       "CREATE INDEX ledger_user_id ON ledger(user_id,id);",
       paymentMigration,
       "ALTER TABLE reservations ADD COLUMN budget TEXT; ALTER TABLE reservations ADD COLUMN reported_usage TEXT;",
+      retirePricingFactors("reservations", "pricing") +
+        retirePricingFactors("reservations", "receipt", "$.pricing") +
+        "DROP TABLE pricing_users;",
     ]);
     db.prepare(
       "UPDATE reservations SET status='review',note='Host restarted before settlement' WHERE status='reserved'",
@@ -235,7 +240,7 @@ export default definePlugin({
           if (
             !state?.finished ||
             state.errorCode ||
-            (!state.usage && pricing.mode !== "request")
+            (!state.usage && !fixedPricing(pricing))
           ) {
             db.prepare(
               "UPDATE reservations SET status='review',note=? WHERE id=?",

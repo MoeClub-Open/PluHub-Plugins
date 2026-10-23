@@ -4,9 +4,14 @@ import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
 import { beginObservation, observation } from "../../lib/ai/telemetry.js";
 import { rankingMigration, readRankings, recordRanking } from "./rankings.js";
 import { readModelMetrics } from "./model-metrics.js";
-import { costMicros } from "../../lib/commerce/money.js";
 import { csvResponse, exportGuard } from "../../lib/export/csv.js";
-import { validateUsage, validatePricing } from "../../lib/commerce/pricing.js";
+import {
+  validateUsage,
+  validatePricing,
+  priceUsage,
+} from "../../lib/commerce/pricing.js";
+import { fixedPricing } from "../../lib/commerce/expression.js";
+import { retirePricingFactors } from "../../lib/commerce/migrations.js";
 export default definePlugin({
   setup(host) {
     const db = openDatabase(join(host.dataDir, "requests.sqlite"), [
@@ -20,6 +25,7 @@ export default definePlugin({
       rankingMigration,
       "ALTER TABLE requests ADD COLUMN usage_json TEXT; ALTER TABLE requests ADD COLUMN pricing_json TEXT;",
       "ALTER TABLE requests ADD COLUMN generation_ms INTEGER; CREATE INDEX requests_model_upstream_time ON requests(model,upstream,created_at);",
+      retirePricingFactors("requests", "pricing_json"),
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -173,6 +179,8 @@ export default definePlugin({
                 "request",
                 "multiplier",
                 "tiers",
+                "expression",
+                "context",
               ].flatMap((key) => {
                 const value = (state.pricing as any)[key];
                 return value === undefined ? [] : [[key, value]];
@@ -201,13 +209,12 @@ export default definePlugin({
         try {
           if (
             state.pricing &&
-            (state.usage ||
-              (state.finished && state.pricing.mode === "request"))
+            (state.usage || (state.finished && fixedPricing(state.pricing)))
           )
-            cost = costMicros(
+            cost = priceUsage(
               state.usage ?? { input: 0, output: 0 },
               state.pricing,
-            );
+            ).amount;
         } catch {
           /* Invalid provider usage remains unpriced for review. */
         }
@@ -237,7 +244,7 @@ export default definePlugin({
                 : null,
               state.routing ? JSON.stringify(state.routing) : null,
               usageDetails,
-              prices && prices.length <= 16384 ? prices : null,
+              prices,
               state.generationMs ?? null,
             );
             recordRanking(db, {

@@ -33,7 +33,7 @@ export function KeyAdmin({ host }: { host: UIHost }) {
                 <small>
                   {r.channelIds?.length
                     ? r.channelIds.join(", ")
-                    : (r.channel_id ?? tr("平台默认路由"))}
+                    : tr("平台默认路由")}
                 </small>
               </>
             ),

@@ -260,53 +260,61 @@ function Page({ host }: { host: UIHost }) {
                         ))}
                     </div>
                     <div className="model-row-prices">
-                      <div>
-                        <strong>
-                          {price(
-                            consumptionPrice(
+                      {model.pricing?.mode === "expression" ? (
+                        <div>
+                          <strong>{tr("动态定价")}</strong>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <strong>
+                              {price(
+                                consumptionPrice(
+                                  model,
+                                  model.pricing?.mode === "request"
+                                    ? "request"
+                                    : "input",
+                                ),
+                              )}
+                            </strong>
+                            {consumptionPrice(
                               model,
                               model.pricing?.mode === "request"
                                 ? "request"
                                 : "input",
-                            ),
-                          )}
-                        </strong>
-                        {consumptionPrice(
-                          model,
-                          model.pricing?.mode === "request"
-                            ? "request"
-                            : "input",
-                        ) !==
-                          (model.pricing?.mode === "request"
-                            ? model.pricing.request
-                            : model.inputPrice) && (
-                          <del title={tr("原价")}>
-                            {price(
-                              model.pricing?.mode === "request"
+                            ) !==
+                              (model.pricing?.mode === "request"
                                 ? model.pricing.request
-                                : model.inputPrice,
+                                : model.inputPrice) && (
+                              <del title={tr("原价")}>
+                                {price(
+                                  model.pricing?.mode === "request"
+                                    ? model.pricing.request
+                                    : model.inputPrice,
+                                )}
+                              </del>
                             )}
-                          </del>
-                        )}
-                        <span>
-                          {model.pricing?.mode === "request"
-                            ? tr("USD / 次")
-                            : tr("输入")}
-                        </span>
-                      </div>
-                      {model.pricing?.mode !== "request" && (
-                        <div>
-                          <strong>
-                            {price(consumptionPrice(model, "output"))}
-                          </strong>
-                          {consumptionPrice(model, "output") !==
-                            model.outputPrice && (
-                            <del title={tr("原价")}>
-                              {price(model.outputPrice)}
-                            </del>
+                            <span>
+                              {model.pricing?.mode === "request"
+                                ? tr("USD / 次")
+                                : tr("输入")}
+                            </span>
+                          </div>
+                          {model.pricing?.mode !== "request" && (
+                            <div>
+                              <strong>
+                                {price(consumptionPrice(model, "output"))}
+                              </strong>
+                              {consumptionPrice(model, "output") !==
+                                model.outputPrice && (
+                                <del title={tr("原价")}>
+                                  {price(model.outputPrice)}
+                                </del>
+                              )}
+                              <span>{tr("输出")}</span>
+                            </div>
                           )}
-                          <span>{tr("输出")}</span>
-                        </div>
+                        </>
                       )}
                       {model.contextWindow && (
                         <div>
@@ -422,7 +430,9 @@ function Page({ host }: { host: UIHost }) {
             <ModelPrices model={selected} />
             {!guest &&
               selected.channel?.scope !== "personal" &&
-              (selected.pricing?.mode === "request" ||
+              (["request", "expression"].includes(
+                selected.pricing?.mode ?? "tokens",
+              ) ||
                 (selected.inputPrice !== undefined &&
                   selected.outputPrice !== undefined)) && (
                 <PriceQuote
@@ -431,6 +441,7 @@ function Page({ host }: { host: UIHost }) {
                   model={selected.id}
                   channelId={selected.channel?.id ?? (channel || undefined)}
                   requestPriced={selected.pricing?.mode === "request"}
+                  expression={selected.pricing?.expression}
                 />
               )}
             <details className="catalog-api-example">

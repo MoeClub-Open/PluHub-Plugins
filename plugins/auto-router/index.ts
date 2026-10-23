@@ -19,7 +19,11 @@ import type {
 } from "@pluhub/contracts/routing";
 import { decide, type DifficultyDecision } from "./decisions.js";
 import { efforts, encodeReasoning } from "../../lib/ai/reasoning.js";
-import { costMicros } from "../../lib/commerce/money.js";
+import { priceUsage } from "../../lib/commerce/pricing.js";
+import {
+  bindPricingContext,
+  capturePricingContext,
+} from "../../lib/commerce/expression.js";
 interface Eligible {
   candidate: RoutingCandidate;
   plan: AIPlan;
@@ -368,10 +372,13 @@ export default definePlugin({
         const price = (x: Eligible) => {
           if (!x.plan.pricing) return Infinity;
           try {
-            return costMicros(
+            return priceUsage(
               { input: inputBytes, output: input.request.maxTokens ?? 4096 },
-              x.plan.pricing,
-            );
+              bindPricingContext(
+                x.plan.pricing,
+                input.pricingContext ?? capturePricingContext(input.request),
+              ),
+            ).amount;
           } catch {
             return Infinity;
           }

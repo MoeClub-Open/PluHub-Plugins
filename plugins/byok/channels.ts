@@ -802,7 +802,7 @@ export function installPersonalChannels(
           : { maxTokens: 64 }),
       };
       const plan = await host.call<AIPlan>(
-        "ai.routing@1",
+        "ai.routing@2",
         {
           model,
           channelId: id,
