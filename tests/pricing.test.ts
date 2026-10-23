@@ -224,7 +224,10 @@ it("uses Gemini's terminal usage snapshot and preserves empty-text signature par
   ))
     events.push(event);
   expect(events.filter((event) => event.type === "usage")).toEqual([
-    { type: "usage", usage: { input: 5, output: 65, reasoning: 64 } },
+    {
+      type: "usage",
+      usage: { input: 5, output: 65, cacheRead: 0, reasoning: 64 },
+    },
   ]);
   expect(events).toContainEqual({
     type: "reasoning",

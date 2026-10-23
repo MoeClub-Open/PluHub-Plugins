@@ -5,7 +5,7 @@
   "name": "OpenAI Responses 上游",
   "description": "调用 OpenAI Responses 兼容服务并解析结果。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

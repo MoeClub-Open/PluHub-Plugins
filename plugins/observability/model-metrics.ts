@@ -21,16 +21,17 @@ export function readModelMetrics(
       SELECT DISTINCT json_extract(value,'$.id') model,
         json_extract(value,'$.channelId') upstream FROM json_each(?)
     ), samples AS (
-      SELECT r.*, json_extract(r.usage_json,'$.cacheRead') cached
+      SELECT r.*, json_extract(r.usage_json,'$.cacheRead') cached,
+        output_tokens-COALESCE(json_extract(r.usage_json,'$.reasoning'),0) visible_output_tokens
       FROM requests r JOIN allowed a ON r.model=a.model AND r.upstream=a.upstream
       WHERE r.created_at>=? AND r.created_at<=?
     )
     SELECT model, COUNT(*) requests, SUM(status='success') successes,
       AVG(CASE WHEN status='success' THEN latency_ms END) latency,
       AVG(CASE WHEN status='success' AND stream=1 THEN first_token_ms END) ttft,
-      SUM(CASE WHEN status='success' AND stream=1 AND generation_ms>0 AND output_tokens>0 THEN output_tokens END)*1000.0 /
-        SUM(CASE WHEN status='success' AND stream=1 AND generation_ms>0 AND output_tokens>0 THEN generation_ms END) tps,
-      SUM(status='success' AND stream=1 AND generation_ms>0 AND output_tokens>0) stream_samples,
+      SUM(CASE WHEN status='success' AND stream=1 AND generation_ms>0 AND visible_output_tokens>0 THEN visible_output_tokens END)*1000.0 /
+        SUM(CASE WHEN status='success' AND stream=1 AND generation_ms>0 AND visible_output_tokens>0 THEN generation_ms END) tps,
+      SUM(status='success' AND stream=1 AND generation_ms>0 AND visible_output_tokens>0) stream_samples,
       AVG(CASE WHEN status='success' AND typeof(cached) IN ('integer','real') THEN cached>0 END) hit_rate,
       SUM(status='success' AND typeof(cached) IN ('integer','real')) cache_samples
     FROM samples GROUP BY model

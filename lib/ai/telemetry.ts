@@ -64,6 +64,7 @@ export async function* observeEvents(
 ) {
   const state = observation(ctx)!;
   let contentEvents = 0;
+  let firstOutputMs: number | undefined;
   try {
     for await (const event of events) {
       if (
@@ -74,8 +75,11 @@ export async function* observeEvents(
       ) {
         const elapsed = Date.now() - state.startedAt;
         state.firstTokenMs ??= elapsed;
-        if (state.stream && ++contentEvents > 1 && elapsed > state.firstTokenMs)
-          state.generationMs = elapsed - state.firstTokenMs;
+        if (event.type !== "reasoning") {
+          firstOutputMs ??= elapsed;
+          if (state.stream && ++contentEvents > 1 && elapsed > firstOutputMs)
+            state.generationMs = elapsed - firstOutputMs;
+        }
       }
       if (
         event.type === "usage" &&

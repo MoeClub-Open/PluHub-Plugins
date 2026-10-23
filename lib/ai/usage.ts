@@ -43,7 +43,8 @@ export function decodeUsage(protocol: Protocol, raw: any): Usage | undefined {
       validateUsage({ input: usage.cacheWrite, output: 0 });
     usage.input += (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
   } else {
-    set("cacheRead", raw.cachedContentTokenCount);
+    // Gemini's protobuf JSON omits zero-valued counters in a complete usage snapshot.
+    set("cacheRead", raw.cachedContentTokenCount ?? 0);
     set("reasoning", raw.thoughtsTokenCount);
     validateUsage({ input: usage.input, output: usage.output });
     if (usage.reasoning !== undefined)

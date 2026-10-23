@@ -302,7 +302,7 @@ function Page({ host }: { host: UIHost }) {
                 <dd>{latency(selected.metrics?.avgFirstTokenMs)}</dd>
               </div>
               <div
-                title={tr("成功流式请求的输出 Token / 生成时间；{0} 个样本", {
+                title={tr("可见输出 Token / 内容流持续时间；{0} 个样本", {
                   "0": textValue(selected.metrics?.streamSamples ?? 0),
                 })}
               >

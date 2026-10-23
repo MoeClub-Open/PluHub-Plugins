@@ -37,7 +37,7 @@ it("scopes public metrics to exact platform pairs and computes weighted streamin
           out,
           JSON.stringify(usage),
         );
-    add("2", now, "success", 1, 1000, 100, { cacheRead: 20 });
+    add("2", now, "success", 1, 1000, 100, { cacheRead: 20, reasoning: 40 });
     add("2", now, "success", 1, 3000, 200, { cacheRead: 0 });
     add("2", now, "success", 0, null, 5000, {});
     add("2", now, "error", 1, 1, 999999, { cacheRead: 999 });
@@ -62,7 +62,7 @@ it("scopes public metrics to exact platform pairs and computes weighted streamin
       successes: 3,
       avgLatencyMs: 3000,
       avgFirstTokenMs: 1000,
-      outputTps: 75,
+      outputTps: 65,
       streamSamples: 2,
       cacheHitRate: 0.5,
       cacheSamples: 2,
@@ -110,6 +110,8 @@ it("measures streamed content generation separately from initial latency and tra
   Date.now = () => now;
   try {
     async function* events(): AsyncGenerator<any> {
+      yield { type: "reasoning", text: "thinking" };
+      now = 2200;
       yield { type: "text", text: "a" };
       now = 2500;
       yield { type: "text", text: "b" };
@@ -122,7 +124,7 @@ it("measures streamed content generation separately from initial latency and tra
     }
     expect(observation(ctx)).toMatchObject({
       firstTokenMs: 1000,
-      generationMs: 500,
+      generationMs: 300,
       finished: true,
     });
   } finally {
