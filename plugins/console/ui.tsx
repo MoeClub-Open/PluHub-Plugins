@@ -63,6 +63,7 @@ import "./portal.css";
 import "./auth.css";
 import "./controls.css";
 import "./choices.css";
+import "./interfaces.css";
 import "./keys.css";
 import "./motion.css";
 import { en } from "../../lib/ui/locales/en.js";

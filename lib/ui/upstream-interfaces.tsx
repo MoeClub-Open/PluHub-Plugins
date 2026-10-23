@@ -1,103 +1,12 @@
 import React from "react";
+import { ArrowDown, ArrowUp, ChevronRight } from "lucide-react";
 import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
 import { t as tr } from "./i18n.js";
-import { Select } from "./select.js";
-import { Checkbox } from "./checkbox.js";
 import { Icon } from "./components.js";
-
-const protocols: { id: Protocol; name: string; path: string }[] = [
-  { id: "openai-chat", name: "Chat Completions", path: "/v1/chat/completions" },
-  { id: "openai-responses", name: "Responses", path: "/v1/responses" },
-  { id: "anthropic", name: "Messages", path: "/v1/messages" },
-  {
-    id: "gemini",
-    name: "Gemini",
-    path: "/v1beta/models/{model}:generateContent",
-  },
-];
-
-function JsonField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value?: object;
-  onChange: (value: any) => void;
-}) {
-  const [text, setText] = React.useState(
-    value ? JSON.stringify(value, null, 2) : "",
-  );
-  const field = React.useRef<HTMLTextAreaElement>(null);
-  React.useEffect(() => {
-    try {
-      if (
-        JSON.stringify(text.trim() ? JSON.parse(text) : undefined) ===
-        JSON.stringify(value)
-      )
-        return;
-    } catch {}
-    setText(value ? JSON.stringify(value, null, 2) : "");
-    field.current?.setCustomValidity("");
-  }, [JSON.stringify(value)]);
-  return (
-    <label>
-      {label}
-      <textarea
-        ref={field}
-        rows={3}
-        value={text}
-        spellCheck={false}
-        placeholder="{}"
-        onChange={(event) => {
-          const text = event.target.value;
-          setText(text);
-          try {
-            const parsed = text.trim() ? JSON.parse(text) : undefined;
-            if (
-              parsed !== undefined &&
-              (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-            )
-              throw new Error();
-            event.target.setCustomValidity("");
-            onChange(parsed);
-          } catch {
-            event.target.setCustomValidity(tr("请输入 JSON 对象"));
-          }
-        }}
-      />
-    </label>
-  );
-}
-
-function ModelPatterns({
-  value,
-  onChange,
-}: {
-  value?: string[];
-  onChange: (value: string[]) => void;
-}) {
-  const [text, setText] = React.useState(value?.join(", ") ?? "");
-  const parse = (text: string) =>
-    text
-      .split(",")
-      .map((model) => model.trim())
-      .filter(Boolean);
-  React.useEffect(() => {
-    if (JSON.stringify(parse(text)) !== JSON.stringify(value ?? []))
-      setText(value?.join(", ") ?? "");
-  }, [JSON.stringify(value)]);
-  return (
-    <input
-      value={text}
-      placeholder="*"
-      onChange={(event) => {
-        setText(event.target.value);
-        onChange(parse(event.target.value));
-      }}
-    />
-  );
-}
+import {
+  UpstreamInterfaceEditor,
+  interfaceProtocols,
+} from "./upstream-interface-editor.js";
 
 export function UpstreamInterfaces({
   value,
@@ -108,232 +17,175 @@ export function UpstreamInterfaces({
   protocol: string;
   onChange: (value: UpstreamInterface[] | undefined) => void;
 }) {
-  if (!protocols.some((option) => option.id === protocol)) return null;
-  const update = (index: number, patch: Partial<UpstreamInterface>) =>
-    onChange(
-      value!.map((route, i) => (i === index ? { ...route, ...patch } : route)),
-    );
+  const group = React.useId();
+  const identities = React.useRef(new WeakMap<UpstreamInterface, string>());
+  const counter = React.useRef(0);
+  const [expanded, setExpanded] = React.useState(!!value?.length);
+  const [selected, setSelected] = React.useState<string>();
+  if (!interfaceProtocols.some((option) => option.id === protocol)) return null;
+  const routes = value ?? [];
+  function identity(route: UpstreamInterface) {
+    let id = identities.current.get(route);
+    if (!id) {
+      id = group + ":" + ++counter.current;
+      identities.current.set(route, id);
+    }
+    return id;
+  }
+  function update(index: number, patch: Partial<UpstreamInterface>) {
+    const route = { ...routes[index]!, ...patch };
+    identities.current.set(route, identity(routes[index]!));
+    onChange(routes.map((current, i) => (i === index ? route : current)));
+  }
+  function move(index: number, direction: number) {
+    const next = [...routes];
+    const destination = index + direction;
+    [next[index], next[destination]] = [next[destination]!, next[index]!];
+    onChange(next);
+  }
+  const name = (protocol: Protocol) =>
+    interfaceProtocols.find((option) => option.id === protocol)!.name;
   return (
-    <details className="full" open={value?.length ? true : undefined}>
-      <summary>{tr("接口组合")}</summary>
-      <div className="actions">
+    <details
+      className="full interface-routing"
+      open={expanded}
+      onToggle={(event) => {
+        if (event.target === event.currentTarget)
+          setExpanded(event.currentTarget.open);
+      }}
+    >
+      <summary>
+        <ChevronRight
+          className="interface-route-chevron"
+          size={14}
+          aria-hidden="true"
+        />
+        {tr("高级路由")}
+        {!!routes.length && <span className="badge">{routes.length}</span>}
+      </summary>
+      <div className="interface-route-toolbar">
         <button
           type="button"
           className="secondary"
           onClick={() => {
             const target =
-              protocols.find(
+              interfaceProtocols.find(
                 (option) =>
-                  !value?.some((route) => route.protocol === option.id),
+                  !routes.some((route) => route.protocol === option.id),
               )?.id ?? (protocol as Protocol);
             const route: UpstreamInterface = {
-              protocol: value?.length ? target : (protocol as Protocol),
-              incoming: value?.length ? [target] : protocols.map((p) => p.id),
+              protocol: routes.length ? target : (protocol as Protocol),
+              incoming: routes.length
+                ? [target]
+                : interfaceProtocols.map((option) => option.id),
             };
-            onChange([route, ...(value ?? [])]);
+            setSelected(identity(route));
+            setExpanded(true);
+            onChange([route, ...routes]);
           }}
         >
           <Icon name="plus" size={14} />
-          {tr("添加接口路由")}
+          {tr("添加路由")}
         </button>
       </div>
-      {value?.map((route, index) => (
-        <fieldset key={index}>
-          <legend>
-            {protocols.find((p) => p.id === route.protocol)?.name}
-          </legend>
-          <div className="form-grid">
-            <div className="full actions">
-              <span>{tr("入口接口")}</span>
-              {protocols.map((option) => (
-                <label className="checkbox-row" key={option.id}>
-                  <Checkbox
-                    checked={route.incoming.includes(option.id)}
-                    onCheckedChange={(checked) =>
-                      update(index, {
-                        incoming: checked
-                          ? [...route.incoming, option.id]
-                          : route.incoming.filter((p) => p !== option.id),
-                      })
-                    }
-                  />
-                  {option.name}
-                </label>
-              ))}
-            </div>
-            <label>
-              {tr("上游接口")}
-              <Select
-                value={route.protocol}
-                onChange={(e) =>
-                  update(index, {
-                    protocol: e.target.value as Protocol,
-                    path: undefined,
-                    streamPath: undefined,
-                  })
-                }
-              >
-                {protocols.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label>
-              {tr("匹配模型")}
-              <ModelPatterns
-                value={route.models}
-                onChange={(models) => update(index, { models })}
-              />
-            </label>
-            <label>
-              {tr("接口路径")}
-              <input
-                value={route.path ?? ""}
-                placeholder={
-                  protocols.find((p) => p.id === route.protocol)?.path
-                }
-                onChange={(e) =>
-                  update(index, { path: e.target.value || undefined })
-                }
-              />
-            </label>
-            <label>
-              {tr("流式接口路径")}
-              <input
-                value={route.streamPath ?? ""}
-                placeholder={
-                  route.protocol === "gemini"
-                    ? "/v1beta/models/{model}:streamGenerateContent"
-                    : route.path ||
-                      protocols.find((p) => p.id === route.protocol)?.path
-                }
-                onChange={(e) =>
-                  update(index, { streamPath: e.target.value || undefined })
-                }
-              />
-            </label>
-            <label>
-              {tr("认证方式")}
-              <Select
-                value={route.auth?.type ?? "default"}
-                onChange={(e) =>
-                  update(index, {
-                    auth: {
-                      type: e.target.value as NonNullable<
-                        UpstreamInterface["auth"]
-                      >["type"],
-                      name: route.auth?.name,
-                    },
-                  })
-                }
-              >
-                <option value="default">{tr("接口默认")}</option>
-                <option value="bearer">Bearer</option>
-                <option value="header">{tr("自定义请求头")}</option>
-                <option value="query">{tr("查询参数")}</option>
-                <option value="none">{tr("无认证")}</option>
-              </Select>
-            </label>
-            {["header", "query"].includes(route.auth?.type ?? "") && (
-              <label>
-                {tr("认证字段名")}
-                <input
-                  required
-                  value={route.auth?.name ?? ""}
-                  onChange={(e) =>
-                    update(index, {
-                      auth: { ...route.auth!, name: e.target.value },
-                    })
-                  }
-                />
-              </label>
-            )}
-            <details className="full">
-              <summary>{tr("高级参数")}</summary>
-              <div className="form-grid">
-                {["openai-chat", "openai-responses"].includes(
-                  route.protocol,
-                ) && (
-                  <JsonField
-                    label={tr("媒体接口路径")}
-                    value={route.mediaPaths}
-                    onChange={(mediaPaths) => update(index, { mediaPaths })}
-                  />
-                )}
-                <label>
-                  {tr("模型目录路径")}
-                  <input
-                    value={route.modelsPath ?? ""}
-                    placeholder={
-                      route.protocol === "gemini"
-                        ? "/v1beta/models"
-                        : "/v1/models"
-                    }
-                    onChange={(e) =>
-                      update(index, { modelsPath: e.target.value || undefined })
-                    }
-                  />
-                </label>
-                <JsonField
-                  label={tr("请求头")}
-                  value={route.headers}
-                  onChange={(headers) => update(index, { headers })}
-                />
-                <JsonField
-                  label={tr("请求参数")}
-                  value={route.params}
-                  onChange={(params) => update(index, { params })}
-                />
-              </div>
-            </details>
-            <div className="full actions">
-              <button
-                type="button"
-                className="ghost"
-                disabled={index === 0}
-                onClick={() => {
-                  const next = [...value];
-                  [next[index - 1], next[index]] = [
-                    next[index]!,
-                    next[index - 1]!,
-                  ];
-                  onChange(next);
+      {!!routes.length && (
+        <div className="interface-route-list">
+          {routes.map((route, index) => {
+            const id = identity(route);
+            const incoming =
+              route.incoming.length === interfaceProtocols.length
+                ? tr("全部接口")
+                : route.incoming.map(name).join(" / ") || "—";
+            return (
+              <details
+                key={id}
+                name={group}
+                className="interface-route"
+                open={selected === id}
+                onToggle={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.currentTarget.open) setSelected(id);
+                  else
+                    setSelected((current) =>
+                      current === id ? undefined : current,
+                    );
+                }}
+                onInvalidCapture={() => {
+                  setExpanded(true);
+                  setSelected(id);
                 }}
               >
-                {tr("上移")}
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                disabled={index === value.length - 1}
-                onClick={() => {
-                  const next = [...value];
-                  [next[index + 1], next[index]] = [
-                    next[index]!,
-                    next[index + 1]!,
-                  ];
-                  onChange(next);
-                }}
-              >
-                {tr("下移")}
-              </button>
-              <button
-                type="button"
-                className="ghost danger"
-                onClick={() => {
-                  const next = value.filter((_, i) => i !== index);
-                  onChange(next.length ? next : undefined);
-                }}
-              >
-                <Icon name="delete" size={14} />
-                {tr("删除")}
-              </button>
-            </div>
-          </div>
-        </fieldset>
-      ))}
+                <summary>
+                  <ChevronRight
+                    className="interface-route-chevron"
+                    size={14}
+                    aria-hidden="true"
+                  />
+                  <span className="interface-route-summary">
+                    <span className="interface-route-mapping">
+                      <span title={incoming}>{incoming}</span>
+                      <Icon name="arrow" size={13} />
+                      <strong>{name(route.protocol)}</strong>
+                    </span>
+                    <span
+                      className="interface-route-models"
+                      title={route.models?.join(", ")}
+                    >
+                      {route.models?.length
+                        ? route.models.join(", ")
+                        : tr("所有模型")}
+                    </span>
+                  </span>
+                  <span className="interface-route-actions">
+                    {[-1, 1].map((direction) => (
+                      <button
+                        key={direction}
+                        type="button"
+                        className="ghost icon-button"
+                        aria-label={tr(direction < 0 ? "上移" : "下移")}
+                        title={tr(direction < 0 ? "上移" : "下移")}
+                        disabled={
+                          direction < 0
+                            ? index === 0
+                            : index === routes.length - 1
+                        }
+                        onClick={(event) => {
+                          event.preventDefault();
+                          move(index, direction);
+                        }}
+                      >
+                        {direction < 0 ? (
+                          <ArrowUp size={14} aria-hidden="true" />
+                        ) : (
+                          <ArrowDown size={14} aria-hidden="true" />
+                        )}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="ghost icon-button danger"
+                      aria-label={tr("删除路由")}
+                      title={tr("删除路由")}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        const next = routes.filter((_, i) => i !== index);
+                        onChange(next.length ? next : undefined);
+                        if (selected === id) setSelected(undefined);
+                      }}
+                    >
+                      <Icon name="delete" size={14} />
+                    </button>
+                  </span>
+                </summary>
+                <UpstreamInterfaceEditor
+                  route={route}
+                  update={(patch) => update(index, patch)}
+                />
+              </details>
+            );
+          })}
+        </div>
+      )}
     </details>
   );
 }

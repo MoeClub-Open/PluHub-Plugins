@@ -1,0 +1,114 @@
+.interface-routing {
+  min-width: 0;
+  container-type: inline-size;
+}
+.interface-routing > summary,
+.interface-route > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  cursor: pointer;
+}
+.interface-routing summary::-webkit-details-marker {
+  display: none;
+}
+.interface-routing > summary {
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.interface-route-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform var(--motion-fast);
+}
+.interface-routing[open] > summary > .interface-route-chevron,
+.interface-route[open] > summary > .interface-route-chevron {
+  transform: rotate(90deg);
+}
+.interface-route-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+.interface-route-list {
+  border-block: 1px solid var(--border);
+}
+.interface-route + .interface-route {
+  border-top: 1px solid var(--border);
+}
+.interface-route > summary {
+  min-height: 42px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.interface-route[open] > summary {
+  background: var(--subtle);
+}
+.interface-route-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.8fr);
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.interface-route-mapping {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.interface-route-mapping > svg {
+  flex: none;
+  color: var(--muted);
+}
+.interface-route-mapping > span,
+.interface-route-mapping > strong,
+.interface-route-models {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.interface-route-models {
+  color: var(--muted);
+  font-size: 11px;
+}
+.interface-route-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+.interface-route-actions > button {
+  width: 26px;
+  min-height: 26px;
+  padding: 4px;
+}
+.interface-route-fields {
+  padding: 10px 22px 12px;
+}
+.interface-route-fields label {
+  margin: 0;
+}
+.interface-route-options > summary {
+  padding-block: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.interface-incoming {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+@container (max-width: 480px) {
+  .interface-route-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .interface-route-fields {
+    padding-inline: 8px;
+  }
+}
