@@ -41,7 +41,7 @@ export function installPriceQuote(host: Host) {
           "Model has no billing price",
           404,
         );
-      const pricing: RequestPricing = {
+      const pricing: RequestPricing = selected.billing ?? {
         ...selected.pricing,
         input: selected.inputPrice ?? 0,
         output: selected.outputPrice ?? 0,

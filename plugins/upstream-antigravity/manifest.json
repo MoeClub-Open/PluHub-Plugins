@@ -5,7 +5,7 @@
   "name": "Antigravity 订阅接入",
   "description": "管理 Antigravity 授权、订阅账号与上游调用。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.17",
+  "version": "0.1.0-alpha.18",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

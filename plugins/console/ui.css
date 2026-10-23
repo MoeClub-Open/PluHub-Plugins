@@ -1012,19 +1012,48 @@ code {
   gap: 11px;
   min-width: 0;
 }
-.provider-mark {
+.model-logo {
   width: 30px;
   height: 30px;
   flex-shrink: 0;
-  border: 1px solid
-    color-mix(in srgb, var(--accent) 18%, var(--border));
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text);
   display: grid;
   place-items: center;
+}
+.model-logo svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+.catalog-channel-list {
+  display: grid;
+  gap: 20px;
+}
+.catalog-channel-heading {
+  justify-content: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.catalog-channel-heading h2 {
+  margin: 0;
   font-size: 13px;
-  font-weight: 650;
+}
+.catalog-channel-heading > .muted {
+  margin-left: auto;
+  font-size: 11px;
+}
+.catalog-model-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.catalog-model-heading code {
+  overflow-wrap: anywhere;
+}
+.model-row-prices del {
+  color: var(--muted);
+  font-size: 10px;
 }
 .model-row-main > div {
   flex: 1;

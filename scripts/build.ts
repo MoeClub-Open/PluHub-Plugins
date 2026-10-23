@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { readdir, rm } from "node:fs/promises";
+import { readdir, rm, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,19 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
       target: "es2023",
       jsx: "automatic",
       minify: true,
+      banner:
+        entry.name === "model-catalog"
+          ? {
+              js:
+                "/*!\n" +
+                (await readFile(
+                  resolve(directory, "THIRD_PARTY_NOTICES.md"),
+                  "utf8",
+                )) +
+                "\n*/",
+            }
+          : undefined,
+      loader: { ".svg": "text" },
       define: { "process.env.NODE_ENV": '"production"' },
     });
 }

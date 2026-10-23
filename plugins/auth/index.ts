@@ -4,12 +4,12 @@ import { installAuthSecurity, securityMigration } from "./security/index.js";
 import { adminTarget } from "../../lib/admin/access.js";
 import { installAdmin } from "./admin.js";
 import { installSetup, setupMigration } from "./setup.js";
+import { installKeys, keysMigration } from "./keys.js";
 import { sessionMigration } from "./sessions.js";
 import { installSecurityHistory, historyMigration } from "./history.js";
 import { join } from "node:path";
 import {
   randomBytes,
-  randomUUID,
   createHash,
   scrypt,
   timingSafeEqual,
@@ -63,6 +63,7 @@ export default definePlugin({
       sessionMigration,
       historyMigration,
       "UPDATE api_keys SET expires_at=0 WHERE credential_id IS NOT NULL AND (channel_id IS NULL OR channel_id NOT LIKE 'personal:%'); UPDATE api_keys SET credential_id=NULL;",
+      keysMigration,
     ]);
     rawHost.cleanup(() => db.close());
     const history = installSecurityHistory(rawHost, db),
@@ -392,130 +393,6 @@ export default definePlugin({
         return json({ ok: true });
       },
     });
-    host.api({
-      method: "GET",
-      path: "/keys",
-      access: "authenticated",
-      handle: (_r, ctx) => {
-        requireSession(ctx.principal!);
-        return json(
-          db
-            .prepare(
-              "SELECT id,name,prefix,created_at,models_json,expires_at,requests_per_minute,last_used_at,channel_id FROM api_keys WHERE user_id=? ORDER BY created_at DESC",
-            )
-            .all(ctx.principal!.id)
-            .map((row: any) => {
-              const { models_json, ...key } = row;
-              return { ...key, models: JSON.parse(models_json) };
-            }),
-        );
-      },
-    });
-    async function keyBinding(body: any, userId: string) {
-      if (body.credentialId)
-        throw new HostError("unsupported_credential", "平台渠道凭证已移除");
-      const channelId = body.channelId
-        ? requiredString(body.channelId, "channelId", 256)
-        : null;
-      if (channelId) {
-        const options = await host.call<{ id: string; scope: string }[]>(
-          "ai.channels@1",
-          { userId },
-        );
-        if (!options.some((channel) => channel.id === channelId))
-          throw new HostError(
-            "invalid_binding",
-            "渠道不可用或不属于当前用户",
-            403,
-          );
-      }
-      return { channelId };
-    }
-    host.api({
-      method: "POST",
-      path: "/keys",
-      access: "authenticated",
-      handle: async (request, ctx) => {
-        requireSession(ctx.principal!);
-        const body = await readObject(request);
-        const binding = await keyBinding(body, ctx.principal!.id);
-        const models = body.models ?? [];
-        if (
-          !Array.isArray(models) ||
-          models.length > 256 ||
-          models.some(
-            (m: unknown) =>
-              typeof m !== "string" || !m.trim() || m.length > 256,
-          )
-        )
-          throw new HostError("invalid_request", "Invalid model restrictions");
-        const expires = body.expiresAt ?? null;
-        if (
-          expires !== null &&
-          (!Number.isSafeInteger(expires) ||
-            expires <= Date.now() ||
-            expires > Date.now() + 3650 * 86400000)
-        )
-          throw new HostError("invalid_request", "Invalid key expiration");
-        const rpm = body.requestsPerMinute ?? 0;
-        if (!Number.isInteger(rpm) || rpm < 0 || rpm > 100000)
-          throw new HostError("invalid_request", "Invalid request limit");
-        const token = "ph_" + randomBytes(32).toString("base64url");
-        const id = randomUUID();
-        db.prepare(
-          "INSERT INTO api_keys(id,user_id,name,hash,prefix,created_at,models_json,expires_at,requests_per_minute,channel_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
-        ).run(
-          id,
-          ctx.principal!.id,
-          requiredString(body.name, "name", 128),
-          digest(token),
-          token.slice(0, 10),
-          new Date().toISOString(),
-          JSON.stringify([...new Set(models)]),
-          expires,
-          rpm,
-          binding.channelId,
-        );
-        history.tag({ resourceId: id });
-        return json({ id, token }, 201);
-      },
-    });
-    host.api({
-      method: "PUT",
-      path: "/keys/binding",
-      access: "authenticated",
-      handle: async (request, ctx) => {
-        requireSession(ctx.principal!);
-        const body = await readObject(request),
-          userId = ctx.principal!.id;
-        const id = requiredString(body.id, "id");
-        if (
-          !db
-            .prepare("SELECT id FROM api_keys WHERE id=? AND user_id=?")
-            .get(id, userId)
-        )
-          throw new HostError("not_found", "密钥不存在", 404);
-        const binding = await keyBinding(body, userId);
-        db.prepare(
-          "UPDATE api_keys SET channel_id=? WHERE id=? AND user_id=?",
-        ).run(binding.channelId, id, userId);
-        history.tag({ resourceId: id });
-        return json({ ok: true });
-      },
-    });
-    host.api({
-      method: "DELETE",
-      path: "/keys",
-      access: "authenticated",
-      handle: (request, ctx) => {
-        requireSession(ctx.principal!);
-        const id = new URL(request.url).searchParams.get("id");
-        const removed = db
-          .prepare("DELETE FROM api_keys WHERE id=? AND user_id=?")
-          .run(requiredString(id, "id"), ctx.principal!.id);
-        if (removed.changes) history.tag({ resourceId: id! });
-        return json({ ok: true });
-      },
-    });
+    installKeys(host, db, security.keyVault, history.tag);
   },
 });

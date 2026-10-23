@@ -62,6 +62,11 @@ export default definePlugin({
         .map(([id, m]) => ({
           id,
           channelId: m.upstream,
+          channel: {
+            id: m.upstream,
+            name: upstreams[m.upstream]?.name || m.upstream,
+            scope: m.upstream.startsWith("personal:") ? "personal" : "platform",
+          },
           name: m.name || id,
           provider: m.provider || upstreams[m.upstream]?.protocol || "Custom",
           description: m.description ?? "",
@@ -69,7 +74,9 @@ export default definePlugin({
           inputPrice: m.inputPrice,
           outputPrice: m.outputPrice,
           pricing: m.pricing,
-          consumptionMultiplier: upstreams[m.upstream]?.consumptionMultiplier,
+          consumptionMultiplier:
+            upstreams[m.upstream]?.consumptionMultiplier ?? 1,
+          billing: routePricing(m, upstreams[m.upstream]),
           features: ["text", "tools", "stream", "usage"],
         }));
     };
@@ -88,7 +95,13 @@ export default definePlugin({
           throw new HostError("channel_not_found", "个人渠道不可用", 404);
         return catalog(
           {
-            upstreams: { [channel.id]: channel.upstream },
+            upstreams: {
+              [channel.id]: {
+                ...channel.upstream,
+                name: channel.name,
+                enabled: channel.enabled,
+              },
+            },
             models: channel.models,
           },
           channel.id,

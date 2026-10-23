@@ -473,7 +473,9 @@ it("maps thinking settings across protocols and rejects lossy conversions", () =
     expect(decodeReasoning(p, b)).toEqual({ effort: "high" });
     expect(encodeReasoning(p, { effort: "high" })).toBeDefined();
   }
-  expect(() => encodeReasoning("gemini", { effort: "max" })).toThrow();
+  expect(encodeReasoning("gemini", { effort: "max" })).toEqual({
+    thinkingConfig: { thinkingLevel: "HIGH" },
+  });
   expect(() =>
     encodeReasoning("openai-chat", { budgetTokens: 1024 }),
   ).toThrow();

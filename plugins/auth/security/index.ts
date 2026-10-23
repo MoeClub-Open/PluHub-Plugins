@@ -85,7 +85,13 @@ export function installAuthSecurity(
   const vault = authVault(
     host.dataDir,
     Number(
-      (db.prepare("SELECT count(*) n FROM totp_credentials").get() as any).n,
+      (
+        db
+          .prepare(
+            "SELECT (SELECT count(*) FROM totp_credentials)+(SELECT count(*) FROM api_keys WHERE secret IS NOT NULL) n",
+          )
+          .get() as any
+      ).n,
     ) > 0,
   );
   host.cleanup(() => vault.close());
@@ -1148,5 +1154,10 @@ export function installAuthSecurity(
     services.history.local("factors.reset", user.id);
     return { ok: true };
   });
-  return { passwordLogin, requireRecent, email: verifiedEmail };
+  return {
+    passwordLogin,
+    requireRecent,
+    email: verifiedEmail,
+    keyVault: { encrypt: vault.encrypt, decrypt: vault.decrypt },
+  };
 }

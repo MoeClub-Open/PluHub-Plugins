@@ -89,6 +89,12 @@ export function subscriptionRequest(
         "project_required",
         "Antigravity requires an authorized project ID",
       );
+    // OpenAI clients often retain call IDs but omit Google's signature extension.
+    // Antigravity accepts this compatibility marker for unsigned tool history.
+    for (const content of body.contents ?? [])
+      for (const part of content.parts ?? [])
+        if (part.functionCall && !part.thoughtSignature)
+          part.thoughtSignature = "skip_thought_signature_validator";
     // Both client modes share the provider's terminal signature and usage frames.
     suffix = "/v1internal:streamGenerateContent";
     body = {

@@ -11,6 +11,9 @@ importers:
       '@huggingface/tokenizers':
         specifier: 0.2.0
         version: 0.2.0
+      '@lobehub/icons-static-svg':
+        specifier: 1.98.0
+        version: 1.98.0
       '@pluhub/contracts':
         specifier: link:../PluHub-Spec
         version: link:../PluHub-Spec
@@ -269,6 +272,9 @@ packages:
 
   '@levischuck/tiny-cbor@0.2.11':
     resolution: {integrity: sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==}
+
+  '@lobehub/icons-static-svg@1.98.0':
+    resolution: {integrity: sha512-soyLV2g74ujV+9BBymPwXrorJ+kQsEz7WvVd4uzhN2wZnd4Jbyc2FsmyjZBosGaufOirCs1RGJQlLe6l9bjwLg==}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -1340,6 +1346,8 @@ snapshots:
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
   '@levischuck/tiny-cbor@0.2.11': {}
+
+  '@lobehub/icons-static-svg@1.98.0': {}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true

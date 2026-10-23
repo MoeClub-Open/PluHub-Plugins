@@ -5,12 +5,13 @@
   "type": "module",
   "packageManager": "pnpm@10.20.0",
   "scripts": {
-    "build": "pnpm typecheck && node scripts/build.mjs",
+    "build": "pnpm typecheck && bun scripts/build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun --bun node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
     "@huggingface/tokenizers": "0.2.0",
+    "@lobehub/icons-static-svg": "1.98.0",
     "@pluhub/contracts": "link:../PluHub-Spec",
     "@pluhub/sdk": "link:../PluHub/packages/sdk",
     "@pluhub/ui-sdk": "link:../PluHub/packages/ui-sdk",

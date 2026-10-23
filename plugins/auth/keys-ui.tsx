@@ -15,10 +15,11 @@ type Key = {
   id: string;
   name: string;
   prefix: string;
+  canCopy?: boolean;
   created_at: string;
   models?: string[];
   requests_per_minute: number;
-  expires_at?: number;
+  expires_at?: number | null;
   last_used_at?: number;
   channel_id?: string;
 };
@@ -35,7 +36,8 @@ export function Keys({ host }: { host: UIHost }) {
   const [token, setToken] = React.useState(""),
     [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const [binding, setBinding] = React.useState<Key>();
+  const [editing, setEditing] = React.useState<Key>();
+  const [rotate, setRotate] = React.useState<Key>();
   const channelNames = useLoad<any[]>(() =>
     host.request("/api/plugins/official.ai-router/channels").catch(() => []),
   );
@@ -49,7 +51,7 @@ export function Keys({ host }: { host: UIHost }) {
       : tr("绑定渠道不可用");
   };
   const expired = (key: Key) =>
-    !!key.expires_at && key.expires_at <= Date.now();
+    key.expires_at != null && key.expires_at <= Date.now();
   const rows = (keys.data ?? []).filter(
     (key) =>
       [key.name, key.prefix, ...(key.models ?? [])]
@@ -62,6 +64,7 @@ export function Keys({ host }: { host: UIHost }) {
   const close = () => {
     if (!busy) {
       setDialog(false);
+      setEditing(undefined);
       setToken("");
       setMessage("");
     }
@@ -80,6 +83,8 @@ export function Keys({ host }: { host: UIHost }) {
         <button
           onClick={() => {
             setMessage("");
+            setEditing(undefined);
+            setToken("");
             setDialog(true);
           }}
         >
@@ -87,7 +92,7 @@ export function Keys({ host }: { host: UIHost }) {
           {tr("创建密钥")}
         </button>
       </PageHeading>
-      {!dialog && !revoke && !binding && (
+      {!dialog && !revoke && !rotate && (
         <Notice message={message || keys.error} />
       )}
       <div className="list-toolbar">
@@ -156,7 +161,7 @@ export function Keys({ host }: { host: UIHost }) {
                     {expired(key) ? tr("已过期") : tr("有效")}
                   </span>
                   <small>
-                    {key.expires_at
+                    {key.expires_at != null
                       ? new Date(key.expires_at).toLocaleString(getLocale())
                       : tr("长期有效")}
                   </small>
@@ -172,10 +177,48 @@ export function Keys({ host }: { host: UIHost }) {
                     className="ghost"
                     onClick={() => {
                       setMessage("");
-                      setBinding(key);
+                      setEditing(key);
+                      setToken("");
+                      setDialog(true);
                     }}
                   >
-                    {tr("渠道绑定")}
+                    {tr("编辑")}
+                  </button>
+                  <button
+                    className="ghost"
+                    disabled={busy}
+                    onClick={async () => {
+                      setMessage("");
+                      if (!key.canCopy) {
+                        setRotate(key);
+                        return;
+                      }
+                      setBusy(true);
+                      try {
+                        const result = await host.request<{ token: string }>(
+                          api + "/reveal",
+                          {
+                            method: "POST",
+                            body: JSON.stringify({ id: key.id }),
+                          },
+                        );
+                        try {
+                          await navigator.clipboard.writeText(result.token);
+                          setMessage(tr("密钥已复制"));
+                        } catch {
+                          setEditing(undefined);
+                          setToken(result.token);
+                          setDialog(true);
+                        }
+                      } catch (error) {
+                        setMessage((error as Error).message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    <Icon name={key.canCopy ? "copy" : "refresh"} size={14} />
+                    {key.canCopy ? tr("复制") : tr("重新生成")}
                   </button>
                   <button
                     className="ghost danger"
@@ -214,13 +257,18 @@ export function Keys({ host }: { host: UIHost }) {
       />
       {dialog && (
         <Dialog
-          title={token ? tr("保存新密钥") : tr("创建 API 密钥")}
+          title={
+            token
+              ? tr("API 密钥")
+              : editing
+                ? tr("编辑密钥")
+                : tr("创建 API 密钥")
+          }
           close={close}
         >
           <Notice message={message} />
           {token ? (
             <>
-              <p>{tr("完整密钥仅显示这一次。关闭前请复制保存。")}</p>
               <pre className="issued-token">{token}</pre>
               <div className="form-actions">
                 <button
@@ -234,7 +282,7 @@ export function Keys({ host }: { host: UIHost }) {
                 >
                   {tr("复制密钥")}
                 </button>
-                <button onClick={close}>{tr("已保存，关闭")}</button>
+                <button onClick={close}>{tr("关闭")}</button>
               </div>
             </>
           ) : (
@@ -246,8 +294,9 @@ export function Keys({ host }: { host: UIHost }) {
                 const fields = new FormData(e.currentTarget);
                 try {
                   const result = await host.request<any>(api, {
-                    method: "POST",
+                    method: editing ? "PUT" : "POST",
                     body: JSON.stringify({
+                      ...(editing ? { id: editing.id } : {}),
                       name: fields.get("name"),
                       channelId: fields.get("channelId") || null,
                       models: String(fields.get("models") ?? "")
@@ -260,7 +309,11 @@ export function Keys({ host }: { host: UIHost }) {
                         : null,
                     }),
                   });
-                  setToken(result.token);
+                  if (editing) {
+                    setEditing(undefined);
+                    setDialog(false);
+                    setMessage(tr("密钥配置已保存"));
+                  } else setToken(result.token);
                   keys.reload();
                 } catch (error) {
                   setMessage((error as Error).message);
@@ -273,6 +326,7 @@ export function Keys({ host }: { host: UIHost }) {
                 {tr("密钥名称")}
                 <input
                   name="name"
+                  defaultValue={editing?.name}
                   required
                   maxLength={128}
                   autoFocus
@@ -280,13 +334,20 @@ export function Keys({ host }: { host: UIHost }) {
                   disabled={busy}
                 />
               </label>
-              <ChannelBinding host={host} initialChannel={initialChannel} />
-              <details className="advanced-options">
+              <ChannelBinding
+                host={host}
+                initialChannel={editing?.channel_id ?? initialChannel}
+              />
+              <details
+                className="advanced-options"
+                open={editing ? true : undefined}
+              >
                 <summary>{tr("访问限制（可选）")}</summary>
                 <label>
                   {tr("允许的模型 ID")}
                   <input
                     name="models"
+                    defaultValue={editing?.models?.join(", ")}
                     placeholder={tr("留空允许全部，多个用逗号分隔")}
                     disabled={busy}
                   />
@@ -295,6 +356,7 @@ export function Keys({ host }: { host: UIHost }) {
                   {tr("每分钟请求数")}
                   <input
                     name="rpm"
+                    defaultValue={editing?.requests_per_minute ?? 0}
                     type="number"
                     min="0"
                     max="100000"
@@ -305,7 +367,22 @@ export function Keys({ host }: { host: UIHost }) {
                 </label>
                 <label>
                   {tr("到期时间")}
-                  <input name="expires" type="datetime-local" disabled={busy} />
+                  <input
+                    name="expires"
+                    type="datetime-local"
+                    disabled={busy}
+                    defaultValue={
+                      editing?.expires_at
+                        ? new Date(
+                            editing.expires_at -
+                              new Date(editing.expires_at).getTimezoneOffset() *
+                                60000,
+                          )
+                            .toISOString()
+                            .slice(0, 16)
+                        : ""
+                    }
+                  />
                 </label>
               </details>
               <div className="form-actions">
@@ -318,7 +395,7 @@ export function Keys({ host }: { host: UIHost }) {
                   {tr("取消")}
                 </button>
                 <button disabled={busy}>
-                  {busy ? tr("创建中…") : tr("创建密钥")}
+                  {busy ? tr("保存中…") : editing ? tr("保存") : tr("创建密钥")}
                 </button>
               </div>
             </form>
@@ -372,61 +449,48 @@ export function Keys({ host }: { host: UIHost }) {
           </div>
         </Dialog>
       )}
-      {binding && (
+      {rotate && (
         <Dialog
-          title={tr("修改渠道绑定")}
+          title={tr("重新生成密钥")}
           close={() => {
-            if (!busy) setBinding(undefined);
+            if (!busy) setRotate(undefined);
           }}
         >
           <Notice message={message} />
-          <p>
-            {tr(
-              "修改「{0} 」的渠道，保存后立即用于新请求，完整密钥保持有效。",
-              { "0": textValue(binding.name) },
-            )}
-          </p>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const f = new FormData(e.currentTarget);
-              setBusy(true);
-              try {
-                await host.request(api + "/binding", {
-                  method: "PUT",
-                  body: JSON.stringify({
-                    id: binding.id,
-                    channelId: f.get("channelId") || null,
-                  }),
-                });
-                setBinding(undefined);
-                keys.reload();
-                setMessage(tr("渠道绑定已更新。"));
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <ChannelBinding
-              host={host}
-              initialChannel={binding.channel_id ?? ""}
-            />
-            <div className="form-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => setBinding(undefined)}
-              >
-                {tr("取消")}
-              </button>
-              <button disabled={busy}>
-                {busy ? tr("保存中…") : tr("保存绑定")}
-              </button>
-            </div>
-          </form>
+          <p>{tr("重新生成后，旧密钥立即失效，应用需要更换密钥。")}</p>
+          <div className="form-actions">
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => setRotate(undefined)}
+            >
+              {tr("取消")}
+            </button>
+            <button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setMessage("");
+                try {
+                  const result = await host.request<{ token: string }>(
+                    api + "/rotate",
+                    { method: "POST", body: JSON.stringify({ id: rotate.id }) },
+                  );
+                  setRotate(undefined);
+                  setEditing(undefined);
+                  setToken(result.token);
+                  setDialog(true);
+                  keys.reload();
+                } catch (error) {
+                  setMessage((error as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? tr("处理中…") : tr("重新生成")}
+            </button>
+          </div>
         </Dialog>
       )}
     </>

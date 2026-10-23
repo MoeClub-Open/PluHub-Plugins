@@ -43,6 +43,8 @@ export default definePlugin({
               outputPrice: model.outputPrice,
               pricing: model.pricing,
               consumptionMultiplier: model.consumptionMultiplier,
+              channel: model.channel,
+              billing: model.billing,
               features: model.features,
               metrics: model.metrics,
             })),

@@ -28,14 +28,16 @@ export function createSessionAffinity(
   function notify(id: string) {
     for (const wake of [...(waiters.get(id) ?? [])]) wake();
   }
-  function wait(id: string, signal: AbortSignal) {
+  function wait(ids: string[], signal: AbortSignal) {
     signal.throwIfAborted();
     return new Promise<void>((resolve, reject) => {
-      const queue = waiters.get(id) ?? new Set<() => void>();
       const cleanup = () => {
         signal.removeEventListener("abort", abort);
-        queue.delete(wake);
-        if (!queue.size) waiters.delete(id);
+        for (const id of ids) {
+          const queue = waiters.get(id);
+          queue?.delete(wake);
+          if (!queue?.size) waiters.delete(id);
+        }
       };
       const wake = () => {
         cleanup();
@@ -45,8 +47,11 @@ export function createSessionAffinity(
         cleanup();
         reject(signal.reason);
       };
-      queue.add(wake);
-      waiters.set(id, queue);
+      for (const id of ids) {
+        const queue = waiters.get(id) ?? new Set<() => void>();
+        queue.add(wake);
+        waiters.set(id, queue);
+      }
       signal.addEventListener("abort", abort, { once: true });
       if (signal.aborted) abort();
     });
@@ -83,7 +88,7 @@ export function createSessionAffinity(
           AbortSignal.timeout(15000),
         ]);
         try {
-          await wait(bound.id, waiting);
+          await wait([bound.id], waiting);
         } catch {
           signal.throwIfAborted();
           stopped.throwIfAborted();
@@ -105,6 +110,28 @@ export function createSessionAffinity(
                 (active.get(b.id) ?? 0) / b.max_concurrency ||
               a.last_used - b.last_used,
           )[0];
+      if (!selected && ready.length) {
+        waiting ??= AbortSignal.any([
+          signal,
+          stopped,
+          AbortSignal.timeout(15000),
+        ]);
+        try {
+          await wait(
+            ready.map((account) => account.id),
+            waiting,
+          );
+        } catch {
+          signal.throwIfAborted();
+          stopped.throwIfAborted();
+          throw new HostError(
+            "subscription_busy",
+            "订阅账号繁忙，请稍后重试",
+            429,
+          );
+        }
+        continue;
+      }
       if (!selected)
         throw new HostError(
           "subscription_unavailable",

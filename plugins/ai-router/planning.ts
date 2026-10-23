@@ -11,6 +11,7 @@ import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { providerSession } from "../../lib/ai/session.js";
+import { geminiEffort } from "../../lib/ai/reasoning.js";
 import {
   runWorkflow,
   checkProtocolConversion,
@@ -167,6 +168,27 @@ export async function planRoute(
         "Channel graph has no provider",
         503,
       );
+    if (
+      ["gemini", "antigravity"].includes(connection.protocol ?? "") &&
+      prepared?.reasoning?.effort
+    ) {
+      prepared = {
+        ...prepared,
+        reasoning: {
+          ...prepared.reasoning,
+          effort: geminiEffort(prepared.reasoning.effort),
+        },
+      };
+      if (
+        connection.protocol === "antigravity" &&
+        /^gemini-3\.8-flash-(low|medium|high|tiered)$/.test(providerModel) &&
+        ["low", "medium", "high"].includes(prepared.reasoning!.effort!)
+      )
+        providerModel = providerModel.replace(
+          /-(low|medium|high|tiered)$/,
+          "-" + prepared.reasoning!.effort,
+        );
+    }
     if (profile) {
       if (!prepared)
         throw new HostError(

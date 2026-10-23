@@ -10,7 +10,7 @@ pnpm test
 
 每个 plugins/name 目录含 Manifest、后端源码及独立产物。可选 ui.tsx 导出 mount(element, host)，并返回注销函数。包内包含前后端 Bundle。
 
-`tsc` 只检查类型，`scripts/build.mjs` 生成各插件的 `dist/`；不生成仓库根目录的重复编译产物。`lib/` 按 `ai/`、`commerce/`、`http/`、`identity/`、`storage/`、`ui/` 分组，仅此插件使用的实现放在 `plugins/name/` 内。共享库不导入插件，插件之间通过公开能力协作。完整目录约定见主仓 `docs/STRUCTURE.md`。
+`tsc` 只检查类型，`scripts/build.ts` 生成各插件的 `dist/`；不生成仓库根目录的重复编译产物。`lib/` 按 `ai/`、`commerce/`、`http/`、`identity/`、`storage/`、`ui/` 分组，仅此插件使用的实现放在 `plugins/name/` 内。共享库不导入插件，插件之间通过公开能力协作。完整目录约定见主仓 `docs/STRUCTURE.md`。
 
 基础插件：Listener、HTTP Transport、Console、Users、Auth、AI Router。
 

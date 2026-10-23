@@ -1,10 +1,16 @@
-import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
+import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { CatalogModel } from "@pluhub/contracts/ai";
 import { Select } from "../../lib/ui/select.js";
 import { mountPage, useLoad } from "../../lib/ui/mount.js";
 import { PriceQuote } from "./quote-ui.js";
+import { ModelLogo } from "../../lib/ui/model-logo.js";
+import {
+  consumptionPrice,
+  formatPrice as price,
+  ModelPrices,
+} from "./prices.js";
 import {
   PageHeading,
   Icon,
@@ -14,15 +20,6 @@ import {
   latency,
 } from "../../lib/ui/components.js";
 
-const price = (value?: number) =>
-  value === undefined
-    ? tr("暂未公布")
-    : value === 0
-      ? tr("免费")
-      : "$" +
-        new Intl.NumberFormat(getLocale(), {
-          maximumSignificantDigits: 8,
-        }).format(value);
 const featureNames: Record<string, string> = {
   get text() {
     return tr("文本对话");
@@ -36,7 +33,9 @@ const featureNames: Record<string, string> = {
 };
 function Page({ host }: { host: UIHost }) {
   const guest = host.authenticated === false;
-  const [channel, setChannel] = React.useState("");
+  const [channel, setChannel] = React.useState(
+    new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "",
+  );
   const channels = useLoad<any[]>(
     () =>
       guest
@@ -64,6 +63,7 @@ function Page({ host }: { host: UIHost }) {
   const models = (loaded.data ?? [])
     .filter(
       (model) =>
+        (!channel || model.channel?.id === channel) &&
         (!provider || model.provider === provider) &&
         (
           model.name +
@@ -72,23 +72,50 @@ function Page({ host }: { host: UIHost }) {
           " " +
           model.provider +
           " " +
-          model.description
+          model.description +
+          " " +
+          (model.channel?.name ?? "")
         )
           .toLowerCase()
           .includes(search.trim().toLowerCase()),
     )
     .sort((a, b) =>
       sort === "price"
-        ? (a.inputPrice ?? Infinity) - (b.inputPrice ?? Infinity)
+        ? (consumptionPrice(
+            a,
+            a.pricing?.mode === "request" ? "request" : "input",
+          ) ?? Infinity) -
+          (consumptionPrice(
+            b,
+            b.pricing?.mode === "request" ? "request" : "input",
+          ) ?? Infinity)
         : a.name.localeCompare(b.name),
     );
-  const playPath = (model?: CatalogModel) =>
-    "/playground" +
-    (model
-      ? "?model=" +
-        encodeURIComponent(model.id) +
-        (!guest && channel ? "&channel=" + encodeURIComponent(channel) : "")
-      : "");
+  const channelOptions = guest
+    ? [
+        ...new Map(
+          (loaded.data ?? [])
+            .filter((m) => m.channel)
+            .map((m) => [
+              m.channel!.id,
+              { ...m.channel!, consumptionMultiplier: m.consumptionMultiplier },
+            ]),
+        ).values(),
+      ]
+    : (channels.data ?? []);
+  const groups = [
+    ...new Set(models.map((model) => model.channel?.id ?? "")),
+  ].map((id) => ({
+    id,
+    models: models.filter((model) => (model.channel?.id ?? "") === id),
+  }));
+  const playPath = (model?: CatalogModel) => {
+    const params = new URLSearchParams();
+    if (model) params.set("model", model.id);
+    const chosen = model?.channel?.id ?? channel;
+    if (chosen) params.set("channel", chosen);
+    return "/playground" + (params.size ? "?" + params : "");
+  };
   const destination = (model?: CatalogModel) =>
     guest
       ? "/login?next=" + encodeURIComponent(playPath(model))
@@ -105,25 +132,23 @@ function Page({ host }: { host: UIHost }) {
       </PageHeading>
 
       <div className="toolbar catalog-toolbar">
-        {!guest && (
-          <Select
-            aria-label={tr("模型目录渠道")}
-            value={channel}
-            onChange={(event) => {
-              setChannel(event.target.value);
-              setProvider("");
-              setSelected(undefined);
-            }}
-          >
-            <option value="">{tr("平台模型")}</option>
-            {channels.data?.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
-                {item.name}
-              </option>
-            ))}
-          </Select>
-        )}
+        <Select
+          aria-label={tr("模型目录渠道")}
+          value={channel}
+          onChange={(event) => {
+            setChannel(event.target.value);
+            setProvider("");
+            setSelected(undefined);
+          }}
+        >
+          <option value="">{tr("全部渠道")}</option>
+          {channelOptions.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.scope === "personal" ? tr("个人 · ") : ""}
+              {item.name} · ×{item.consumptionMultiplier ?? 1}
+            </option>
+          ))}
+        </Select>
         <div className="search-box">
           <Icon name="search" />
           <input
@@ -168,7 +193,7 @@ function Page({ host }: { host: UIHost }) {
               ? tr("加载失败")
               : tr("正在加载模型…")}
         </span>
-        <span>{tr("模型原价 · 美元 / 百万 Token")}</span>
+        <span>{tr("扣费价格 · 美元 / 百万 Token")}</span>
       </div>
       {loaded.data && models.length === 0 ? (
         <Empty
@@ -182,6 +207,7 @@ function Page({ host }: { host: UIHost }) {
               onClick={() => {
                 setSearch("");
                 setProvider("");
+                setChannel("");
               }}
             >
               {tr("清除筛选")}
@@ -189,101 +215,149 @@ function Page({ host }: { host: UIHost }) {
           )}
         </Empty>
       ) : (
-        <div className="catalog-list">
-          <div className="catalog-list-head" aria-hidden="true">
-            <span>{tr("模型")}</span>
-            <span>{tr("能力")}</span>
-            <span>{tr("价格 / 百万 Token")}</span>
-            <span>{tr("操作")}</span>
-          </div>
-          {models.map((model) => (
-            <article className="model-row" key={model.id}>
-              <div className="model-row-main">
-                <span className="provider-mark" aria-hidden="true">
-                  {model.provider.slice(0, 1).toUpperCase()}
+        <div className="catalog-channel-list">
+          {groups.map((group) => (
+            <section className="catalog-channel" key={group.id}>
+              <div className="section-heading catalog-channel-heading">
+                <h2>{group.models[0]?.channel?.name ?? tr("平台模型")}</h2>
+                <span className="feature-pill">
+                  {tr("渠道消耗倍率")} ×
+                  {group.models[0]?.consumptionMultiplier ?? 1}
                 </span>
-                <div>
-                  <h2 title={model.name}>{model.name}</h2>
-                  <small>
-                    <span>{model.provider}</span>
-                    <code>{model.id}</code>
-                  </small>
+                <span className="muted">
+                  {tr("{0} 个模型", { "0": textValue(group.models.length) })}
+                </span>
+              </div>
+              <div className="catalog-list">
+                <div className="catalog-list-head" aria-hidden="true">
+                  <span>{tr("模型")}</span>
+                  <span>{tr("能力")}</span>
+                  <span>{tr("扣费价格 / 百万 Token")}</span>
+                  <span>{tr("操作")}</span>
                 </div>
+                {group.models.map((model) => (
+                  <article
+                    className="model-row"
+                    key={model.channel?.id + ":" + model.id}
+                  >
+                    <div className="model-row-main">
+                      <ModelLogo model={model.id} provider={model.provider} />
+                      <div>
+                        <h2 title={model.name}>{model.name}</h2>
+                        <small>
+                          <span>{model.provider}</span>
+                          {model.name !== model.id && <code>{model.id}</code>}
+                        </small>
+                      </div>
+                    </div>
+                    <div className="model-row-features">
+                      {model.features
+                        .filter((feature) => featureNames[feature])
+                        .map((feature) => (
+                          <span className="feature-pill" key={feature}>
+                            {featureNames[feature]}
+                          </span>
+                        ))}
+                    </div>
+                    <div className="model-row-prices">
+                      <div>
+                        <strong>
+                          {price(
+                            consumptionPrice(
+                              model,
+                              model.pricing?.mode === "request"
+                                ? "request"
+                                : "input",
+                            ),
+                          )}
+                        </strong>
+                        {consumptionPrice(
+                          model,
+                          model.pricing?.mode === "request"
+                            ? "request"
+                            : "input",
+                        ) !==
+                          (model.pricing?.mode === "request"
+                            ? model.pricing.request
+                            : model.inputPrice) && (
+                          <del title={tr("原价")}>
+                            {price(
+                              model.pricing?.mode === "request"
+                                ? model.pricing.request
+                                : model.inputPrice,
+                            )}
+                          </del>
+                        )}
+                        <span>
+                          {model.pricing?.mode === "request"
+                            ? tr("USD / 次")
+                            : tr("输入")}
+                        </span>
+                      </div>
+                      {model.pricing?.mode !== "request" && (
+                        <div>
+                          <strong>
+                            {price(consumptionPrice(model, "output"))}
+                          </strong>
+                          {consumptionPrice(model, "output") !==
+                            model.outputPrice && (
+                            <del title={tr("原价")}>
+                              {price(model.outputPrice)}
+                            </del>
+                          )}
+                          <span>{tr("输出")}</span>
+                        </div>
+                      )}
+                      {model.contextWindow && (
+                        <div>
+                          <strong>{number(model.contextWindow)}</strong>
+                          <span>{tr("上下文")}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="model-row-actions">
+                      <button
+                        className="ghost"
+                        onClick={() => setSelected(model)}
+                      >
+                        {tr("详情")}
+                      </button>
+                      <button
+                        className="secondary"
+                        onClick={() => host.navigate(destination(model))}
+                      >
+                        {tr("使用")}
+                        <Icon name="arrow" size={14} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
               </div>
-              <div className="model-row-features">
-                {model.features
-                  .filter((feature) => featureNames[feature])
-                  .map((feature) => (
-                    <span className="feature-pill" key={feature}>
-                      {featureNames[feature]}
-                    </span>
-                  ))}
-              </div>
-              <div className="model-row-prices">
-                <div>
-                  <strong>
-                    {price(
-                      model.pricing?.mode === "request"
-                        ? model.pricing.request
-                        : model.inputPrice,
-                    )}
-                  </strong>
-                  <span>
-                    {model.pricing?.mode === "request"
-                      ? tr("USD / 次")
-                      : tr("输入")}
-                  </span>
-                </div>
-                {model.pricing?.mode !== "request" && (
-                  <div>
-                    <strong>{price(model.outputPrice)}</strong>
-                    <span>{tr("输出")}</span>
-                  </div>
-                )}
-                {model.contextWindow && (
-                  <div>
-                    <strong>{number(model.contextWindow)}</strong>
-                    <span>{tr("上下文")}</span>
-                  </div>
-                )}
-              </div>
-              <div className="model-row-actions">
-                <button className="ghost" onClick={() => setSelected(model)}>
-                  {tr("详情")}
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => host.navigate(destination(model))}
-                >
-                  {tr("使用")}
-                  <Icon name="arrow" size={14} />
-                </button>
-              </div>
-            </article>
+            </section>
           ))}
         </div>
       )}
       {selected && (
         <Dialog title={selected.name} close={() => setSelected(undefined)}>
           <div className="catalog-detail">
+            <div className="catalog-model-heading">
+              <ModelLogo model={selected.id} provider={selected.provider} />
+              <code>{selected.id}</code>
+            </div>
             {selected.description && <p>{selected.description}</p>}
             <dl className="catalog-detail-facts">
               <div>
                 <dt>{tr("提供商")}</dt>
                 <dd>{selected.provider}</dd>
               </div>
-              {selected.pricing?.mode !== "request" && (
-                <div>
-                  <dt>{tr("输入原价 / 百万 Token")}</dt>
-                  <dd>{price(selected.inputPrice)}</dd>
-                </div>
-              )}
-              {selected.pricing?.mode !== "request" && (
-                <div>
-                  <dt>{tr("输出原价 / 百万 Token")}</dt>
-                  <dd>{price(selected.outputPrice)}</dd>
-                </div>
-              )}
+              <div>
+                <dt>{tr("渠道")}</dt>
+                <dd>{selected.channel?.name ?? tr("平台模型")}</dd>
+              </div>
+              <div>
+                <dt>{tr("渠道消耗倍率")}</dt>
+                <dd>×{selected.consumptionMultiplier ?? 1}</dd>
+              </div>
               {selected.contextWindow && (
                 <div>
                   <dt>{tr("上下文长度")}</dt>
@@ -345,74 +419,17 @@ function Page({ host }: { host: UIHost }) {
                 </dd>
               </div>
             </dl>
-            {selected.pricing && (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{tr("计价项目")}</th>
-                      <th>{tr("原价 · USD")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selected.pricing.mode === "request" ? (
-                      <tr>
-                        <td>{tr("每次请求")}</td>
-                        <td>{price(selected.pricing.request)}</td>
-                      </tr>
-                    ) : (
-                      <>
-                        {(
-                          [
-                            [tr("缓存读取"), selected.pricing.cacheRead],
-                            [
-                              tr("缓存写入 · 5 分钟"),
-                              selected.pricing.cacheWrite,
-                            ],
-                            [
-                              tr("缓存写入 · 1 小时"),
-                              selected.pricing.cacheWrite1h,
-                            ],
-                          ] as const
-                        )
-                          .filter(([, value]) => value !== undefined)
-                          .map(([name, value]) => (
-                            <tr key={name}>
-                              <td>{name} / 1M</td>
-                              <td>{price(value)}</td>
-                            </tr>
-                          ))}
-                        {selected.pricing.tiers?.map((tier) => (
-                          <tr key={tier.above}>
-                            <td>
-                              {tr("输入 Token 超过")} {number(tier.above)}
-                            </td>
-                            <td>
-                              {price(tier.input)} / {price(tier.output)} / 1M
-                            </td>
-                          </tr>
-                        ))}
-                      </>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {(selected.consumptionMultiplier ?? 1) !== 1 && (
-              <p>
-                {tr("渠道消耗倍率")} ×{selected.consumptionMultiplier}
-              </p>
-            )}
+            <ModelPrices model={selected} />
             {!guest &&
-              !channel.startsWith("personal:") &&
+              selected.channel?.scope !== "personal" &&
               (selected.pricing?.mode === "request" ||
                 (selected.inputPrice !== undefined &&
                   selected.outputPrice !== undefined)) && (
                 <PriceQuote
-                  key={channel + ":" + selected.id}
+                  key={selected.channel?.id + ":" + selected.id}
                   host={host}
                   model={selected.id}
-                  channelId={channel || undefined}
+                  channelId={selected.channel?.id ?? (channel || undefined)}
                   requestPriced={selected.pricing?.mode === "request"}
                 />
               )}

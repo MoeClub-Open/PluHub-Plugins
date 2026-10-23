@@ -13,6 +13,8 @@ export const efforts: ReasoningEffort[] = [
   "xhigh",
   "max",
 ];
+export const geminiEffort = (value: ReasoningEffort) =>
+  value === "xhigh" || value === "max" ? "high" : value;
 export function effort(value: unknown): ReasoningEffort {
   if (!efforts.includes(value as ReasoningEffort))
     throw new HostError(
@@ -133,7 +135,11 @@ export function encodeReasoning(
   r: Reasoning | undefined,
 ): Record<string, any> {
   if (!r) return {};
-  if (r.encryptedContent && protocol !== "openai-responses")
+  if (
+    r.encryptedContent &&
+    protocol !== "openai-responses" &&
+    protocol !== "gemini"
+  )
     throw new HostError(
       "unsupported_reasoning",
       "Encrypted reasoning output requires Responses",
@@ -204,7 +210,7 @@ export function encodeReasoning(
       ...(r.adaptive ? { thinking: { type: "adaptive" } } : {}),
     };
   }
-  if (r.adaptive !== undefined || r.summary !== undefined)
+  if (r.adaptive !== undefined)
     throw new HostError(
       "unsupported_reasoning",
       "Gemini cannot represent these reasoning settings",
@@ -214,25 +220,23 @@ export function encodeReasoning(
       "unsupported_reasoning",
       "Gemini requires a thinking level or budget",
     );
-  if (
-    r.effort &&
-    !["none", "minimal", "low", "medium", "high"].includes(r.effort)
-  )
+  const level = r.effort ? geminiEffort(r.effort) : undefined;
+  if (level && !["none", "minimal", "low", "medium", "high"].includes(level))
     throw new HostError(
       "unsupported_reasoning",
       "Gemini cannot represent this thinking level",
     );
   return {
     thinkingConfig: {
-      ...(r.effort === "none"
+      ...(level === "none"
         ? { thinkingBudget: 0 }
-        : r.effort
-          ? { thinkingLevel: r.effort.toUpperCase() }
+        : level
+          ? { thinkingLevel: level.toUpperCase() }
           : r.budgetTokens !== undefined
             ? { thinkingBudget: r.budgetTokens }
             : {}),
-      ...(r.includeThoughts !== undefined
-        ? { includeThoughts: r.includeThoughts }
+      ...(r.includeThoughts !== undefined || r.summary || r.encryptedContent
+        ? { includeThoughts: r.includeThoughts ?? true }
         : {}),
     },
   };

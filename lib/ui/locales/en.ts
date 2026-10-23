@@ -1,5 +1,17 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "订阅账号繁忙，请稍后重试": "Subscription accounts are busy. Try again shortly.",
+  "编辑密钥": "Edit key",
+  "密钥配置已保存": "Key settings saved",
+  "重新生成密钥": "Regenerate key",
+  "重新生成后，旧密钥立即失效，应用需要更换密钥。": "The previous key will stop working immediately. Update your applications with the new key.",
+  "此密钥未保存可恢复副本，请重新生成": "This key has no recoverable copy. Regenerate it to continue.",
+  "修改 API Key": "Update API key",
+  "复制 API Key": "Copy API key",
+  "重新生成 API Key": "Regenerate API key",
+  "扣费价格 · 美元 / 百万 Token": "Billed price · USD / 1M tokens",
+  "扣费价格 / 百万 Token": "Billed price / 1M tokens",
+  "扣费价 · USD": "Billed price · USD",
   "平均延迟": "Average latency",
   "近 24 小时": "Last 24 hours",
   "输出速度": "Output speed",
