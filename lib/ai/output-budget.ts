@@ -101,7 +101,11 @@ export function outputBudget(
       503,
     );
   const source = prepared.maxTokens !== undefined ? "explicit" : "default";
-  const thinkingTokens = reasoning?.budgetTokens ?? 0;
+  // Gemini's -1 selects dynamic thinking; the output cap still covers its usage.
+  const thinkingTokens =
+    gemini && reasoning?.budgetTokens === -1
+      ? 0
+      : (reasoning?.budgetTokens ?? 0);
   if (
     !Number.isSafeInteger(thinkingTokens) ||
     thinkingTokens < 0 ||

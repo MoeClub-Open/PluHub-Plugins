@@ -21,6 +21,7 @@ import {
   type SubscriptionKind,
 } from "./subscription-auth.js";
 import { discoverAntigravityProject } from "./antigravity-control.js";
+import { prepareAntigravityRequest } from "./antigravity-reasoning.js";
 export { subscriptionRequest } from "./subscription-request.js";
 export type { SubscriptionKind } from "./subscription-auth.js";
 
@@ -31,6 +32,7 @@ async function* execute(
   upstream: Upstream,
   signal: AbortSignal,
 ): AsyncGenerator<AIEvent> {
+  if (kind === "antigravity") request = prepareAntigravityRequest(request);
   const ids = upstream.subscriptionAccountIds;
   if (
     ids &&

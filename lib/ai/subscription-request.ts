@@ -12,6 +12,7 @@ import {
 } from "./subscription-auth.js";
 import { antigravityUserAgent } from "./antigravity-control.js";
 import { validateWebSearchTarget } from "./web-search.js";
+import { prepareAntigravityRequest } from "./antigravity-reasoning.js";
 export function subscriptionRequest(
   kind: SubscriptionKind,
   request: AIRequest,
@@ -23,6 +24,7 @@ export function subscriptionRequest(
     authMode?: "siwc";
   },
 ) {
+  if (kind === "antigravity") request = prepareAntigravityRequest(request);
   if (credential.authMode === "siwc")
     upstream = {
       ...upstream,

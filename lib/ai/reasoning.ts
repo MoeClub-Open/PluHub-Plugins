@@ -35,8 +35,12 @@ function keys(value: any, allowed: string[]) {
       "Unsupported thinking settings",
     );
 }
-function budget(n: unknown): number {
-  if (!Number.isSafeInteger(n) || Number(n) < 0 || Number(n) > 1000000)
+function budget(n: unknown, dynamic = false): number {
+  if (
+    !Number.isSafeInteger(n) ||
+    Number(n) < (dynamic ? -1 : 0) ||
+    Number(n) > 1000000
+  )
     throw new HostError("invalid_reasoning", "Invalid thinking token budget");
   return Number(n);
 }
@@ -126,7 +130,7 @@ export function decodeReasoning(
   if (t.thinkingLevel !== undefined)
     return { effort: effort(String(t.thinkingLevel).toLowerCase()), ...extra };
   if (t.thinkingBudget !== undefined)
-    return { budgetTokens: budget(t.thinkingBudget), ...extra };
+    return { budgetTokens: budget(t.thinkingBudget, true), ...extra };
   if (t.includeThoughts !== undefined) return extra;
   throw new HostError("invalid_reasoning", "Empty thinking config");
 }
@@ -145,7 +149,8 @@ export function encodeReasoning(
       "Encrypted reasoning output requires Responses",
     );
   if (r.effort !== undefined) effort(r.effort);
-  if (r.budgetTokens !== undefined) budget(r.budgetTokens);
+  if (r.budgetTokens !== undefined)
+    budget(r.budgetTokens, protocol === "gemini");
   if (protocol.startsWith("openai")) {
     if (r.adaptive !== undefined || r.includeThoughts !== undefined)
       throw new HostError(

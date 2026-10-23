@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-upstream-claude-subscription",
-  "version": "0.1.0-alpha.22",
+  "version": "0.1.0-alpha.23",
   "type": "module",
   "private": true,
   "files": [

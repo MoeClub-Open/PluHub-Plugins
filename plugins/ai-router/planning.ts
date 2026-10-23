@@ -229,15 +229,6 @@ export async function planRoute(
           effort: geminiEffort(prepared.reasoning.effort),
         },
       };
-      if (
-        connection.protocol === "antigravity" &&
-        /^gemini-3\.8-flash-(low|medium|high|tiered)$/.test(providerModel) &&
-        ["low", "medium", "high"].includes(prepared.reasoning!.effort!)
-      )
-        providerModel = providerModel.replace(
-          /-(low|medium|high|tiered)$/,
-          "-" + prepared.reasoning!.effort,
-        );
     }
     if (profile) {
       if (!prepared)
