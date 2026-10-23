@@ -5,7 +5,7 @@
   "name": "计费与余额",
   "description": "管理余额预留、结算和资金账本。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.18",
+  "version": "0.1.0-alpha.19",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

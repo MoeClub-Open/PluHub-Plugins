@@ -22,6 +22,7 @@ export function PriceReceiptView({
     cacheWrite1h: tr("缓存写入 · 1 小时"),
     request: tr("请求"),
     expression: tr("表达式计价"),
+    webSearch: tr("网页搜索"),
   };
   const p = receipt.pricing;
   const multiplier = p.multiplier ?? 1;
@@ -34,13 +35,7 @@ export function PriceReceiptView({
             <tr>
               <th>{tr("项目")}</th>
               <th>{tr("数量")}</th>
-              <th>
-                {receipt.expression
-                  ? "USD"
-                  : receipt.mode === "request"
-                    ? tr("USD / 次")
-                    : tr("USD / 百万 Token")}
-              </th>
+              <th>{tr("单价")}</th>
             </tr>
           </thead>
           <tbody>
@@ -48,7 +43,14 @@ export function PriceReceiptView({
               <tr key={line.kind}>
                 <td>{labels[line.kind] ?? line.kind}</td>
                 <td>{line.quantity}</td>
-                <td>{line.rate}</td>
+                <td>
+                  {line.rate}{" "}
+                  {line.kind === "expression"
+                    ? "USD"
+                    : ["request", "webSearch"].includes(line.kind)
+                      ? tr("USD / 次")
+                      : tr("USD / 百万 Token")}
+                </td>
               </tr>
             ))}
           </tbody>

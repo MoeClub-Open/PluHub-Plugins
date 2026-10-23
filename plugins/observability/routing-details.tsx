@@ -8,13 +8,23 @@ export function RoutingDetails({ value }: { value: string }) {
     return null;
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
-  const { outputBudget: budget, ...routing } = data;
+  const { outputBudget: budget, webSearchCalls, ...routing } = data;
   const bounded =
     budget?.mode === "bounded" && Number.isSafeInteger(budget.limit);
   const estimated =
-    budget?.mode === "estimate" && Number.isSafeInteger(budget.reservedTokens);
+    budget?.mode === "estimate" &&
+    Number.isSafeInteger(budget.reservedTokens) &&
+    budget.reservedTokens > 0;
   return (
     <>
+      {Number.isSafeInteger(webSearchCalls) && (
+        <dl className="detail-grid">
+          <div>
+            <dt>{tr("网页搜索")}</dt>
+            <dd>{number(webSearchCalls)}</dd>
+          </div>
+        </dl>
+      )}
       {(bounded || estimated) && (
         <dl className="detail-grid">
           <div>

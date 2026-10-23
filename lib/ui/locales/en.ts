@@ -2,6 +2,8 @@
 export const en: Record<string, string> = {
   可用端点: "Endpoints",
   对话: "Chat",
+  单价: "Unit price",
+  网页搜索: "Web search",
   媒体接口路径: "Media endpoint paths",
   认证方式: "Authentication",
   下移: "Move down",

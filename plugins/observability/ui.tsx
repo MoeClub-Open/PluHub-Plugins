@@ -1,5 +1,6 @@
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
+import { modelEndpoints } from "../../lib/ui/model-endpoints.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
@@ -45,7 +46,11 @@ function estimateReceipt(row: any) {
     const usage = row.usage_json
       ? JSON.parse(row.usage_json)
       : fixedPricing(pricing)
-        ? { input: 0, output: 0 }
+        ? {
+            input: 0,
+            output: 0,
+            webSearch: JSON.parse(row.routing ?? "{}").webSearchCalls ?? 0,
+          }
         : null;
     if (!usage) return null;
     const receipt = priceUsage(usage, pricing);
@@ -350,13 +355,19 @@ function Page({ host }: { host: UIHost }) {
                 }
               >
                 <option value="">{tr("全部协议")}</option>
-                {["openai-chat", "openai-responses", "anthropic", "gemini"].map(
-                  (protocol) => (
-                    <option key={protocol} value={protocol}>
-                      {protocol}
-                    </option>
-                  ),
-                )}
+                {[
+                  "openai-chat",
+                  "openai-responses",
+                  "anthropic",
+                  "gemini",
+                  ...modelEndpoints
+                    .filter(([kind]) => kind !== "chat")
+                    .map(([kind]) => kind),
+                ].map((protocol) => (
+                  <option key={protocol} value={protocol}>
+                    {protocol}
+                  </option>
+                ))}
               </Select>
             </label>
             {[
