@@ -82,6 +82,14 @@ tbody tr {
     translate: 0 0;
   }
 }
+@keyframes ph-sidebar-enter {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
 @keyframes ph-dialog-enter {
   from {
     opacity: 0;

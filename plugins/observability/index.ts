@@ -1,4 +1,5 @@
 import { attachCharges, consumptionSummary } from "./charges.js";
+import { attachRequestLabels } from "./request-labels.js";
 import { join } from "node:path";
 import { definePlugin, HostError, json } from "@pluhub/sdk";
 import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
@@ -32,6 +33,7 @@ export default definePlugin({
        UPDATE requests SET consumption_source=CASE
          WHEN billing_mode IN ('platform','disabled') THEN 'platform'
          WHEN billing_mode='personal' THEN 'personal' END;`,
+      "ALTER TABLE requests ADD COLUMN user_name TEXT; ALTER TABLE requests ADD COLUMN key_name TEXT;",
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -236,7 +238,7 @@ export default definePlugin({
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source,user_name,key_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -262,6 +264,12 @@ export default definePlugin({
               state.generationMs ?? null,
               (ctx.state.get("billing.mode") as string | undefined) ?? null,
               state.consumptionSource ?? null,
+              typeof ctx.principal?.attributes?.username === "string"
+                ? ctx.principal.attributes.username
+                : null,
+              typeof ctx.principal?.attributes?.keyName === "string"
+                ? ctx.principal.attributes.keyName
+                : null,
             );
             recordRanking(db, {
               at: state.startedAt,
@@ -303,7 +311,7 @@ export default definePlugin({
           principal.session === true && principal.permissions.includes("*")
             ? "all"
             : "self",
-        users: [{ id: principal.id, name: principal.id }],
+        users: [{ id: principal.id, name: "" }],
       };
     }
     host.api({
@@ -396,7 +404,15 @@ export default definePlugin({
         where.push("COALESCE(consumption_source,'unknown')=?");
         params.push(source);
       }
-      return { query, hours, from, to, sql: where.join(" AND "), params };
+      return {
+        query,
+        hours,
+        from,
+        to,
+        sql: where.join(" AND "),
+        params,
+        users: allowed.users,
+      };
     }
     const guardExport = exportGuard();
     host.api({
@@ -416,11 +432,14 @@ export default definePlugin({
         const columns = [
           "id",
           "user_id",
+          "user_name",
           "key_id",
+          "key_name",
           "created_at",
           "model",
           "upstream",
           "protocol",
+          "effort",
           "status",
           "http_status",
           "latency_ms",
@@ -438,7 +457,13 @@ export default definePlugin({
         return csvResponse(
           "pluhub-requests.csv",
           columns,
-          (await attachCharges(host, rows, ctx.signal)).map((row) =>
+          (
+            await attachCharges(
+              host,
+              await attachRequestLabels(host, rows, f.users, ctx.signal),
+              ctx.signal,
+            )
+          ).map((row) =>
             columns.map(
               (key) =>
                 row[
@@ -481,7 +506,12 @@ export default definePlugin({
         return json({
           data: await attachCharges(
             host,
-            rows as Record<string, any>[],
+            await attachRequestLabels(
+              host,
+              rows as Record<string, any>[],
+              f.users,
+              ctx.signal,
+            ),
             ctx.signal,
           ),
           total,

@@ -1,5 +1,35 @@
 import { t as tr } from "./i18n.js";
-import { money, number, type Summary } from "./components.js";
+import { money, number, Stat, type Summary } from "./components.js";
+
+export function TokenStat({
+  input,
+  output,
+  note = "",
+}: {
+  input?: number;
+  output?: number;
+  note?: string;
+}) {
+  return (
+    <Stat
+      title={tr("Token 用量")}
+      icon="models"
+      note={note}
+      value={
+        <span className="stat-token-values">
+          <span>
+            <small>{tr("输入")}</small>
+            {number(input)}
+          </span>
+          <span>
+            <small>{tr("输出")}</small>
+            {number(output)}
+          </span>
+        </span>
+      }
+    />
+  );
+}
 
 export const consumptionSources: Record<string, string> = {
   platform: "平台渠道",
@@ -43,7 +73,8 @@ export function ConsumptionBreakdown({
           <tr>
             <th>{tr("消耗来源")}</th>
             <th className="numeric">{tr("请求数")}</th>
-            <th className="numeric">Token</th>
+            <th className="numeric">{tr("输入 Token")}</th>
+            <th className="numeric">{tr("输出 Token")}</th>
             <th className="numeric">{tr("估算消耗 (USD)")}</th>
           </tr>
         </thead>
@@ -57,9 +88,12 @@ export function ConsumptionBreakdown({
                 <td className="numeric">
                   {row && !row.usageKnownRequests
                     ? "—"
-                    : number(
-                        (row?.inputTokens ?? 0) + (row?.outputTokens ?? 0),
-                      )}
+                    : number(row?.inputTokens ?? 0)}
+                </td>
+                <td className="numeric">
+                  {row && !row.usageKnownRequests
+                    ? "—"
+                    : number(row?.outputTokens ?? 0)}
                 </td>
                 <td className="numeric">
                   {money(row ? row.estimatedCostUSD : 0)}

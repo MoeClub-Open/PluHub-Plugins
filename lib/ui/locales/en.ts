@@ -1,5 +1,10 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "用户 / 时间": "User / Time",
+  "用户 / API Key": "User / API Key",
+  未知用户: "Unknown user",
+  名称不可用: "Name unavailable",
+  控制台会话: "Console session",
   历史个人渠道: "Historical personal channels",
   未分类: "Unclassified",
   不扣余额: "No wallet charge",

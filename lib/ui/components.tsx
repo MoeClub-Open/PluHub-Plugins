@@ -260,7 +260,7 @@ export function Stat({
   icon,
 }: {
   title: string;
-  value: string;
+  value: React.ReactNode;
   note: string;
   icon: string;
 }) {

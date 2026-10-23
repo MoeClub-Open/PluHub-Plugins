@@ -434,6 +434,21 @@ p {
   color: var(--muted);
   line-height: 1.45;
 }
+.stat-token-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  font-size: clamp(16px, 1.65vw, 24px);
+  letter-spacing: -0.3px;
+}
+.stat-token-values small {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.9fr) minmax(280px, 0.88fr);
@@ -1532,14 +1547,12 @@ code {
     --control-height: 36px;
   }
   .layout > aside {
-    visibility: hidden;
-    transform: translateX(-100%);
+    display: none;
     width: 236px;
-    transition: transform 0.2s;
   }
   .layout > aside.open {
-    visibility: visible;
-    transform: translateX(0);
+    display: flex;
+    animation: ph-sidebar-enter var(--motion-normal) var(--motion-ease);
   }
   .sidebar-scrim {
     display: block;

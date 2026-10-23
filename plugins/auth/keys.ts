@@ -33,6 +33,23 @@ export function installKeys(
   vault: Vault,
   tag: (value: { resourceId: string }) => void,
 ) {
+  host.provide(
+    "auth.key-names@1",
+    ({ keys }: { keys: { id: string; userId: string }[] }) => {
+      if (!Array.isArray(keys) || keys.length > 500)
+        throw new HostError(
+          "invalid_request",
+          "Expected at most 500 key identities",
+        );
+      const find = db.prepare(
+        "SELECT id,user_id AS userId,name FROM api_keys WHERE id=? AND user_id=?",
+      );
+      return keys.flatMap(({ id, userId }) => {
+        const row = find.get(id, userId);
+        return row ? [row] : [];
+      });
+    },
+  );
   const owner = (ctx: RequestContext) => {
     if (!ctx.principal?.session)
       throw new HostError(

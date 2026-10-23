@@ -197,16 +197,18 @@ export default definePlugin({
         id: user.id,
         permissions: !key && user.role === "admin" ? ["*"] : [],
         session: !key,
-        ...(key
-          ? {
-              attributes: {
+        attributes: {
+          username: user.username,
+          ...(key
+            ? {
                 keyId: row.id,
+                keyName: row.name,
                 models: JSON.parse(row.models_json),
                 requestsPerMinute: row.requests_per_minute,
                 channelIds: boundChannels,
-              },
-            }
-          : {}),
+              }
+            : {}),
+        },
       };
     });
     const requireSession = (principal: { session?: boolean }) => {

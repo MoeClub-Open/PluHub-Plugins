@@ -2,7 +2,11 @@ import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
-import { ConsumptionBreakdown, walletNote } from "../../lib/ui/consumption.js";
+import {
+  ConsumptionBreakdown,
+  TokenStat,
+  walletNote,
+} from "../../lib/ui/consumption.js";
 import {
   PageHeading,
   Stat,
@@ -21,6 +25,10 @@ type RecentRequest = {
   input_tokens: number | null;
   output_tokens: number | null;
   created_at: number;
+  user_name: string | null;
+  key_name: string | null;
+  key_id: string | null;
+  effort: string | null;
 };
 const outcome = {
   get success() {
@@ -134,18 +142,17 @@ export function Dashboard({
           }
           icon="activity"
         />
-        <Stat
-          title={tr("Token 用量")}
-          value={d ? number(d.inputTokens + d.outputTokens) : "—"}
+        <TokenStat
+          input={d?.inputTokens}
+          output={d?.outputTokens}
           note={
             d
               ? tr("{0}/{1} 次请求返回用量", {
                   "0": textValue(d.usageKnownRequests),
                   "1": textValue(d.requests),
                 })
-              : tr("输入 + 输出 Token")
+              : ""
           }
-          icon="models"
         />
         <Stat
           title={tr("平均首 Token 延迟")}
@@ -235,13 +242,17 @@ export function Dashboard({
           <table>
             <thead>
               <tr>
+                <th scope="col">{tr("用户 / API Key")}</th>
                 <th scope="col">{tr("模型")}</th>
                 <th scope="col">{tr("状态")}</th>
                 <th scope="col" className="numeric">
                   {tr("耗时")}
                 </th>
                 <th scope="col" className="numeric">
-                  Token
+                  {tr("输入 Token")}
+                </th>
+                <th scope="col" className="numeric">
+                  {tr("输出 Token")}
                 </th>
                 <th scope="col" className="numeric">
                   {tr("调用时间")}
@@ -252,7 +263,17 @@ export function Dashboard({
               {recent.data?.data.map((request) => (
                 <tr key={request.id}>
                   <td>
+                    <strong>{request.user_name || tr("未知用户")}</strong>
+                    <small>
+                      {request.key_name ||
+                        (request.key_id ? tr("名称不可用") : tr("控制台会话"))}
+                    </small>
+                  </td>
+                  <td>
                     <strong>{request.model || "—"}</strong>
+                    <small>
+                      {tr("思考强度")}: {request.effort || "—"}
+                    </small>
                   </td>
                   <td>
                     <span
@@ -269,12 +290,8 @@ export function Dashboard({
                     </span>
                   </td>
                   <td className="numeric">{latency(request.latency_ms)}</td>
-                  <td className="numeric">
-                    {request.input_tokens == null ||
-                    request.output_tokens == null
-                      ? tr("未知")
-                      : number(request.input_tokens + request.output_tokens)}
-                  </td>
+                  <td className="numeric">{number(request.input_tokens)}</td>
+                  <td className="numeric">{number(request.output_tokens)}</td>
                   <td className="numeric muted">
                     <time dateTime={new Date(request.created_at).toISOString()}>
                       {new Date(request.created_at).toLocaleString(

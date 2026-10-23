@@ -14,6 +14,7 @@ import {
   consumptionLabel,
   consumptionSources,
   walletNote,
+  TokenStat,
 } from "../../lib/ui/consumption.js";
 import {
   PageHeading,
@@ -133,7 +134,9 @@ function Page({ host }: { host: UIHost }) {
     users: { id: string; name: string }[];
   }>(() => host.request("/api/plugins/official.observability/log-scope"));
   const displayUser = (id: string) =>
-    scope.data?.users.find((user) => user.id === id)?.name ?? id;
+    scope.data?.users.find((user) => user.id === id)?.name || tr("未知用户");
+  const displayKey = (row: any) =>
+    row.key_name || (row.key_id ? tr("名称不可用") : tr("控制台会话"));
   const [offset, setOffset] = React.useState(0);
   const [selected, setSelected] = React.useState<any>();
   const query = new URLSearchParams({
@@ -258,15 +261,9 @@ function Page({ host }: { host: UIHost }) {
           note={tr("取消请求不计入失败")}
           icon="check"
         />
-        <Stat
-          title={tr("Token 用量")}
-          value={
-            stats.data
-              ? number(stats.data.inputTokens + stats.data.outputTokens)
-              : "—"
-          }
-          note=""
-          icon="models"
+        <TokenStat
+          input={stats.data?.inputTokens}
+          output={stats.data?.outputTokens}
         />
         <Stat
           title={tr("余额扣费")}
@@ -306,13 +303,6 @@ function Page({ host }: { host: UIHost }) {
             placeholder={tr("输入完整模型 ID 筛选…")}
           />
         </div>
-        <input
-          aria-label={tr("请求 ID")}
-          placeholder={tr("请求 ID")}
-          value={requestId}
-          maxLength={256}
-          onChange={(e) => setRequestId(e.target.value)}
-        />
         <Select
           aria-label={tr("日志状态")}
           value={status}
@@ -372,6 +362,14 @@ function Page({ host }: { host: UIHost }) {
         </button>
         {advanced && (
           <div className="request-log-advanced">
+            <label>
+              {tr("请求 ID")}
+              <input
+                value={requestId}
+                maxLength={256}
+                onChange={(e) => setRequestId(e.target.value)}
+              />
+            </label>
             {scope.data?.scope !== "self" && (
               <label>
                 {tr("用户")}
@@ -510,11 +508,13 @@ function Page({ host }: { host: UIHost }) {
           <table>
             <thead>
               <tr>
-                <th>{tr("请求 / 时间")}</th>
+                <th>{tr("用户 / 时间")}</th>
+                <th>API Key</th>
                 <th>{tr("模型")}</th>
                 <th>{tr("状态")}</th>
                 <th>{tr("耗时 / 首 Token")}</th>
-                <th>Token</th>
+                <th className="numeric">{tr("输入 Token")}</th>
+                <th className="numeric">{tr("输出 Token")}</th>
                 <th>{tr("估算消耗")}</th>
                 <th>{tr("实际扣费")}</th>
                 <th>{tr("详情")}</th>
@@ -524,20 +524,17 @@ function Page({ host }: { host: UIHost }) {
               {data.data?.data.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    <code>{r.id.slice(0, 8)}</code>
-                    {scope.data?.scope !== "self" && (
-                      <small>{displayUser(r.user_id)}</small>
-                    )}
+                    <strong>{r.user_name || displayUser(r.user_id)}</strong>
                     <small>
                       {new Date(r.created_at).toLocaleString(getLocale())}
                     </small>
                   </td>
+                  <td>{displayKey(r)}</td>
                   <td>
                     <strong>{r.model || "—"}</strong>
                     <small>{consumptionLabel(r.consumption_source)}</small>
                     <small>
-                      {r.protocol}
-                      {r.stream ? " · stream" : ""}
+                      {tr("思考强度")}: {r.effort || "—"}
                     </small>
                   </td>
                   <td>
@@ -560,11 +557,8 @@ function Page({ host }: { host: UIHost }) {
                       {latency(r.first_token_ms)} {tr("首 Token")}
                     </small>
                   </td>
-                  <td>
-                    {r.input_tokens == null
-                      ? tr("未知")
-                      : number(r.input_tokens + r.output_tokens)}
-                  </td>
+                  <td className="numeric">{number(r.input_tokens)}</td>
+                  <td className="numeric">{number(r.output_tokens)}</td>
                   <td>
                     {money(
                       r.cost_micro_usd == null
@@ -583,7 +577,7 @@ function Page({ host }: { host: UIHost }) {
                   <td>
                     <button
                       className="ghost"
-                      aria-label={tr("查看请求 ") + r.id.slice(0, 8)}
+                      aria-label={tr("请求详情")}
                       onClick={() => setSelected(r)}
                     >
                       {tr("详情 ↗")}
@@ -626,9 +620,11 @@ function Page({ host }: { host: UIHost }) {
           <dl className="detail-grid">
             {Object.entries({
               "请求 ID": selected.id,
-              用户: displayUser(selected.user_id),
+              用户: selected.user_name || displayUser(selected.user_id),
+              "API Key": displayKey(selected),
               "密钥 ID": selected.key_id || "—",
               模型: selected.model || "—",
+              思考强度: selected.effort || "—",
               渠道: selected.upstream || "—",
               消耗来源: consumptionLabel(selected.consumption_source),
               入口协议: selected.protocol,
