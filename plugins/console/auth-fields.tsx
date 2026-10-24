@@ -8,6 +8,7 @@ export function PasswordField({
   change,
   register = false,
   disabled = false,
+  error,
 }: {
   name: string;
   label: string;
@@ -15,6 +16,7 @@ export function PasswordField({
   change: (value: string) => void;
   register?: boolean;
   disabled?: boolean;
+  error?: string;
 }) {
   const [visible, setVisible] = React.useState(false);
   const id = "auth-" + name;
@@ -31,6 +33,8 @@ export function PasswordField({
           minLength={register ? 12 : undefined}
           maxLength={1024}
           required
+          aria-invalid={!!error || undefined}
+          aria-describedby={error ? id + "-error" : undefined}
           value={value}
           onChange={(e) => change(e.target.value)}
           placeholder={
@@ -54,6 +58,15 @@ export function PasswordField({
           <Icon name={visible ? "eye-off" : "eye"} size={17} />
         </button>
       </div>
+      {error && (
+        <small
+          id={id + "-error"}
+          className="field-note field-error"
+          role="alert"
+        >
+          {tr(error)}
+        </small>
+      )}
     </div>
   );
 }

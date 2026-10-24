@@ -137,6 +137,12 @@ function Page({ host }: { host: UIHost }) {
     scope.data?.users.find((user) => user.id === id)?.name || tr("未知用户");
   const displayKey = (row: any) =>
     row.key_name || (row.key_id ? tr("名称不可用") : tr("控制台会话"));
+  const channels = useLoad<{ id: string; name: string }[]>(() =>
+    host.request("/api/plugins/official.ai-router/channels").catch(() => []),
+  );
+  const displayChannel = (id?: string) =>
+    channels.data?.find((channel) => channel.id === id)?.name ??
+    (id ? tr("渠道已删除或不可用") : "—");
   const [offset, setOffset] = React.useState(0);
   const [selected, setSelected] = React.useState<any>();
   const query = new URLSearchParams({
@@ -198,6 +204,12 @@ function Page({ host }: { host: UIHost }) {
     () => host.request("/api/plugins/official.observability/summary?" + query),
     [hours, status, queryModel, queryRequestId, filters, selfOnly],
   );
+  React.useEffect(() => {
+    if (queryRequestId) {
+      const row = data.data?.data.find((row) => row.id === queryRequestId);
+      if (row) setSelected(row);
+    }
+  }, [data.data, queryRequestId]);
   const reload = () => {
     data.reload();
     stats.reload();
@@ -512,7 +524,7 @@ function Page({ host }: { host: UIHost }) {
                 <th>API Key</th>
                 <th>{tr("模型")}</th>
                 <th>{tr("状态")}</th>
-                <th>{tr("耗时 / 首 Token")}</th>
+                <th>{tr("服务端耗时 / 首 Token")}</th>
                 <th className="numeric">{tr("输入 Token")}</th>
                 <th className="numeric">{tr("输出 Token")}</th>
                 <th>{tr("估算消耗")}</th>
@@ -625,13 +637,13 @@ function Page({ host }: { host: UIHost }) {
               "密钥 ID": selected.key_id || "—",
               模型: selected.model || "—",
               思考强度: selected.effort || "—",
-              渠道: selected.upstream || "—",
+              渠道: displayChannel(selected.upstream),
               消耗来源: consumptionLabel(selected.consumption_source),
               入口协议: selected.protocol,
               状态: names[selected.status],
               "HTTP 状态": selected.http_status,
-              完成耗时: latency(selected.latency_ms),
-              "首 Token 延迟": latency(selected.first_token_ms),
+              服务端完成耗时: latency(selected.latency_ms),
+              "服务端首 Token 延迟": latency(selected.first_token_ms),
               "输入 Token": number(selected.input_tokens),
               "输出 Token": number(selected.output_tokens),
               "估算消耗 (USD)": money(
@@ -673,7 +685,12 @@ function Page({ host }: { host: UIHost }) {
               )
             }
           />
-          {selected.routing && <RoutingDetails value={selected.routing} />}
+          {selected.routing && (
+            <RoutingDetails
+              value={selected.routing}
+              requestedModel={selected.model}
+            />
+          )}
           {scope.data?.scope === "all" && (
             <a
               className="button secondary"

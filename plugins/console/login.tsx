@@ -39,6 +39,28 @@ export function Login({
   const emailInput = React.useRef<HTMLInputElement>(null);
   const captcha = React.useRef<CaptchaHandle>(null);
   const codeInput = React.useRef<HTMLInputElement>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>(
+    {},
+  );
+  function validateField(field: HTMLInputElement) {
+    const errors: Record<string, string> = {
+      username:
+        mode === "register"
+          ? "用户名须为 3–64 位，以字母或数字开头，仅支持字母、数字、下划线、点和短横线。"
+          : "请输入用户名。",
+      email: "请输入有效的邮箱地址。",
+      password:
+        mode === "register" ? "密码至少需要 12 个字符。" : "请输入密码。",
+      confirmPassword: "请再次输入至少 12 个字符的密码。",
+      code: "请输入六位数字验证码。",
+    };
+    const error = !field.validity.valid
+      ? (errors[field.name] ?? field.validationMessage)
+      : field.name === "confirmPassword" && field.value !== password
+        ? "两次输入的密码不一致，请检查后重试。"
+        : "";
+    setFieldErrors((current) => ({ ...current, [field.name]: error }));
+  }
   const busy = !!pending;
   React.useEffect(() => {
     if (challenge) codeInput.current?.focus();
@@ -74,6 +96,7 @@ export function Login({
     setConfirmPassword("");
     setRecovery(false);
     setMessage("");
+    setFieldErrors({});
     setToken("");
     setReset((v) => v + 1);
   }
@@ -100,7 +123,9 @@ export function Login({
     }
   }
   async function send() {
-    if (cooldown || !emailInput.current?.reportValidity()) return;
+    if (cooldown || !emailInput.current) return;
+    validateField(emailInput.current);
+    if (!emailInput.current.reportValidity()) return;
     await run(async () => {
       const result = await client.request<any>(api + "/email/request", {
         method: "POST",
@@ -126,6 +151,10 @@ export function Login({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (mode === "register" && password !== confirmPassword) {
+      setFieldErrors((current) => ({
+        ...current,
+        confirmPassword: "两次输入的密码不一致，请检查后重试。",
+      }));
       setMessage("两次输入的密码不一致，请检查后重试。");
       setMessageTone("error");
       return;
@@ -298,6 +327,22 @@ export function Login({
         className="auth-form-motion"
         onSubmit={submit}
         aria-busy={busy}
+        onBlurCapture={(event) => {
+          if (event.target instanceof HTMLInputElement)
+            validateField(event.target);
+        }}
+        onInvalidCapture={(event) => {
+          if (event.target instanceof HTMLInputElement)
+            validateField(event.target);
+        }}
+        onChangeCapture={(event) => {
+          if (event.target instanceof HTMLInputElement) {
+            const name = event.target.name;
+            setFieldErrors((current) =>
+              current[name] ? { ...current, [name]: "" } : current,
+            );
+          }
+        }}
       >
         {(mode === "password" || mode === "register") && (
           <label>
@@ -307,6 +352,14 @@ export function Login({
               disabled={busy}
               autoComplete="username"
               value={username}
+              aria-invalid={!!fieldErrors.username || undefined}
+              aria-describedby={
+                fieldErrors.username
+                  ? "auth-username-error"
+                  : mode === "register"
+                    ? "auth-username-note"
+                    : undefined
+              }
               onChange={(e) => setUsername(e.target.value)}
               required
               autoFocus
@@ -319,9 +372,18 @@ export function Login({
               }
               placeholder={tr("输入用户名")}
             />
-            {mode === "register" && (
-              <small className="field-note">
+            {mode === "register" && !fieldErrors.username && (
+              <small id="auth-username-note" className="field-note">
                 {tr("3–64 位，支持字母、数字、下划线、点和短横线。")}
+              </small>
+            )}
+            {fieldErrors.username && (
+              <small
+                id="auth-username-error"
+                className="field-note field-error"
+                role="alert"
+              >
+                {tr(fieldErrors.username)}
               </small>
             )}
           </label>
@@ -336,6 +398,10 @@ export function Login({
               type="email"
               autoComplete="email"
               value={email}
+              aria-invalid={!!fieldErrors.email || undefined}
+              aria-describedby={
+                fieldErrors.email ? "auth-email-error" : undefined
+              }
               onChange={(e) => {
                 setEmail(e.target.value);
                 setChallenge("");
@@ -344,6 +410,15 @@ export function Login({
               required
               placeholder="name@example.com"
             />
+            {fieldErrors.email && (
+              <small
+                id="auth-email-error"
+                className="field-note field-error"
+                role="alert"
+              >
+                {tr(fieldErrors.email)}
+              </small>
+            )}
           </label>
         )}
         {(mode === "password" || mode === "register") && (
@@ -355,6 +430,7 @@ export function Login({
               value={password}
               change={setPassword}
               register={mode === "register"}
+              error={fieldErrors.password}
             />
             {mode === "register" && (
               <PasswordField
@@ -364,6 +440,7 @@ export function Login({
                 value={confirmPassword}
                 change={setConfirmPassword}
                 register
+                error={fieldErrors.confirmPassword}
               />
             )}
           </div>
@@ -391,6 +468,10 @@ export function Login({
                 ref={codeInput}
                 autoComplete="one-time-code"
                 value={code}
+                aria-invalid={!!fieldErrors.code || undefined}
+                aria-describedby={
+                  fieldErrors.code ? "auth-code-error" : "auth-code-note"
+                }
                 onChange={(e) => setCode(e.target.value)}
                 required
                 disabled={mode !== "mfa" && !challenge}
@@ -407,7 +488,11 @@ export function Login({
                   type="button"
                   className="secondary"
                   disabled={
-                    busy || !email || cooldown > 0 || (needsCaptcha && !token)
+                    busy ||
+                    !email ||
+                    !!fieldErrors.email ||
+                    cooldown > 0 ||
+                    (needsCaptcha && !token)
                   }
                   onClick={() => void send()}
                 >
@@ -421,9 +506,20 @@ export function Login({
                 </button>
               )}
             </div>
-            {mode !== "mfa" && challenge && (
-              <small className="field-note">
-                {tr("验证码 10 分钟内有效。")}
+            {fieldErrors.code && (
+              <small
+                id="auth-code-error"
+                className="field-note field-error"
+                role="alert"
+              >
+                {tr(fieldErrors.code)}
+              </small>
+            )}
+            {mode !== "mfa" && (
+              <small id="auth-code-note" className="field-note">
+                {tr(
+                  challenge ? "验证码 10 分钟内有效。" : "发送验证码后可填写。",
+                )}
               </small>
             )}
           </div>

@@ -1,6 +1,12 @@
 import { t as tr } from "../../lib/ui/i18n.js";
 import { number } from "../../lib/ui/components.js";
-export function RoutingDetails({ value }: { value: string }) {
+export function RoutingDetails({
+  value,
+  requestedModel,
+}: {
+  value: string;
+  requestedModel?: string;
+}) {
   let data: Record<string, any>;
   try {
     data = JSON.parse(value);
@@ -17,6 +23,15 @@ export function RoutingDetails({ value }: { value: string }) {
     budget.reservedTokens > 0;
   return (
     <>
+      {typeof routing.targetModel === "string" &&
+        routing.targetModel !== requestedModel && (
+          <dl className="detail-grid">
+            <div>
+              <dt>{tr("实际模型")}</dt>
+              <dd>{routing.targetModel}</dd>
+            </div>
+          </dl>
+        )}
       {Number.isSafeInteger(webSearchCalls) && (
         <dl className="detail-grid">
           <div>
@@ -48,10 +63,10 @@ export function RoutingDetails({ value }: { value: string }) {
         </dl>
       )}
       {Object.keys(routing).length > 0 && (
-        <div className="card">
-          <h3>{tr("自动路由 / 思考设置")}</h3>
+        <details>
+          <summary>{tr("路由诊断")}</summary>
           <pre>{JSON.stringify(routing, null, 2)}</pre>
-        </div>
+        </details>
       )}
     </>
   );

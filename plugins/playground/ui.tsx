@@ -12,12 +12,14 @@ import {
   latency,
 } from "../../lib/ui/components.js";
 import { readChatStream } from "./chat-stream.js";
-type Message = {
-  role: "user" | "assistant";
-  content: string;
-  incomplete?: boolean;
-  citations?: UrlCitation[];
-};
+import {
+  chatStorageKey,
+  readChat,
+  saveChat,
+  type Message,
+  type ChatMeta,
+  type ChatSession,
+} from "./session.js";
 function Answer({ message }: { message: Message }) {
   const citations = [...(message.citations ?? [])].sort(
     (a, b) => a.startIndex - b.startIndex,
@@ -48,12 +50,20 @@ function Answer({ message }: { message: Message }) {
     cursor = citation.endIndex;
   }
   parts.push(message.content.slice(cursor));
-  return <p>{message.content ? parts : tr("正在等待模型响应…")}</p>;
+  return (
+    <p>
+      {message.content
+        ? parts
+        : message.incomplete
+          ? tr("调用未完成")
+          : tr("正在等待模型响应…")}
+    </p>
+  );
 }
 function Page({ host }: { host: UIHost }) {
-  const [channel, setChannel] = React.useState(
-    new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "",
-  );
+  const [storageKey] = React.useState(chatStorageKey);
+  const [initial] = React.useState(() => readChat(storageKey));
+  const [channel, setChannel] = React.useState(initial.channel);
   const channels = useLoad<any[]>(() =>
     host.request("/api/plugins/official.ai-router/channels").catch(() => []),
   );
@@ -65,35 +75,80 @@ function Page({ host }: { host: UIHost }) {
       ),
     [channel],
   );
-  const [model, setModel] = React.useState(
-    new URLSearchParams(location.hash.split("?")[1]).get("model") ?? "",
-  );
-  const [modelChannel, setModelChannel] = React.useState(channel);
+  const [model, setModel] = React.useState(initial.model);
+  const [modelChannel, setModelChannel] = React.useState(initial.modelChannel);
   const selectedModel = models.data?.find(
     (item) => item.id === model && item.channel?.id === modelChannel,
   );
   const selection = selectedModel ? JSON.stringify([modelChannel, model]) : "";
-  const [prompt, setPrompt] = React.useState("");
-  const [system, setSystem] = React.useState("");
-  const [temperature, setTemperature] = React.useState("0.7");
-  const [maxTokens, setMaxTokens] = React.useState("1024");
-  const [messages, setMessages] = React.useState<Message[]>([]);
+  const [prompt, setPrompt] = React.useState(initial.prompt);
+  const [system, setSystem] = React.useState(initial.system);
+  const [temperature, setTemperature] = React.useState(initial.temperature);
+  const [maxTokens, setMaxTokens] = React.useState(initial.maxTokens);
+  const [messages, setMessages] = React.useState<Message[]>(initial.messages);
   const [busy, setBusy] = React.useState(false);
   const [settings, setSettings] = React.useState(false);
   const [error, setError] = React.useState("");
-  const [meta, setMeta] = React.useState<{
-    id?: string;
-    first?: number;
-    elapsed?: number;
-    tokens?: number;
-  }>({});
+  const [meta, setMeta] = React.useState<ChatMeta>(initial.meta);
   const controller = React.useRef<AbortController | null>(null);
-  const session = React.useRef<string>("");
-  if (!session.current) session.current = crypto.randomUUID();
+  const session = React.useRef(initial.sessionId);
   const transcript = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => () => controller.current?.abort(), []);
+  const latest = React.useRef<ChatSession>(initial);
+  latest.current = {
+    version: 1,
+    sessionId: session.current,
+    channel,
+    model,
+    modelChannel,
+    prompt,
+    system,
+    temperature,
+    maxTokens,
+    meta,
+    messages: busy
+      ? messages.map((message, index) =>
+          index === messages.length - 1 && message.role === "assistant"
+            ? { ...message, incomplete: true }
+            : message,
+        )
+      : messages,
+  };
+  React.useEffect(() => {
+    const timer = setTimeout(() => saveChat(storageKey, latest.current), 250);
+    return () => clearTimeout(timer);
+  }, [
+    channel,
+    model,
+    modelChannel,
+    prompt,
+    system,
+    temperature,
+    maxTokens,
+    messages,
+    meta,
+    busy,
+    storageKey,
+  ]);
+  React.useEffect(() => {
+    const save = () => saveChat(storageKey, latest.current);
+    window.addEventListener("pagehide", save);
+    return () => {
+      save();
+      window.removeEventListener("pagehide", save);
+      controller.current?.abort();
+    };
+  }, [storageKey]);
   React.useEffect(() => {
     if (!models.data?.length) return;
+    if (
+      model &&
+      !models.data.some(
+        (item) =>
+          item.id === model &&
+          (!modelChannel || item.channel?.id === modelChannel),
+      )
+    )
+      return;
     const match =
       models.data.find(
         (item) =>
@@ -114,7 +169,8 @@ function Page({ host }: { host: UIHost }) {
       ...messages.filter((m) => !m.incomplete),
       { role: "user" as const, content: prompt },
     ];
-    setMessages([...history, { role: "assistant", content: "" }]);
+    const answer = { role: "assistant" as const, model, channel: modelChannel };
+    setMessages([...history, { ...answer, content: "" }]);
     setPrompt("");
     setBusy(true);
     setError("");
@@ -164,7 +220,7 @@ function Page({ host }: { host: UIHost }) {
           text += delta;
           setMessages([
             ...history,
-            { role: "assistant", content: text, citations: [...citations] },
+            { ...answer, content: text, citations: [...citations] },
           ]);
         }
         for (const annotation of event.choices?.[0]?.delta?.annotations ?? []) {
@@ -190,7 +246,7 @@ function Page({ host }: { host: UIHost }) {
             citations.push(citation);
           setMessages([
             ...history,
-            { role: "assistant", content: text, citations: [...citations] },
+            { ...answer, content: text, citations: [...citations] },
           ]);
         }
         if (event.usage)
@@ -206,7 +262,7 @@ function Page({ host }: { host: UIHost }) {
       setMessages([
         ...history,
         {
-          role: "assistant",
+          ...answer,
           content:
             text ||
             (abort.signal.aborted ? tr("已停止生成") : tr("调用未完成")),
@@ -242,6 +298,13 @@ function Page({ host }: { host: UIHost }) {
         </button>
       </PageHeading>
       <Notice message={error || models.error} />
+      {!models.error && models.data && model && !selectedModel && (
+        <Notice
+          message={tr(
+            "所选模型或渠道已不可用，请重新选择。默认不会切换到其他渠道。",
+          )}
+        />
+      )}
       {!!channels.data?.length && (
         <div className="chat-toolbar">
           <label>
@@ -251,12 +314,11 @@ function Page({ host }: { host: UIHost }) {
               value={channel}
               disabled={busy}
               onChange={(e) => {
-                session.current = crypto.randomUUID();
                 setChannel(e.target.value);
                 setModel("");
                 setModelChannel("");
-                setMessages([]);
                 setMeta({});
+                setError("");
               }}
             >
               <option value="">{tr("全部渠道")}</option>
@@ -281,7 +343,7 @@ function Page({ host }: { host: UIHost }) {
                   </span>
                   <div>
                     <strong>
-                      {m.role === "user" ? tr("你") : model}
+                      {m.role === "user" ? tr("你") : (m.model ?? model)}
                       {m.incomplete ? tr(" · 未完成") : ""}
                     </strong>
                     <Answer message={m} />
@@ -322,14 +384,13 @@ function Page({ host }: { host: UIHost }) {
                   value={selection}
                   disabled={busy}
                   onChange={(e) => {
-                    session.current = crypto.randomUUID();
                     const [selectedChannel, selectedId] = JSON.parse(
                       e.target.value,
                     ) as [string, string];
                     setModel(selectedId);
                     setModelChannel(selectedChannel);
-                    setMessages([]);
                     setMeta({});
+                    setError("");
                   }}
                 >
                   <option value="" disabled>
@@ -419,15 +480,26 @@ function Page({ host }: { host: UIHost }) {
       )}
       {(meta.id || meta.elapsed != null) && (
         <div className="chat-meta">
+          {meta.id ? (
+            <a
+              className="text-link"
+              href={
+                "#/activity?requestId=" +
+                encodeURIComponent(meta.id) +
+                "&scope=me"
+              }
+            >
+              {tr("请求 {0}", { "0": textValue(meta.id?.slice(0, 8) ?? "—") })}
+            </a>
+          ) : (
+            <span>{tr("请求 {0}", { "0": "—" })}</span>
+          )}
           <span>
-            {tr("请求 {0}", { "0": textValue(meta.id?.slice(0, 8) ?? "—") })}
-          </span>
-          <span>
-            {tr("首字延迟")}
+            {tr("客户端首字延迟")}
             {latency(meta.first)}
           </span>
           <span>
-            {tr("耗时")}
+            {tr("客户端总耗时")}
             {latency(meta.elapsed)}
           </span>
           <span>{number(meta.tokens)} Token</span>

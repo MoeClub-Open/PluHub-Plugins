@@ -825,16 +825,18 @@ export function installPersonalChannels(
       );
       let usage,
         finished = false,
-        text = false;
+        text = "";
       for await (const event of events) {
         if (event.type === "usage") usage = event.usage;
-        if (event.type === "text" && event.text.trim()) text = true;
+        if (event.type === "text") text += event.text;
         if (event.type === "finish") finished = event.reason === "stop";
       }
-      if (!finished || !text)
+      if (!finished || !text.trim())
         throw new HostError("upstream_protocol", "上游没有返回完整文本", 502);
       return json({
         ok: true,
+        model,
+        text,
         latencyMs: Math.round(performance.now() - start),
         usage,
       });

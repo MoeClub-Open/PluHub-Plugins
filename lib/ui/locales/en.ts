@@ -2357,4 +2357,36 @@ export const en: Record<string, string> = {
   撤销编辑: "Undo edit",
   重做编辑: "Redo edit",
   "已选中密钥，请手动复制": "Key selected. Copy it manually.",
+  "所选模型或渠道已不可用，请重新选择。默认不会切换到其他渠道。":
+    "The selected model or channel is unavailable. Choose another; channels are never switched automatically.",
+  客户端首字延迟: "Client time to first token",
+  客户端总耗时: "Client total time",
+  "服务端耗时 / 首 Token": "Server time / first token",
+  服务端完成耗时: "Server completion time",
+  "服务端首 Token 延迟": "Server time to first token",
+  实际模型: "Actual model",
+  渠道已删除或不可用: "Channel removed or unavailable",
+  路由诊断: "Routing diagnostics",
+  "路由与优先级（可选）": "Routing and priority (optional)",
+  "价格设置（USD / 百万 Token，可选）":
+    "Pricing (USD / million tokens, optional)",
+  "必填，每行一个上游 Key": "Required; one upstream key per line",
+  复制上游密钥: "Copy upstream key",
+  测试个人渠道: "Test personal channel",
+  测试模型: "Test model",
+  "测试请求使用上游额度。": "Test requests consume your upstream quota.",
+  模型回复: "Model response",
+  "{0} · {4} 调用成功 · {1} ms · 输入 {2} / 输出 {3} Token":
+    "{0} · {4} succeeded · {1} ms · input {2} / output {3} tokens",
+  "用户名须为 3–64 位，以字母或数字开头，仅支持字母、数字、下划线、点和短横线。":
+    "Use 3–64 characters, starting with a letter or number. Letters, numbers, underscores, dots and hyphens are allowed.",
+  "请输入用户名。": "Enter a username.",
+  "请输入有效的邮箱地址。": "Enter a valid email address.",
+  "密码至少需要 12 个字符。":
+    "Your password must contain at least 12 characters.",
+  "请输入密码。": "Enter your password.",
+  "请再次输入至少 12 个字符的密码。":
+    "Re-enter your password of at least 12 characters.",
+  "请输入六位数字验证码。": "Enter the six-digit verification code.",
+  "发送验证码后可填写。": "Available after sending a verification code.",
 };

@@ -18,33 +18,11 @@ import { SubscriptionAccounts } from "../../lib/ui/subscription-accounts.js";
 import { parseApiConnection } from "../../lib/ai/personal-api.js";
 import { listSubscriptionAccounts } from "../../lib/ui/subscription-providers.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
-import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
-import type {
-  ModelRoute,
-  ModelDefinition,
-  Protocol,
-} from "@pluhub/contracts/ai";
+import type { Protocol } from "@pluhub/contracts/ai";
+import { PersonalModels, emptyModel, type Model } from "./models-ui.js";
+import { ChannelActions } from "./channel-actions.js";
 import type { SubscriptionModel } from "../../lib/ai/subscription-models.js";
 const api = "/api/plugins/official.byok";
-type Model = {
-  definition?: ModelDefinition;
-  alias: string;
-  model: string;
-  inputPrice: string;
-  outputPrice: string;
-  upstreamInputPrice: string;
-  upstreamOutputPrice: string;
-  pricingSource?: string;
-  operations?: ModelRoute["operations"];
-};
-const emptyModel = (): Model => ({
-  alias: "",
-  model: "",
-  inputPrice: "",
-  outputPrice: "",
-  upstreamInputPrice: "",
-  upstreamOutputPrice: "",
-});
 function Page({ host }: { host: UIHost }) {
   const channels = useLoad<any[]>(() =>
     host.request(api + "/personal-channels"),
@@ -71,6 +49,14 @@ function Page({ host }: { host: UIHost }) {
     [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false),
     [models, setModels] = React.useState<Model[]>([]);
+  const [testing, setTesting] = React.useState<any>();
+  const [testModel, setTestModel] = React.useState("");
+  const [testResult, setTestResult] = React.useState<{
+    model: string;
+    text: string;
+    latencyMs: number;
+    usage?: { input: number; output: number };
+  }>();
   const [synced, setSynced] = React.useState<any>();
   const [revealed, setRevealed] = React.useState<{
     name: string;
@@ -216,11 +202,6 @@ function Page({ host }: { host: UIHost }) {
         : [emptyModel()],
     );
   }
-  function patchModel(index: number, patch: Partial<Model>) {
-    setModels((rows) =>
-      rows.map((m, i) => (i === index ? { ...m, ...patch } : m)),
-    );
-  }
   function addPickedModels() {
     const selected = new Set(pickedModels),
       existing = new Set(models.map((model) => model.model)),
@@ -263,22 +244,25 @@ function Page({ host }: { host: UIHost }) {
           body: JSON.stringify({ ...channel, enabled: !channel.enabled }),
         });
       else {
+        setTestResult(undefined);
         const result = await host.request<any>(
           api + "/personal-channels/test",
           {
             method: "POST",
             body: JSON.stringify({
               id: channel.id,
-              model: Object.keys(channel.models)[0],
+              model: testModel,
             }),
           },
         );
+        setTestResult(result);
         setMessage(
-          tr("{0} 调用成功 · {1} ms · 输入 {2} / 输出 {3} Token", {
+          tr("{0} · {4} 调用成功 · {1} ms · 输入 {2} / 输出 {3} Token", {
             "0": textValue(channel.name),
             "1": textValue(result.latencyMs),
             "2": textValue(result.usage?.input ?? "未知"),
             "3": textValue(result.usage?.output ?? "未知"),
+            "4": textValue(result.model),
           }),
         );
       }
@@ -401,7 +385,7 @@ function Page({ host }: { host: UIHost }) {
               {tr("添加渠道")}
             </button>
           </PageHeading>
-          {!editing && !removing && (
+          {!editing && !removing && !testing && (
             <Notice message={message || channels.error || presets.error} />
           )}
           <div className="list-toolbar">
@@ -511,23 +495,6 @@ function Page({ host }: { host: UIHost }) {
                           >
                             {tr("设置")}
                           </button>
-                          {!c.subscriptionAccountId && c.hasCredential && (
-                            <button
-                              className="ghost"
-                              disabled={busy}
-                              onClick={() => void copyKeys(c)}
-                            >
-                              <Icon name="copy" size={14} />
-                              {tr("复制密钥")}
-                            </button>
-                          )}
-                          <button
-                            className="ghost"
-                            disabled={busy}
-                            onClick={() => setGraph(c.id)}
-                          >
-                            {tr("流程图")}
-                          </button>
                           <button
                             className="ghost"
                             disabled={
@@ -536,36 +503,34 @@ function Page({ host }: { host: UIHost }) {
                               !c.enabled ||
                               !c.hasCredential
                             }
-                            onClick={() => void mutate(c, "test")}
+                            onClick={() => {
+                              setTesting(c);
+                              setTestModel(Object.keys(c.models)[0] ?? "");
+                              setTestResult(undefined);
+                              setMessage("");
+                            }}
                           >
                             {tr("测试调用")}
                           </button>
                           <a
                             className="button ghost"
                             href={
-                              "#/auth?create=1&channel=" +
-                              encodeURIComponent(c.id)
+                              "#/playground?channel=" + encodeURIComponent(c.id)
                             }
                           >
-                            {tr("绑定新密钥")}
+                            {tr("在线对话")}
                           </a>
-                          <button
-                            className="ghost"
-                            disabled={busy || c.blocked || !c.hasCredential}
-                            onClick={() => void mutate(c, "state")}
-                          >
-                            {c.enabled ? tr("停用") : tr("启用")}
-                          </button>
-                          <button
-                            className="ghost danger"
-                            disabled={busy}
-                            onClick={() => {
+                          <ChannelActions
+                            channel={c}
+                            busy={busy}
+                            copy={() => void copyKeys(c)}
+                            graph={() => setGraph(c.id)}
+                            toggle={() => void mutate(c, "state")}
+                            remove={() => {
                               setMessage("");
                               setRemoving(c);
                             }}
-                          >
-                            {tr("删除")}
-                          </button>
+                          />
                         </div>
                       </td>
                     </tr>
@@ -592,6 +557,62 @@ function Page({ host }: { host: UIHost }) {
             setSize={setSize}
           />
         </>
+      )}
+      {testing && (
+        <Dialog
+          title={tr("测试个人渠道")}
+          close={() => {
+            if (!busy) setTesting(undefined);
+          }}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void mutate(testing, "test");
+            }}
+          >
+            <strong>{testing.name}</strong>
+            <label>
+              {tr("测试模型")}
+              <Select
+                value={testModel}
+                disabled={busy}
+                onChange={(event) => {
+                  setTestModel(event.target.value);
+                  setTestResult(undefined);
+                  setMessage("");
+                }}
+              >
+                {Object.keys(testing.models).map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <small className="field-note">{tr("测试请求使用上游额度。")}</small>
+            <Notice message={message} />
+            {testResult && (
+              <div>
+                <strong>{tr("模型回复")}</strong>
+                <pre>{testResult.text}</pre>
+              </div>
+            )}
+            <div className="actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => setTesting(undefined)}
+              >
+                {tr("关闭")}
+              </button>
+              <button disabled={busy || !testModel}>
+                {tr(busy ? "正在测试…" : "测试调用")}
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
       {editing && (
         <Dialog
@@ -845,7 +866,11 @@ function Page({ host }: { host: UIHost }) {
                     name="key"
                     rows={3}
                     autoComplete="off"
-                    placeholder={tr("每行一个 Key；留空保留现有密钥")}
+                    placeholder={tr(
+                      editing.hasCredential
+                        ? "每行一个 Key；留空保留现有密钥"
+                        : "必填，每行一个上游 Key",
+                    )}
                     required={!editing.hasCredential}
                     maxLength={16384}
                     disabled={busy}
@@ -857,65 +882,34 @@ function Page({ host }: { host: UIHost }) {
                 </label>
               </>
             )}
-            <label>
-              {tr("优先级")}
-              <input
-                type="number"
-                min="-1000000"
-                max="1000000"
-                step="1"
-                value={editing.priority ?? 0}
-                disabled={busy}
-                onChange={(e) =>
-                  setEditing({ ...editing, priority: Number(e.target.value) })
-                }
-              />
-            </label>
-            {!subscription && (
-              <UpstreamInterfaces
-                protocol={editing.protocol}
-                value={editing.interfaces}
-                onChange={(interfaces) =>
-                  setEditing({ ...editing, interfaces })
-                }
-              />
-            )}
-            <div className="section-heading">
-              <strong>
-                {subscription ? tr("模型映射") : tr("模型映射与原价")}
-              </strong>
-              {!subscription && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() =>
-                    setModels(
-                      models.map((m) => {
-                        const ref = referenceModels.data?.find(
-                          (r) => r.id === m.alias || r.id === m.model,
-                        );
-                        return ref
-                          ? {
-                              ...m,
-                              inputPrice:
-                                m.inputPrice ||
-                                (ref.inputPrice === undefined
-                                  ? ""
-                                  : String(ref.inputPrice)),
-                              outputPrice:
-                                m.outputPrice ||
-                                (ref.outputPrice === undefined
-                                  ? ""
-                                  : String(ref.outputPrice)),
-                            }
-                          : m;
-                      }),
-                    )
+            <details>
+              <summary>{tr("路由与优先级（可选）")}</summary>
+              <label>
+                {tr("优先级")}
+                <input
+                  type="number"
+                  min="-1000000"
+                  max="1000000"
+                  step="1"
+                  value={editing.priority ?? 0}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setEditing({ ...editing, priority: Number(e.target.value) })
                   }
-                >
-                  {tr("匹配平台原价")}
-                </button>
+                />
+              </label>
+              {!subscription && (
+                <UpstreamInterfaces
+                  protocol={editing.protocol}
+                  value={editing.interfaces}
+                  onChange={(interfaces) =>
+                    setEditing({ ...editing, interfaces })
+                  }
+                />
               )}
+            </details>
+            <div className="section-heading">
+              <strong>{tr("模型映射")}</strong>
               {subscription && (
                 <button
                   type="button"
@@ -1023,137 +1017,13 @@ function Page({ host }: { host: UIHost }) {
                 </div>
               </div>
             )}
-            <div
-              className={"personal-models" + (subscription ? " is-sub" : "")}
-            >
-              <table>
-                <thead>
-                  <tr>
-                    <th>{tr("公开模型名")}</th>
-                    <th>{tr("上游模型名")}</th>
-                    {!subscription && (
-                      <>
-                        <th>{tr("输入原价 $")}</th>
-                        <th>{tr("输出原价 $")}</th>
-                        <th>{tr("上游输入报价 $")}</th>
-                        <th>{tr("上游输出报价 $")}</th>
-                      </>
-                    )}
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {models.map((m, i) => {
-                    return (
-                      <tr key={i}>
-                        <td>
-                          <input
-                            aria-label={tr("公开模型名 {0}", {
-                              "0": textValue(i + 1),
-                            })}
-                            value={m.alias}
-                            required
-                            maxLength={256}
-                            disabled={busy}
-                            onChange={(e) =>
-                              patchModel(i, {
-                                alias: e.target.value,
-                                model:
-                                  m.model === m.alias
-                                    ? e.target.value
-                                    : m.model,
-                              })
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            aria-label={tr("上游模型名 {0}", {
-                              "0": textValue(i + 1),
-                            })}
-                            list={
-                              subscription
-                                ? "subscription-model-catalog"
-                                : undefined
-                            }
-                            value={m.model}
-                            required
-                            maxLength={256}
-                            disabled={busy}
-                            onChange={(e) =>
-                              patchModel(i, {
-                                model: e.target.value,
-                                alias:
-                                  !m.alias || m.alias === m.model
-                                    ? e.target.value
-                                    : m.alias,
-                              })
-                            }
-                          />
-                          {!subscription && (
-                            <details>
-                              <summary>{tr("可用端点")}</summary>
-                              <ModelEndpoints
-                                value={m.operations}
-                                onChange={(operations) =>
-                                  patchModel(i, { operations })
-                                }
-                              />
-                            </details>
-                          )}
-                        </td>
-                        {!subscription && (
-                          <>
-                            {(
-                              [
-                                "inputPrice",
-                                "outputPrice",
-                                "upstreamInputPrice",
-                                "upstreamOutputPrice",
-                              ] as const
-                            ).map((field) => (
-                              <td key={field}>
-                                <input
-                                  aria-label={`${{ inputPrice: tr("输入原价"), outputPrice: tr("输出原价"), upstreamInputPrice: tr("上游输入报价"), upstreamOutputPrice: tr("上游输出报价") }[field]} ${i + 1}`}
-                                  type="number"
-                                  min="0"
-                                  max="1000000"
-                                  step="any"
-                                  placeholder={tr("未知")}
-                                  value={m[field]}
-                                  disabled={busy}
-                                  onChange={(e) =>
-                                    patchModel(i, {
-                                      [field]: e.target.value,
-                                      pricingSource: "manual",
-                                    })
-                                  }
-                                />
-                              </td>
-                            ))}
-                          </>
-                        )}
-                        <td>
-                          <button
-                            type="button"
-                            className="ghost danger"
-                            aria-label={tr("删除模型 {0}", {
-                              "0": textValue(i + 1),
-                            })}
-                            disabled={busy || models.length === 1}
-                            onClick={() =>
-                              setModels(models.filter((_m, n) => n !== i))
-                            }
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <PersonalModels
+              models={models}
+              change={setModels}
+              subscription={subscription}
+              busy={busy}
+              references={referenceModels.data ?? []}
+            />
             {subscription && (
               <datalist id="subscription-model-catalog">
                 {modelCatalog.map((model) => (
