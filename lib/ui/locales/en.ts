@@ -2356,4 +2356,5 @@ export const en: Record<string, string> = {
   预览完成: "Preview complete",
   撤销编辑: "Undo edit",
   重做编辑: "Redo edit",
+  "已选中密钥，请手动复制": "Key selected. Copy it manually.",
 };

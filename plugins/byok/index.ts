@@ -3,7 +3,13 @@ import { splitKeys } from "../../lib/ai/upstream-key.js";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
-import { definePlugin, HostError } from "@pluhub/sdk";
+import {
+  definePlugin,
+  HostError,
+  json,
+  readObject,
+  requiredString,
+} from "@pluhub/sdk";
 import { openDatabase } from "../../lib/storage/sqlite.js";
 import {
   channelMigration,
@@ -90,6 +96,24 @@ export default definePlugin({
     }
     const keys = new SelectionPool();
     installPersonalChannels(host, db, encrypt);
+    host.api({
+      method: "POST",
+      path: "/personal-channels/keys",
+      access: "authenticated",
+      async handle(request, ctx) {
+        if (!ctx.principal?.session)
+          throw new HostError("session_required", "请登录后管理个人渠道", 403);
+        const body = await readObject(request);
+        const row = db
+          .prepare("SELECT * FROM credentials WHERE id=? AND user_id=?")
+          .get(requiredString(body.id, "id"), ctx.principal.id) as any;
+        if (!row || row.kind !== "key")
+          throw new HostError("credential_not_found", "渠道凭证不存在", 404);
+        const response = json({ keys: splitKeys(decrypt(row).key) });
+        response.headers.set("cache-control", "private, no-store");
+        return response;
+      },
+    });
     host.provide("credentials.select@1", async ({ id, userId, channel }) => {
       const row = owned(id, userId);
       if (row.channel !== channel)

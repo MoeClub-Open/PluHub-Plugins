@@ -1,3 +1,4 @@
+import { copySecret, SecretCopy } from "../../lib/ui/copy-secret.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { UpstreamInterfaces } from "../../lib/ui/upstream-interfaces.js";
 import { apiProtocols } from "../../lib/ai/upstream-interfaces.js";
@@ -71,6 +72,10 @@ function Page({ host }: { host: UIHost }) {
   const [busy, setBusy] = React.useState(false),
     [models, setModels] = React.useState<Model[]>([]);
   const [synced, setSynced] = React.useState<any>();
+  const [revealed, setRevealed] = React.useState<{
+    name: string;
+    value: string;
+  }>();
   const [connection, setConnection] = React.useState("");
   const [modelCatalog, setModelCatalog] = React.useState<SubscriptionModel[]>(
     [],
@@ -117,6 +122,24 @@ function Page({ host }: { host: UIHost }) {
       cancelled = true;
     };
   }, [editing?.protocol, editing?.subscriptionAccountId, host, subscription]);
+  async function copyKeys(channel: any) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const value = host
+        .request<{ keys: string[] }>(api + "/personal-channels/keys", {
+          method: "POST",
+          body: JSON.stringify({ id: channel.id }),
+        })
+        .then((result) => result.keys.join("\n"));
+      if (await copySecret(value)) setMessage(tr("密钥已复制"));
+      else setRevealed({ name: channel.name, value: await value });
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   const filtered = (channels.data ?? []).filter((c) =>
     [c.name, c.baseUrl, ...Object.keys(c.models)]
       .join(" ")
@@ -488,6 +511,16 @@ function Page({ host }: { host: UIHost }) {
                           >
                             {tr("设置")}
                           </button>
+                          {!c.subscriptionAccountId && c.hasCredential && (
+                            <button
+                              className="ghost"
+                              disabled={busy}
+                              onClick={() => void copyKeys(c)}
+                            >
+                              <Icon name="copy" size={14} />
+                              {tr("复制密钥")}
+                            </button>
+                          )}
                           <button
                             className="ghost"
                             disabled={busy}
@@ -1247,6 +1280,25 @@ function Page({ host }: { host: UIHost }) {
               </button>
             </div>
           </form>
+        </Dialog>
+      )}
+      {revealed && (
+        <Dialog
+          title={revealed.name}
+          close={() => {
+            setRevealed(undefined);
+            setMessage("");
+          }}
+        >
+          <Notice message={message} />
+          <SecretCopy
+            value={revealed.value}
+            close={() => {
+              setRevealed(undefined);
+              setMessage("");
+            }}
+            onMessage={setMessage}
+          />
         </Dialog>
       )}
       {removing && (

@@ -5,7 +5,7 @@
   "name": "账号认证",
   "description": "管理密码、会话、API Key 和多因素验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.25",
+  "version": "0.1.0-alpha.26",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

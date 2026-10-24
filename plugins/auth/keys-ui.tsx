@@ -1,3 +1,4 @@
+import { copySecret, SecretCopy } from "../../lib/ui/copy-secret.js";
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -228,19 +229,17 @@ export function Keys({ host }: { host: UIHost }) {
                         }
                         setBusy(true);
                         try {
-                          const result = await host.request<{ token: string }>(
-                            api + "/reveal",
-                            {
+                          const value = host
+                            .request<{ token: string }>(api + "/reveal", {
                               method: "POST",
                               body: JSON.stringify({ id: key.id }),
-                            },
-                          );
-                          try {
-                            await navigator.clipboard.writeText(result.token);
+                            })
+                            .then((result) => result.token);
+                          if (await copySecret(value))
                             setMessage(tr("密钥已复制"));
-                          } catch {
+                          else {
                             setEditing(undefined);
-                            setToken(result.token);
+                            setToken(await value);
                             setDialog(true);
                           }
                         } catch (error) {
@@ -308,23 +307,7 @@ export function Keys({ host }: { host: UIHost }) {
         >
           <Notice message={message} />
           {token ? (
-            <>
-              <pre className="issued-token">{token}</pre>
-              <div className="form-actions">
-                <button
-                  className="secondary"
-                  onClick={() =>
-                    void navigator.clipboard.writeText(token).then(
-                      () => setMessage(tr("密钥已复制")),
-                      () => setMessage(tr("复制失败，请手动保存。")),
-                    )
-                  }
-                >
-                  {tr("复制密钥")}
-                </button>
-                <button onClick={close}>{tr("关闭")}</button>
-              </div>
-            </>
+            <SecretCopy value={token} close={close} onMessage={setMessage} />
           ) : (
             <form
               className="key-editor"
