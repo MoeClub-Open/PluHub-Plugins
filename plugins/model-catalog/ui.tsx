@@ -1,3 +1,7 @@
+import {
+  useServiceGroups,
+  ServiceGroupSelect,
+} from "../../lib/ui/service-groups.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -54,6 +58,12 @@ function Page({ host }: { host: UIHost }) {
   const [channel, setChannel] = React.useState(
     new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "",
   );
+  const [group, setGroup] = React.useState(
+    () =>
+      new URLSearchParams(location.hash.split("?")[1]).get("group") ??
+      (channel.startsWith("personal:") ? "personal" : "default"),
+  );
+  const serviceGroups = useServiceGroups(host, guest);
   const channels = useLoad<any[]>(
     () =>
       guest
@@ -69,9 +79,11 @@ function Page({ host }: { host: UIHost }) {
         guest
           ? "/api/plugins/official.model-catalog/public"
           : "/api/plugins/official.model-catalog/models?channel=" +
-              encodeURIComponent(channel),
+              encodeURIComponent(channel) +
+              "&group=" +
+              encodeURIComponent(group),
       ),
-    [channel, guest],
+    [channel, group, guest],
   );
   const [search, setSearch] = React.useState(
     () => new URLSearchParams(location.hash.split("?")[1]).get("q") ?? "",
@@ -122,7 +134,14 @@ function Page({ host }: { host: UIHost }) {
             ]),
         ).values(),
       ]
-    : (channels.data ?? []);
+    : (channels.data ?? []).filter((c) =>
+        group === "personal"
+          ? c.scope === "personal"
+          : c.scope === "platform" &&
+            serviceGroups.data
+              ?.find((g) => g.id === group)
+              ?.channelIds.includes(c.id),
+      );
   const groups = [
     ...new Set(models.map((model) => model.channel?.id ?? "")),
   ].map((id) => ({
@@ -131,6 +150,10 @@ function Page({ host }: { host: UIHost }) {
   }));
   const playPath = (model?: CatalogModel) => {
     const params = new URLSearchParams();
+    params.set(
+      "group",
+      model?.channel?.scope === "personal" ? "personal" : group,
+    );
     if (model) params.set("model", model.id);
     const chosen = model?.channel?.id ?? channel;
     if (chosen) params.set("channel", chosen);
@@ -175,6 +198,18 @@ function Page({ host }: { host: UIHost }) {
       </PageHeading>
 
       <div className="toolbar catalog-toolbar">
+        {!guest && (
+          <ServiceGroupSelect
+            value={group}
+            groups={serviceGroups.data}
+            onChange={(value) => {
+              setGroup(value);
+              setChannel("");
+              setProvider("");
+              setSelected(undefined);
+            }}
+          />
+        )}
         <Select
           aria-label={tr("模型目录渠道")}
           value={channel}
@@ -220,7 +255,7 @@ function Page({ host }: { host: UIHost }) {
           <option value="price">{tr("输入价格从低到高")}</option>
         </Select>
       </div>
-      {loaded.error && (
+      {(loaded.error || serviceGroups.error) && (
         <div className="notice" role="alert">
           {tr("模型目录暂时无法加载。")}
           <button className="ghost" onClick={loaded.reload}>
@@ -232,7 +267,7 @@ function Page({ host }: { host: UIHost }) {
         <span role="status">
           {loaded.data
             ? tr("{0} 个模型", { "0": textValue(models.length) })
-            : loaded.error
+            : loaded.error || serviceGroups.error
               ? tr("加载失败")
               : tr("正在加载模型…")}
         </span>
@@ -497,6 +532,7 @@ function Page({ host }: { host: UIHost }) {
                   key={selected.channel?.id + ":" + selected.id}
                   host={host}
                   model={selected.id}
+                  groupId={selected.serviceGroup?.id}
                   channelId={selected.channel?.id ?? (channel || undefined)}
                   requestPriced={selected.pricing?.mode === "request"}
                   expression={selected.pricing?.expression}

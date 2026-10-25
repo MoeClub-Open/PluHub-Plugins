@@ -756,6 +756,11 @@ export function installPersonalChannels(
       const ingressProtocol = requireIngressProtocol(
         body.ingressProtocol ?? "openai-chat",
       );
+      const interfaces = Object.hasOwn(body, "interfaces")
+        ? validateInterfaces(
+            body.interfaces === null ? undefined : body.interfaces,
+          )
+        : config.interfaces;
       const result = runWorkflow(
         row.id,
         body.flow ? validateFlow(body.flow, config.models) : config.flow,
@@ -775,7 +780,7 @@ export function installPersonalChannels(
         checkProtocolConversion(
           ingressProtocol,
           resolveInterface(
-            { protocol: config.protocol, interfaces: config.interfaces },
+            { protocol: config.protocol, interfaces },
             ingressProtocol,
             model,
           ).protocol,

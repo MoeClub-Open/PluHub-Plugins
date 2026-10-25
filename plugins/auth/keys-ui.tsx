@@ -23,6 +23,7 @@ type Key = {
   expires_at?: number | null;
   last_used_at?: number;
   channelIds: string[];
+  groupId?: string | null;
 };
 export function Keys({ host }: { host: UIHost }) {
   const keys = useLoad<Key[]>(() => host.request(api));
@@ -42,13 +43,24 @@ export function Keys({ host }: { host: UIHost }) {
   const channelNames = useLoad<any[]>(() =>
     host.request("/api/plugins/official.ai-router/channels").catch(() => []),
   );
+  const groups = useLoad<{ id: string; name: string; multiplier: number }[]>(
+    () => host.request("/api/plugins/official.ai-router/groups"),
+  );
+  const groupLabel = (id: string) => {
+    const group = groups.data?.find((g) => g.id === id);
+    return group
+      ? `${group.name} · ×${group.multiplier}`
+      : id + " · " + tr("不可用");
+  };
   const initialChannel =
     new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "";
   const channelLabel = (id?: string) => {
     if (!id) return tr("平台默认路由");
     const channel = channelNames.data?.find((entry) => entry.id === id);
     return channel
-      ? `${channel.name} · ×${channel.consumptionMultiplier ?? 1}`
+      ? channel.scope === "personal"
+        ? channel.name + " · " + tr("不扣平台余额")
+        : `${channel.name} · ×${channel.consumptionMultiplier ?? 1}`
       : tr("绑定渠道不可用");
   };
   const expired = (key: Key) =>
@@ -60,6 +72,7 @@ export function Keys({ host }: { host: UIHost }) {
         key.prefix,
         ...(key.models ?? []),
         ...key.channelIds.map(channelLabel),
+        key.groupId ? groupLabel(key.groupId) : "",
       ]
         .join(" ")
         .toLowerCase()
@@ -159,7 +172,11 @@ export function Keys({ host }: { host: UIHost }) {
                       : tr("全部模型")}
                   </span>
                   <div className="key-bound-channels">
-                    {key.channelIds.length ? (
+                    {key.groupId ? (
+                      <span className="feature-pill">
+                        {groupLabel(key.groupId)}
+                      </span>
+                    ) : key.channelIds.length ? (
                       key.channelIds.map((id) => (
                         <span className="feature-pill" key={id}>
                           {channelLabel(id)}
@@ -323,6 +340,7 @@ export function Keys({ host }: { host: UIHost }) {
                       ...(editing ? { id: editing.id } : {}),
                       name: fields.get("name"),
                       channelIds: fields.getAll("channelIds").map(String),
+                      groupId: fields.get("groupId") || null,
                       models: String(fields.get("models") ?? "")
                         .split(",")
                         .map((s) => s.trim())
@@ -360,9 +378,12 @@ export function Keys({ host }: { host: UIHost }) {
               </label>
               <ChannelBinding
                 host={host}
+                initialGroup={editing?.groupId}
                 initialChannels={
                   editing?.channelIds ??
-                  (initialChannel && !editing ? [initialChannel] : [])
+                  (initialChannel.startsWith("personal:") && !editing
+                    ? [initialChannel]
+                    : [])
                 }
                 disabled={busy}
               />

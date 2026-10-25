@@ -1,8 +1,14 @@
+import { Groups } from "./groups-ui.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import { Select } from "../../lib/ui/select.js";
 import type { UIHost } from "@pluhub/ui-sdk";
-import type { Upstream, ModelRoute, ModelRedirect } from "@pluhub/contracts/ai";
+import type {
+  Upstream,
+  ModelRoute,
+  ModelRedirect,
+  ServiceGroup,
+} from "@pluhub/contracts/ai";
 import { Redirects } from "./redirect-ui.js";
 import { ChannelTable } from "./channel-table.js";
 import { ChannelModels, type ChannelModel } from "./channel-models.js";
@@ -19,6 +25,7 @@ type Router = {
   models: Record<string, ModelRoute>;
   redirects?: Record<string, ModelRedirect>;
   nextChannelId?: string;
+  groups?: Record<string, ServiceGroup>;
 };
 function Page({ host }: { host: UIHost }) {
   const loaded = useLoad<any>(() =>
@@ -27,7 +34,8 @@ function Page({ host }: { host: UIHost }) {
   const [page, setPage] = React.useState(location.hash);
   const requestedTab = new URLSearchParams(page.split("?")[1]).get("tab");
   const [tab, setTab] = React.useState(
-    requestedTab === "models" ||
+    requestedTab === "groups" ||
+      requestedTab === "models" ||
       requestedTab === "redirects" ||
       requestedTab === "advanced"
       ? requestedTab
@@ -315,6 +323,14 @@ function Page({ host }: { host: UIHost }) {
         </button>
         <button
           role="tab"
+          aria-selected={tab === "groups"}
+          className={tab === "groups" ? "active" : ""}
+          onClick={() => setTab("groups")}
+        >
+          {tr("使用分组")}
+        </button>
+        <button
+          role="tab"
           aria-selected={tab === "redirects"}
           className={tab === "redirects" ? "active" : ""}
           onClick={() => setTab("redirects")}
@@ -332,6 +348,15 @@ function Page({ host }: { host: UIHost }) {
           {tr("高级 JSON")}
         </button>
       </div>
+      {tab === "groups" && (
+        <Groups
+          host={host}
+          groups={router.groups}
+          upstreams={upstreams}
+          save={save}
+          busy={busy}
+        />
+      )}
       {tab === "redirects" && (
         <Redirects
           rules={router.redirects ?? {}}

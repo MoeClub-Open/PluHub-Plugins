@@ -1,3 +1,4 @@
+import { resolveGroup, groupPricing } from "./groups.js";
 import { HostError, type Host } from "@pluhub/sdk";
 import type {
   CatalogModel,
@@ -14,6 +15,8 @@ export interface CatalogScope {
   channelId?: string;
   channelIds?: readonly string[];
   includePersonal?: boolean;
+  personalOnly?: boolean;
+  groupId?: string;
 }
 function catalog(
   config: Record<string, any>,
@@ -68,20 +71,55 @@ export async function readCatalog(
   input: CatalogScope = {},
   signal?: AbortSignal,
 ): Promise<CatalogModel[]> {
+  if (input.groupId && input.channelId?.startsWith("personal:"))
+    throw new HostError("channel_forbidden", "分组密钥不能调用个人渠道", 403);
   const allowed = input.channelIds?.length ? input.channelIds : undefined;
   if (input.channelId && allowed && !allowed.includes(input.channelId))
     throw new HostError("channel_forbidden", "渠道不在密钥授权范围内", 403);
-  const models = catalog(host.config(), input.channelId).filter(
-    (model) => !allowed || allowed.includes(model.channelId!),
-  );
+  const group =
+    input.personalOnly ||
+    input.channelId?.startsWith("personal:") ||
+    (!input.groupId && allowed)
+      ? undefined
+      : resolveGroup(host.config(), input.groupId, input.principalId);
+  if (group && input.channelId && !group.channelIds.includes(input.channelId))
+    throw new HostError("channel_forbidden", "渠道不在使用分组内", 403);
+  const models: CatalogModel[] = (
+    input.personalOnly ? [] : catalog(host.config(), input.channelId)
+  )
+    .filter(
+      (model) =>
+        (!allowed || allowed.includes(model.channelId!)) &&
+        (!group || group.channelIds.includes(model.channelId!)),
+    )
+    .map((model) => {
+      const billing = groupPricing(model.billing, group);
+      return {
+        ...model,
+        billing,
+        consumptionMultiplier:
+          (model.consumptionMultiplier ?? 1) * (group?.multiplier ?? 1),
+        ...(group
+          ? {
+              serviceGroup: {
+                id: group.id,
+                name: group.name,
+                multiplier: group.multiplier ?? 1,
+              },
+            }
+          : {}),
+      };
+    });
   const personal = input.channelId
     ? input.channelId.startsWith("personal:")
       ? [input.channelId]
       : []
-    : allowed?.filter((id) => id.startsWith("personal:"));
+    : !input.groupId
+      ? allowed?.filter((id) => id.startsWith("personal:"))
+      : [];
   if (
     !personal?.length &&
-    !(input.includePersonal && !input.channelId && !allowed)
+    !(input.includePersonal && !input.channelId && !allowed && !input.groupId)
   )
     return models.sort(
       (a, b) => (b.channelPriority ?? 0) - (a.channelPriority ?? 0),

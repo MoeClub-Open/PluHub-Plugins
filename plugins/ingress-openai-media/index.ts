@@ -57,6 +57,7 @@ export default definePlugin({
               ...channelScope(
                 ctx.principal,
                 request.headers.get("x-pluhub-channel") ?? undefined,
+                request.headers.get("x-pluhub-group") ?? undefined,
               ),
               pricingContext: capturePricingContext(
                 decoded.operation!.input,

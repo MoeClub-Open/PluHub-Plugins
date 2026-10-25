@@ -18,6 +18,7 @@ export type ChatSession = {
   version: 1;
   sessionId: string;
   channel: string;
+  group?: string;
   model: string;
   modelChannel: string;
   prompt: string;
@@ -53,17 +54,20 @@ export function readChat(key: string): ChatSession {
   }
   const params = new URLSearchParams(location.hash.split("?")[1]);
   const channel = params.get("channel"),
-    model = params.get("model");
+    model = params.get("model"),
+    group = params.get("group");
   if (
     saved &&
     (channel === null || channel === saved.channel) &&
-    (model === null || model === saved.model)
+    (model === null || model === saved.model) &&
+    (group === null || group === saved.group)
   )
     return saved;
   return {
     version: 1,
     sessionId: crypto.randomUUID(),
     channel: channel ?? "",
+    group: group ?? (channel?.startsWith("personal:") ? "personal" : "default"),
     model: model ?? "",
     modelChannel: channel ?? "",
     prompt: "",

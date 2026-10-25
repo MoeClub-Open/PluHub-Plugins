@@ -1,3 +1,4 @@
+import { resolveGroup, groupPricing } from "./groups.js";
 import { SelectionPool } from "../../lib/ai/selection.js";
 import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
@@ -46,6 +47,7 @@ export async function planRoute(
       principalId: input.principalId,
       channelId: input.channelId,
       channelIds: input.channelIds,
+      groupId: input.groupId,
     },
     signal,
   );
@@ -57,7 +59,7 @@ export async function planRoute(
       ),
   );
   if (!matches.length) {
-    if (input.channelIds?.length)
+    if (input.channelIds?.length || input.groupId)
       throw new HostError("model_not_found", "绑定渠道中没有此模型", 404);
     return resolvePlan(host, input, signal, requestedModel);
   }
@@ -106,7 +108,7 @@ export async function planRoute(
         if (!state.available) {
           unavailable = new HostError(
             "subscription_unavailable",
-            "渠道订阅账号暂不可用",
+            "渠道订阅账号暂不可用，请检查授权状态、额度或模型支持情况",
             503,
           );
           continue;
@@ -146,6 +148,11 @@ async function resolvePlan(
       models: channel.models,
     };
   }
+  const group =
+    input.channelId?.startsWith("personal:") ||
+    (!input.groupId && input.channelIds?.length)
+      ? undefined
+      : resolveGroup(host.config(), input.groupId, input.principalId);
   const models = (config.models ?? {}) as Record<string, ModelRoute>;
   const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
   const redirects = (config.redirects ?? {}) as Record<string, ModelRedirect>;
@@ -183,6 +190,8 @@ async function resolvePlan(
     const route = Object.hasOwn(models, model) ? models[model] : undefined;
     if (!route || route.enabled === false)
       throw new HostError("model_not_found", "Unknown model", 404);
+    if (group && !group.channelIds.includes(route.upstream))
+      throw new HostError("group_forbidden", "目标渠道不在使用分组内", 403);
     validateOperations(route.operations);
     if (
       !(route.operations ?? ["chat"]).includes(
@@ -308,6 +317,8 @@ async function resolvePlan(
           profile,
           request: prepared,
           principalId: input.principalId,
+          groupId: group?.id,
+          allowedChannelIds: group?.channelIds,
           ingressProtocol: input.ingressProtocol,
           protocolPolicy,
           pricingContext: input.pricingContext,
@@ -485,7 +496,7 @@ async function resolvePlan(
     ...(resolved.pricing
       ? {
           pricing: bindPricingContext(
-            resolved.pricing,
+            groupPricing(resolved.pricing, group)!,
             input.pricingContext ?? capturePricingContext(input.request),
           ),
         }

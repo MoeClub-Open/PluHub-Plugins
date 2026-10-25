@@ -21,7 +21,11 @@ export function installPriceQuote(host: Host) {
       const selectedChannel = body.channelId
         ? requiredString(body.channelId, "channelId", 256)
         : undefined;
-      const channels = channelScope(ctx.principal, selectedChannel);
+      const channels = channelScope(
+        ctx.principal,
+        selectedChannel,
+        body.groupId ? requiredString(body.groupId, "groupId") : undefined,
+      );
       const allowed = ctx.principal?.attributes?.models as string[] | undefined;
       if (allowed?.length && !allowed.includes(model))
         throw new HostError("forbidden", "Model is not allowed", 403);
@@ -29,7 +33,18 @@ export function installPriceQuote(host: Host) {
         principalId: ctx.principal!.id,
         ...channels,
       });
-      const selected = models.find((entry) => entry.id === model);
+      const candidates = models.filter((entry) => entry.id === model);
+      if (
+        !selectedChannel &&
+        new Set(candidates.map((entry) => JSON.stringify(entry.billing))).size >
+          1
+      )
+        throw new HostError(
+          "price_ambiguous",
+          "同名模型存在不同价格，请选择渠道后试算",
+          409,
+        );
+      const selected = candidates[0];
       if (
         !selected ||
         (!["request", "expression"].includes(

@@ -2389,4 +2389,67 @@ export const en: Record<string, string> = {
     "Re-enter your password of at least 12 characters.",
   "请输入六位数字验证码。": "Enter the six-digit verification code.",
   "发送验证码后可填写。": "Available after sending a verification code.",
+  不扣平台余额: "No platform balance deduction",
+  "个人渠道 · 不扣平台余额": "Personal channels \u00b7 No platform charge",
+  使用分组: "Service group",
+  使用范围: "Usage scope",
+  保存并离开: "Save and leave",
+  保留原渠道授权: "Keep existing channel access",
+  允许使用的用户: "Allowed users",
+  全部平台渠道: "All platform channels",
+  分组倍率: "Group multiplier",
+  分组名称: "Group name",
+  启用分组: "Enable group",
+  "实际消耗按模型价格、渠道倍率和分组倍率计算。停用分组后，绑定密钥将停止调用。":
+    "Usage is calculated from model prices, channel and group multipliers. Disabling a group stops its bound keys.",
+  密钥使用范围: "Key usage scope",
+  "平台调用按所选分组计费，从平台余额扣除。":
+    "Platform calls are billed at the selected group rates and deducted from your platform balance.",
+  "成功流式请求 · 平均完成耗时 {0}":
+    "Successful streams \u00b7 Average completion time {0}",
+  指定用户: "Selected users",
+  放弃更改并离开: "Discard and leave",
+  无可用渠道: "No available channels",
+  "此密钥保留原渠道授权和计费。选择分组后将按分组设置调用。":
+    "This key keeps its existing channel access and pricing. Selecting a group applies its settings.",
+  添加分组: "Add group",
+  继续编辑: "Continue editing",
+  编辑使用分组: "Edit service group",
+  "请先添加个人渠道。": "Add a personal channel first.",
+  预览模型: "Preview model",
+  默认分组: "Default group",
+  未进入计费: "Billing not started",
+  未进入渠道: "Routing not completed",
+  "流程需要 1–64 个节点": "A flow needs 1\u201364 nodes",
+  节点标识不能为空或重复: "Node IDs must be nonempty and unique",
+  请选择有效的请求入口节点: "Select a valid entry node",
+  "节点形成循环，请调整连线": "Nodes form a cycle; adjust the connections",
+  节点出口尚未连接: "Node output is not connected",
+  连线指向不存在的节点: "Connection points to a missing node",
+  "以下节点未接入请求路径，请连接或删除":
+    "These nodes are outside the request path; connect or remove them",
+  "无效的 TPS 设置": "Invalid token speed settings",
+  协议准入需要有效且不重复的入口协议及转换策略:
+    "Protocol admission needs unique valid ingress protocols and a conversion policy",
+  协议分支需要指定有效的入口协议:
+    "Protocol branches need a valid ingress protocol",
+  "订阅账号当前无法使用。请检查授权、额度和模型支持情况，或选择其他可用渠道。":
+    "The subscription account is unavailable. Check authorization, quota and model support, or choose another channel.",
+  "使用分组已停用或无权访问，请检查密钥分组。":
+    "The group is disabled or access is denied. Check the key binding.",
+  "目标渠道不在使用分组内，请调整分组渠道或路由目标。":
+    "The target channel is outside this group. Adjust its channels or routing target.",
+  "当前密钥无权使用此渠道，请检查绑定范围。":
+    "This key cannot access the channel. Check its scope.",
+  "平台余额不足，请充值后重试。":
+    "Insufficient platform balance. Top up and retry.",
+  "模型尚未配置有效价格，请联系管理员。":
+    "The model has no valid price. Contact an administrator.",
+  "当前使用范围内没有此模型，请重新选择模型或分组。":
+    "This model is outside your usage scope. Choose another model or group.",
+  "当前没有可用渠道，请稍后重试或联系管理员。":
+    "No channel is available. Retry later or contact an administrator.",
+  "同名模型存在不同价格，请选择渠道后试算":
+    "This model has different prices across channels. Select a channel to calculate the cost.",
+  添加使用分组: "Add service group",
 };

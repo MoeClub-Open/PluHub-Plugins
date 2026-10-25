@@ -132,6 +132,8 @@ export function removeFlowNodes(
 }
 
 type CanvasProps = {
+  disabled?: boolean;
+  invalidNodes?: readonly string[];
   flow: ChannelWorkflow;
   selected: string;
   channel?: Upstream;
@@ -145,13 +147,17 @@ type CanvasProps = {
   canUndo: boolean;
   canRedo: boolean;
 };
-type FlowNode = Node<{ node: WorkflowNode; summary: string }, "channel">;
+type FlowNode = Node<
+  { node: WorkflowNode; summary: string; invalid?: boolean },
+  "channel"
+>;
 const NodeContext = React.createContext<{
   expanded: ReadonlySet<string>;
   toggle: (id: string) => void;
   settings: (id: string) => React.ReactNode;
   remove: (id: string) => void;
   duplicate: (id: string) => void;
+  disabled?: boolean;
 }>(null!);
 
 function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
@@ -159,7 +165,14 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
     { node } = data;
   const expanded = context.expanded.has(id);
   return (
-    <div className={"flow-node" + (selected ? " is-selected" : "")}>
+    <div
+      className={"flow-node" + (selected ? " is-selected" : "")}
+      style={
+        data.invalid
+          ? { outline: "2px solid var(--danger, #dc2626)" }
+          : undefined
+      }
+    >
       {node.type !== "start" && (
         <Handle type="target" position={Position.Left} id="in" />
       )}
@@ -183,6 +196,7 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
               type="button"
               title={tr("复制节点")}
               aria-label={tr("复制节点")}
+              disabled={context.disabled}
               onClick={() => context.duplicate(id)}
             >
               <Copy size={13} />
@@ -192,6 +206,7 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
               type="button"
               title={tr("删除节点")}
               aria-label={tr("删除节点")}
+              disabled={context.disabled}
               onClick={() => context.remove(id)}
             >
               <Trash2 size={13} />
@@ -201,9 +216,13 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
       </div>
       <div className="flow-node-summary">{data.summary}</div>
       {expanded && (
-        <div className="flow-node-settings nodrag nowheel">
+        <fieldset
+          disabled={context.disabled}
+          className="flow-node-settings nodrag nowheel"
+          style={{ border: 0, margin: 0, minWidth: 0 }}
+        >
           {context.settings(id)}
-        </div>
+        </fieldset>
       )}
       {outputs(node).map((port, index) => (
         <React.Fragment key={port.field}>
@@ -286,7 +305,11 @@ function Canvas(props: CanvasProps) {
       id: node.id,
       type: "channel",
       position: positions.get(node.id)!,
-      data: { node, summary: summary(node, channel) },
+      data: {
+        node,
+        summary: summary(node, channel),
+        invalid: props.invalidNodes?.includes(node.id),
+      },
       dragHandle: ".flow-node-header",
       deletable: node.id !== flow.entry,
       selected: node.id === props.selected,
@@ -303,16 +326,21 @@ function Canvas(props: CanvasProps) {
       ),
   );
   React.useEffect(() => {
-    setNodes((current) => {
-      const previous = new Map(current.map((node) => [node.id, node]));
-      return makeNodes().map((node) => ({
-        ...node,
-        selected: previous.get(node.id)?.selected ?? node.selected,
-      }));
-    });
+    setNodes(makeNodes());
     setEdges(graphEdges(flow));
-  }, [flow, channel]);
+  }, [flow, channel, props.selected, props.invalidNodes]);
+  React.useEffect(() => {
+    const id = props.invalidNodes?.[0];
+    if (id)
+      void graph.fitView({
+        nodes: [{ id }],
+        padding: 0.5,
+        maxZoom: 1,
+        duration: 200,
+      });
+  }, [props.invalidNodes]);
   const connect = (connection: Connection, old?: Edge) => {
+    if (props.disabled) return;
     if (!connection.source || !connection.target || !connection.sourceHandle)
       return;
     update({
@@ -351,27 +379,57 @@ function Canvas(props: CanvasProps) {
   };
   function duplicate(id: string) {
     const original = flow.nodes.find((node) => node.id === id);
-    if (!original || original.type === "start" || flow.nodes.length >= 64)
+    if (
+      props.disabled ||
+      !original ||
+      original.type === "start" ||
+      flow.nodes.length >= 64
+    )
       return;
     let copy = original.type,
       n = 1;
     while (flow.nodes.some((node) => node.id === copy))
       copy = (original.type + n++) as typeof copy;
-    const point = positions.get(id)!;
+    const point = { ...positions.get(id)! };
+    const occupied = graph.getNodes();
+    do {
+      point.y += 80;
+    } while (
+      occupied.some(
+        (node) =>
+          Math.abs(node.position.x - point.x) <
+            (node.measured?.width ?? 320) + 30 &&
+          point.y < node.position.y + (node.measured?.height ?? 210) + 30 &&
+          point.y + (graph.getNode(id)?.measured?.height ?? 210) + 30 >
+            node.position.y,
+      )
+    );
     update({
       ...flow,
       nodes: [...flow.nodes, { ...structuredClone(original), id: copy }],
-      layout: { ...flow.layout, [copy]: { x: point.x + 50, y: point.y + 100 } },
+      layout: { ...Object.fromEntries(positions), [copy]: point },
     });
     select(copy);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        void graph.fitView({
+          nodes: [{ id: copy }],
+          padding: 0.5,
+          maxZoom: 1,
+          duration: 200,
+        });
+      }),
+    );
   }
   return (
     <NodeContext.Provider
       value={{
         expanded,
+        disabled: props.disabled,
         settings: props.renderSettings,
         duplicate,
         remove: (id) => {
+          if (props.disabled) return;
           update(
             removeFlowNodes(
               { ...flow, layout: Object.fromEntries(positions) },
@@ -394,7 +452,7 @@ function Canvas(props: CanvasProps) {
           className="secondary icon-button"
           title={tr("撤销编辑")}
           aria-label={tr("撤销编辑")}
-          disabled={!props.canUndo}
+          disabled={props.disabled || !props.canUndo}
           onClick={props.undo}
         >
           <Undo2 size={15} />
@@ -403,13 +461,14 @@ function Canvas(props: CanvasProps) {
           className="secondary icon-button"
           title={tr("重做编辑")}
           aria-label={tr("重做编辑")}
-          disabled={!props.canRedo}
+          disabled={props.disabled || !props.canRedo}
           onClick={props.redo}
         >
           <Redo2 size={15} />
         </button>
         <button
           className="secondary"
+          disabled={props.disabled}
           onClick={() => {
             const sizes = new Map(
               graph.getNodes().map((node) => [node.id, node.measured ?? {}]),
@@ -435,6 +494,7 @@ function Canvas(props: CanvasProps) {
         className="channel-flow-canvas"
         aria-label={tr("渠道流程画布")}
         onKeyDown={(event) => {
+          if (props.disabled) return;
           const target = event.target as HTMLElement;
           if (target.closest("input, textarea, select, [contenteditable=true]"))
             return;
@@ -451,6 +511,9 @@ function Canvas(props: CanvasProps) {
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          nodesDraggable={!props.disabled}
+          nodesConnectable={!props.disabled}
+          edgesReconnectable={!props.disabled}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={(_, node) => select(node.id)}
@@ -472,6 +535,7 @@ function Canvas(props: CanvasProps) {
           onReconnect={(edge, connection) => connect(connection, edge)}
           isValidConnection={validConnection}
           onDelete={({ nodes: deleted, edges: links }) => {
+            if (props.disabled) return;
             const next = removeFlowNodes(
               { ...flow, layout: Object.fromEntries(positions) },
               deleted.map((node) => node.id),
@@ -499,6 +563,7 @@ function Canvas(props: CanvasProps) {
           }}
           onDrop={(event) => {
             event.preventDefault();
+            if (props.disabled) return;
             const type = event.dataTransfer.getData(
               "application/pluhub-node",
             ) as WorkflowNode["type"];
@@ -515,7 +580,7 @@ function Canvas(props: CanvasProps) {
           minZoom={0.2}
           maxZoom={2}
           panOnDrag={[0, 1]}
-          deleteKeyCode={["Backspace", "Delete"]}
+          deleteKeyCode={props.disabled ? null : ["Backspace", "Delete"]}
           selectionKeyCode="Shift"
           multiSelectionKeyCode={["Control", "Meta"]}
           proOptions={{ hideAttribution: true }}

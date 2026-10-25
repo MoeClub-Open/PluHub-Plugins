@@ -6,8 +6,19 @@ import type {
   WorkflowResult,
 } from "@pluhub/contracts/workflow";
 
-const bad = (message: string): never => {
-  throw new HostError("invalid_workflow", message);
+export class WorkflowValidationError extends HostError {
+  constructor(
+    public reason: string,
+    public nodeIds: string[] = [],
+  ) {
+    super(
+      "invalid_workflow",
+      reason + (nodeIds.length ? "：" + nodeIds.join("、") : ""),
+    );
+  }
+}
+const bad = (message: string, nodeIds: string[] = []): never => {
+  throw new WorkflowValidationError(message, nodeIds);
 };
 export const ingressProtocols: readonly Protocol[] = [
   "openai-chat",
@@ -51,7 +62,7 @@ export function compileWorkflow(flow: ChannelWorkflow) {
     !flow.nodes.length ||
     flow.nodes.length > 64
   )
-    bad("A workflow needs between 1 and 64 nodes");
+    bad("流程需要 1–64 个节点");
   const nodes = new Map<string, WorkflowNode>();
   for (const raw of flow.nodes) {
     const node = structuredClone(raw);
@@ -69,7 +80,7 @@ export function compileWorkflow(flow: ChannelWorkflow) {
             value! > 1_000_000_000,
         )
       )
-        bad("请求限流需要至少一项有效的限制");
+        bad("请求限流需要至少一项有效的限制", [node.id]);
     }
     if (
       node.type === "tps" &&
@@ -87,7 +98,7 @@ export function compileWorkflow(flow: ChannelWorkflow) {
         (node.inheritDefault !== undefined &&
           typeof node.inheritDefault !== "boolean"))
     )
-      bad("无效的 TPS 设置");
+      bad("无效的 TPS 设置", [node.id]);
     if (
       node.type === "protocol" &&
       (!Array.isArray(node.allow) ||
@@ -97,26 +108,27 @@ export function compileWorkflow(flow: ChannelWorkflow) {
         node.allow.some((p) => !ingressProtocols.includes(p)) ||
         !["auto", "disabled"].includes(node.conversion))
     )
-      bad("协议准入需要有效且不重复的入口协议及转换策略");
+      bad("协议准入需要有效且不重复的入口协议及转换策略", [node.id]);
     if (
       node.type === "condition" &&
       node.test === "protocol" &&
       !ingressProtocols.includes(node.protocol as Protocol)
     )
-      bad("协议分支需要指定有效的入口协议");
-    if (!node.id || nodes.has(node.id)) bad("Node IDs must be unique");
+      bad("协议分支需要指定有效的入口协议", [node.id]);
+    if (!node.id || nodes.has(node.id))
+      bad("节点标识不能为空或重复", [node.id]);
     nodes.set(node.id, Object.freeze(node));
   }
   if (nodes.get(flow.entry)?.type !== "start")
-    bad("Entry must be a start node");
+    bad("请选择有效的请求入口节点", [flow.entry]);
   const visiting = new Set<string>(),
     done = new Set<string>();
-  function visit(id: string) {
-    if (visiting.has(id)) bad("Workflow cycles are not allowed");
+  function visit(id: string, source?: string) {
+    if (visiting.has(id)) bad("节点形成循环，请调整连线", [...visiting, id]);
     if (done.has(id)) return;
-    if (!id) bad("Workflow output is not connected");
+    if (!id) bad("节点出口尚未连接", source ? [source] : []);
     const node = nodes.get(id);
-    if (!node) bad("Workflow edge references a missing node: " + id);
+    if (!node) bad("连线指向不存在的节点", source ? [source] : [id]);
     visiting.add(id);
     if (
       node!.type !== "upstream" &&
@@ -124,16 +136,19 @@ export function compileWorkflow(flow: ChannelWorkflow) {
       node!.type !== "routing"
     ) {
       if (node!.type === "condition") {
-        visit(node!.yes);
-        visit(node!.no);
-      } else visit(node!.next);
+        visit(node!.yes, id);
+        visit(node!.no, id);
+      } else visit(node!.next, id);
     }
     visiting.delete(id);
     done.add(id);
   }
   visit(flow.entry);
   if (done.size !== nodes.size)
-    bad("All nodes must be reachable from the entry");
+    bad(
+      "以下节点未接入请求路径，请连接或删除",
+      [...nodes.keys()].filter((id) => !done.has(id)),
+    );
   return { entry: flow.entry, nodes };
 }
 export function runWorkflow(

@@ -159,7 +159,7 @@ export function Dashboard({
           value={latency(d?.avgFirstTokenMs)}
           note={
             d
-              ? tr("平均完成耗时 {0}", {
+              ? tr("成功流式请求 · 平均完成耗时 {0}", {
                   "0": textValue(latency(d.avgLatencyMs)),
                 })
               : tr("文本或工具首次输出")

@@ -62,7 +62,7 @@ it("rejects graph cycles, missing edges, unreachable and duplicate nodes", () =>
   expect(() => compileWorkflow({ ...flow, entry: "absent" })).toThrow();
   expect(() =>
     compileWorkflow({ ...flow, nodes: [...flow.nodes, flow.nodes[0]!] }),
-  ).toThrow(/unique/);
+  ).toThrow(/不能为空或重复/);
   expect(() =>
     compileWorkflow({
       ...flow,
@@ -70,13 +70,13 @@ it("rejects graph cycles, missing edges, unreachable and duplicate nodes", () =>
         n.id === "start" ? { id: "start", type: "start", next: "start" } : n,
       ),
     }),
-  ).toThrow(/cycles/);
+  ).toThrow(/循环/);
   expect(() =>
     compileWorkflow({
       ...flow,
       nodes: flow.nodes.filter((n) => n.id !== "budget"),
     }),
-  ).toThrow(/missing/);
+  ).toThrow(/不存在/);
   expect(() =>
     compileWorkflow({
       ...flow,
@@ -85,7 +85,7 @@ it("rejects graph cycles, missing edges, unreachable and duplicate nodes", () =>
         { id: "orphan", type: "upstream", target: "x", mode: "implicit" },
       ],
     }),
-  ).toThrow(/reachable/);
+  ).toThrow(/未接入请求路径/);
 });
 it("honors cancellation before a workflow runs", () => {
   const controller = new AbortController();

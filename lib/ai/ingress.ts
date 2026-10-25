@@ -73,7 +73,11 @@ export function createIngress(protocol: Protocol) {
             throw new HostError("unsupported_credential", "平台渠道凭证已移除");
           const channelHeader =
             request.headers.get("x-pluhub-channel") ?? undefined;
-          const channels = channelScope(ctx.principal, channelHeader);
+          const channels = channelScope(
+            ctx.principal,
+            channelHeader,
+            request.headers.get("x-pluhub-group") ?? undefined,
+          );
           if (host.hasCapability("auth.admit@1")) {
             await host.call(
               "auth.admit@1",

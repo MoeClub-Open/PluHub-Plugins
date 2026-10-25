@@ -1,3 +1,4 @@
+import { requestErrorHint } from "../../lib/ui/request-error.js";
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import { modelEndpoints } from "../../lib/ui/model-endpoints.js";
@@ -50,6 +51,7 @@ const billingStatus = (status: string) =>
         disabled: "未启用计费",
         unavailable: "计费记录不可用",
         unknown: "无结算记录",
+        not_started: "未进入计费",
       } as Record<string, string>
     )[status] ?? "无结算记录",
   );
@@ -670,6 +672,11 @@ function Page({ host }: { host: UIHost }) {
               </div>
             ))}
           </dl>
+          {requestErrorHint(selected.error_code) && (
+            <p className="field-note">
+              {requestErrorHint(selected.error_code)}
+            </p>
+          )}
           {selected.billing_receipt && (
             <PriceReceiptView
               value={selected.billing_receipt}

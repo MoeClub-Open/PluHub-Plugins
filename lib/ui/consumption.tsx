@@ -37,6 +37,7 @@ export const consumptionSources: Record<string, string> = {
   byosub: "BYOSUB",
   personal: "历史个人渠道",
   unknown: "未分类",
+  unrouted: "未进入渠道",
 };
 export const consumptionLabel = (source?: string) =>
   tr(consumptionSources[source ?? "unknown"] ?? "未分类");

@@ -178,6 +178,9 @@ export default definePlugin({
               request: input.request,
               ingressProtocol: input.ingressProtocol,
               protocolPolicy: input.protocolPolicy,
+              principalId: input.principalId,
+              groupId: input.groupId,
+              allowedChannelIds: input.allowedChannelIds,
             },
             signal,
           );

@@ -1,3 +1,9 @@
+import {
+  serviceGroups,
+  groupAccess,
+  resolveGroup,
+  groupPricing,
+} from "./groups.js";
 import { modelDefinition } from "../../lib/ai/model-definition.js";
 import { installConfiguration } from "./configuration.js";
 import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
@@ -43,13 +49,35 @@ import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
 export default definePlugin({
   setup(host) {
     installConfiguration(host);
+    const groups = (input?: { userId?: string }) =>
+      Object.entries(serviceGroups(host.config()))
+        .filter(([, group]) => groupAccess(group, input?.userId))
+        .map(([id, group]) => ({
+          id,
+          name: group.name,
+          multiplier: group.multiplier ?? 1,
+          channelIds:
+            group.channelIds ?? Object.keys(host.config().upstreams ?? {}),
+        }));
+    host.provide("ai.groups@1", groups);
+    host.api({
+      method: "GET",
+      path: "/groups",
+      access: "authenticated",
+      handle: async (_request, ctx) =>
+        json(groups({ userId: ctx.principal?.id })),
+    });
     const getCatalog = (input?: CatalogScope) => readCatalog(host, input);
     host.provide("ai.catalog@2", getCatalog);
     async function channels(input?: { userId?: string }) {
       const platform = Object.entries(
         (host.config().upstreams ?? {}) as Record<string, Upstream>,
       )
-        .filter(([, u]) => u.enabled !== false)
+        .filter(
+          ([id, u]) =>
+            u.enabled !== false &&
+            groups(input).some((group) => group.channelIds.includes(id)),
+        )
         .map(([id, u]) => ({
           id,
           name: u.name ?? id,
@@ -187,6 +215,7 @@ export default definePlugin({
       path: string[] = [],
       ingressProtocol?: Protocol,
       protocolPolicy?: WorkflowResult["protocolPolicy"],
+      allowedChannels?: readonly string[],
     ): { plan: AIPlan; route: ModelRoute } {
       if (path.length >= 32 || path.includes(modelId))
         throw new HostError("routing_cycle", "Target channel graph cycle");
@@ -202,6 +231,7 @@ export default definePlugin({
           [...path, modelId],
           ingressProtocol,
           protocolPolicy,
+          allowedChannels,
         );
       const route = (c.models as Record<string, ModelRoute> | undefined)?.[
         modelId
@@ -227,6 +257,8 @@ export default definePlugin({
           "Model does not support this endpoint",
           400,
         );
+      if (allowedChannels && !allowedChannels.includes(route.upstream))
+        throw new HostError("group_forbidden", "目标渠道不在使用分组内", 403);
       let upstream = channel;
       let providerModel = route.model;
       if (channel.flow) {
@@ -256,6 +288,7 @@ export default definePlugin({
             [...path, modelId],
             ingressProtocol,
             protocolPolicy,
+            allowedChannels,
           );
         const node = channel.flow.nodes.find((n) => n.id === result.providerId);
         upstream =
@@ -297,7 +330,12 @@ export default definePlugin({
           [],
           input.ingressProtocol,
           input.protocolPolicy,
+          input.allowedChannelIds,
         );
+        const group = input.groupId
+          ? resolveGroup(c, input.groupId, input.principalId)
+          : undefined;
+        target.plan.pricing = groupPricing(target.plan.pricing, group);
         const { upstream, model } = target.plan;
         if (upstream.subscriptionAccountIds) {
           const state = await host.call<{ available: boolean }>(
@@ -400,6 +438,10 @@ export default definePlugin({
         );
     }
     host.validateConfig((config) => {
+      for (const [id, group] of Object.entries(serviceGroups(config))) {
+        if (id !== "default" && !Array.isArray(group.channelIds))
+          throw new HostError("invalid_config", "分组需要选择渠道");
+      }
       for (const model of Object.values(config.models ?? {}) as ModelRoute[]) {
         routePricing(model);
         modelDefinition(model);
@@ -502,6 +544,7 @@ export default definePlugin({
         const scope = channelScope(
           ctx.principal,
           request.headers.get("x-pluhub-channel") ?? undefined,
+          request.headers.get("x-pluhub-group") ?? undefined,
         );
         const allowed = ctx.principal?.attributes?.models as
           string[] | undefined;
@@ -529,7 +572,7 @@ export default definePlugin({
           {
             headers: {
               "cache-control": "private, no-store",
-              vary: "Cookie, Authorization, x-pluhub-channel",
+              vary: "Cookie, Authorization, x-pluhub-channel, x-pluhub-group",
             },
           },
         );
@@ -710,6 +753,8 @@ export default definePlugin({
             host,
             {
               model: publicModel,
+              channelId: id,
+              channelIds: [id],
               request: task,
               features: ["text"],
               principalId: ctx.principal?.id,

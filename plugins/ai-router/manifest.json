@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.38",
+  "version": "0.1.0-alpha.39",
   "host": ">=0.1.0-alpha.15 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -16,7 +16,8 @@
     "ai.execution@1",
     "ai.catalog@2",
     "ai.channels@1",
-    "ai.targets@1"
+    "ai.targets@1",
+    "ai.groups@1"
   ],
   "requires": [],
   "permissions": ["api.register", "http.route", "http.dispatch"],
@@ -1043,6 +1044,47 @@
             },
             "enabled": {
               "type": "boolean"
+            }
+          }
+        }
+      },
+      "groups": {
+        "type": "object",
+        "propertyNames": {
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "channelIds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
+            },
+            "multiplier": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "userIds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }

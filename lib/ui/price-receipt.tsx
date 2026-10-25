@@ -58,6 +58,12 @@ export function PriceReceiptView({
           </tbody>
         </table>
       </div>
+      {p.serviceGroup && (
+        <p>
+          {tr("使用分组")} · {p.serviceGroup.name} · {tr("分组倍率")} ×
+          {p.serviceGroup.multiplier}
+        </p>
+      )}
       {showMultiplier && (
         <p>
           {tr("消耗倍率")} ×{Number(multiplier.toPrecision(12))}

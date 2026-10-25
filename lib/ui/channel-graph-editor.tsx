@@ -2,7 +2,10 @@ import {
   ChannelNodeSettings,
   ingressOptions,
 } from "./channel-node-settings.js";
-import { compileWorkflow } from "../ai/channel-graph.js";
+import {
+  compileWorkflow,
+  WorkflowValidationError,
+} from "../ai/channel-graph.js";
 import * as Popover from "@radix-ui/react-popover";
 import { Checkbox } from "./checkbox.js";
 import { listSubscriptionAccounts } from "./subscription-providers.js";
@@ -22,6 +25,14 @@ import {
   workflowNodePositions,
 } from "./channel-flow-canvas.js";
 import { defaultChannelFlow } from "../ai/channel-config.js";
+import { useUnsavedChanges } from "./unsaved-changes.js";
+type GraphDraft = {
+  channelName: string;
+  enabled: boolean;
+  priority: number;
+  personalInterfaces?: UpstreamInterface[];
+  flow: ChannelWorkflow;
+};
 export function ChannelGraphEditor({
   host,
   channelId,
@@ -46,20 +57,23 @@ export function ChannelGraphEditor({
         : "/api/plugins/official.ai-router/configuration",
     ),
   );
-  const [channelName, setChannelName] = React.useState("");
-  const [enabled, setEnabled] = React.useState(false);
-  const [priority, setPriority] = React.useState(0);
-  const [personalInterfaces, setPersonalInterfaces] =
-    React.useState<UpstreamInterface[]>();
-  const [flow, setFlow] = React.useState<ChannelWorkflow>();
-  const history = React.useRef<{
-    past: ChannelWorkflow[];
-    future: ChannelWorkflow[];
-  }>({ past: [], future: [] });
+  const [draft, setDraft] = React.useState<GraphDraft>();
+  const [baseline, setBaseline] = React.useState("");
+  const channelName = draft?.channelName ?? "";
+  const enabled = draft?.enabled ?? false;
+  const priority = draft?.priority ?? 0;
+  const personalInterfaces = draft?.personalInterfaces;
+  const flow = draft?.flow;
+  const history = React.useRef<{ past: GraphDraft[]; future: GraphDraft[] }>({
+    past: [],
+    future: [],
+  });
   const [selected, select] = React.useState("start");
   const [message, setMessage] = React.useState("");
+  const [invalidNodes, setInvalidNodes] = React.useState<string[]>([]);
   const [task, setTask] = React.useState("Hello");
   const [preview, setPreview] = React.useState<any>();
+  const [previewModel, setPreviewModel] = React.useState("");
   const [panel, setPanel] = React.useState<ChannelPanel | undefined>(
     personal ? undefined : initialPanel,
   );
@@ -85,27 +99,48 @@ export function ChannelGraphEditor({
     ...Object.keys(router?.redirects ?? {}),
   ];
   React.useEffect(() => {
-    if (channel) {
-      setChannelName(channel.name ?? "");
-      setEnabled(channel.enabled !== false);
-      setPriority(channel.priority ?? 0);
-      setPersonalInterfaces(channel.interfaces);
-      const next = structuredClone(channel.flow ?? defaultChannelFlow());
-      setFlow(next);
-      history.current = { past: [], future: [] };
-      select(next.entry);
-    }
+    if (!channel) return;
+    const next: GraphDraft = {
+      channelName: channel.name ?? "",
+      enabled: channel.enabled !== false,
+      priority: channel.priority ?? 0,
+      personalInterfaces: channel.interfaces,
+      flow: structuredClone(channel.flow ?? defaultChannelFlow()),
+    };
+    setDraft(next);
+    setBaseline(JSON.stringify(next));
+    history.current = { past: [], future: [] };
+    select(next.flow.entry);
   }, [JSON.stringify(channel)]);
   const node = flow?.nodes.find((n) => n.id === selected);
-  function update(next: ChannelWorkflow) {
-    if (flow && JSON.stringify(flow) !== JSON.stringify(next)) {
-      history.current.past = [...history.current.past.slice(-49), flow];
-      history.current.future = [];
-    }
-    setFlow(next);
+  const dirty = !!draft && JSON.stringify(draft) !== baseline;
+  function change(patch: Partial<GraphDraft>) {
+    if (!draft || busy) return;
+    const next = { ...draft, ...patch };
+    if (JSON.stringify(draft) === JSON.stringify(next)) return;
+    history.current.past = [...history.current.past.slice(-49), draft];
+    history.current.future = [];
+    setDraft(next);
+  }
+  const setChannelName = (channelName: string) => change({ channelName });
+  const setEnabled = (enabled: boolean) => change({ enabled });
+  const setPriority = (priority: number) => change({ priority });
+  const setPersonalInterfaces = (
+    personalInterfaces: UpstreamInterface[] | undefined,
+  ) => change({ personalInterfaces });
+  const update = (flow: ChannelWorkflow) => change({ flow });
+  React.useEffect(() => {
     setPreview(undefined);
     setMessage("");
-  }
+    setInvalidNodes([]);
+  }, [draft, task, previewModel, ingressProtocol, toolTask, streamTask]);
+  const previewModels = Object.entries(router?.models ?? {}).filter(
+    ([, model]: [string, any]) => personal || model.upstream === channelId,
+  );
+  React.useEffect(() => {
+    if (!previewModels.some(([id]) => id === previewModel))
+      setPreviewModel(previewModels[0]?.[0] ?? "");
+  }, [JSON.stringify(previewModels.map(([id]) => id))]);
   function add(
     type: WorkflowNode["type"],
     position?: { x: number; y: number },
@@ -200,21 +235,31 @@ export function ChannelGraphEditor({
     select(key);
   }
   function undo() {
+    if (!draft || busy) return;
     const previous = history.current.past.pop();
-    if (!previous || !flow) return;
-    history.current.future.push(flow);
-    setFlow(previous);
-    setPreview(undefined);
+    if (!previous) return;
+    history.current.future.push(draft);
+    setDraft(previous);
   }
   function redo() {
+    if (!draft || busy) return;
     const next = history.current.future.pop();
-    if (!next || !flow) return;
-    history.current.past.push(flow);
-    setFlow(next);
-    setPreview(undefined);
+    if (!next) return;
+    history.current.past.push(draft);
+    setDraft(next);
+  }
+  function showError(error: unknown) {
+    if (error instanceof WorkflowValidationError) {
+      setInvalidNodes(error.nodeIds);
+      select(error.nodeIds[0] ?? flow?.entry ?? "start");
+      setMessage(
+        tr(error.reason) +
+          (error.nodeIds.length ? "：" + error.nodeIds.join("、") : ""),
+      );
+    } else setMessage((error as Error).message);
   }
   async function save() {
-    if (!flow) return false;
+    if (!flow || !draft || busy) return false;
     const invalid = editor.current?.querySelector<
       HTMLInputElement | HTMLTextAreaElement
     >("input:invalid, textarea:invalid");
@@ -238,6 +283,7 @@ export function ChannelGraphEditor({
             enabled,
           }),
         });
+        setBaseline(JSON.stringify(draft));
         setMessage(tr("流程已保存。"));
         loaded.reload();
         saved();
@@ -254,20 +300,24 @@ export function ChannelGraphEditor({
         method: "PUT",
         body: JSON.stringify({ config: next, revision: loaded.data.revision }),
       });
+      setBaseline(JSON.stringify(draft));
       setMessage(tr("已保存"));
       loaded.reload();
       saved();
       return true;
     } catch (e) {
-      setMessage((e as Error).message);
+      showError(e);
       return false;
     } finally {
       setBusy(false);
     }
   }
   async function inspect() {
+    if (!flow || !previewModel || busy) return;
     setBusy(true);
+    setMessage("");
     try {
+      compileWorkflow(flow);
       setPreview(
         await host.request(
           personal
@@ -278,14 +328,10 @@ export function ChannelGraphEditor({
             body: JSON.stringify({
               ...(personal ? { id: channelId } : { upstream: channelId }),
               ingressProtocol,
+              interfaces: personalInterfaces ?? null,
               flow,
               request: {
-                model:
-                  (personal
-                    ? targets[0]
-                    : Object.keys(router?.models ?? {}).find(
-                        (id) => router.models[id].upstream === channelId,
-                      )) ?? "preview",
+                model: previewModel,
                 messages: [{ role: "user", text: task }],
                 tools: toolTask
                   ? [{ name: "preview_tool", parameters: { type: "object" } }]
@@ -299,11 +345,12 @@ export function ChannelGraphEditor({
       setMessage(tr("预览完成"));
     } catch (e) {
       setPreview(undefined);
-      setMessage((e as Error).message);
+      showError(e);
     } finally {
       setBusy(false);
     }
   }
+  const guard = useUnsavedChanges(dirty, save, busy);
   return (
     <section ref={editor} aria-label={tr("渠道流程编辑器")}>
       <style>{`.workflow-grid{margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}.workflow-panel{margin-top:14px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
@@ -324,7 +371,11 @@ export function ChannelGraphEditor({
           )}
         </div>
         <div className="actions">
-          <button className="secondary" disabled={busy} onClick={close}>
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() => guard.leave(close)}
+          >
             {tr("返回渠道")}
           </button>
           {manageModels && (
@@ -332,23 +383,24 @@ export function ChannelGraphEditor({
               className="secondary"
               disabled={busy || !flow}
               onClick={async () => {
-                const changed =
-                  channelName !== (channel?.name ?? "") ||
-                  enabled !== (channel?.enabled !== false) ||
-                  priority !== (channel?.priority ?? 0) ||
-                  JSON.stringify(flow) !==
-                    JSON.stringify(channel?.flow ?? defaultChannelFlow());
-                if (!changed || (await save())) manageModels();
+                guard.leave(manageModels);
               }}
             >
               {tr("模型与定价")}
             </button>
           )}
-          <button disabled={busy || !flow} onClick={() => void save()}>
+          <span className="muted" role="status">
+            {tr(dirty ? "有未保存的修改" : "已保存")}
+          </span>
+          <button
+            disabled={busy || !flow || !dirty}
+            onClick={() => void save()}
+          >
             {tr("保存流程")}
           </button>
         </div>
       </div>
+      {guard.confirmation}
       <Notice message={message || loaded.error || ""} />
       {!personal && panel && (
         <Dialog
@@ -384,6 +436,7 @@ export function ChannelGraphEditor({
         <>
           <div className="workflow-tools">
             <input
+              disabled={busy}
               aria-label={tr("渠道名称")}
               value={channelName}
               maxLength={128}
@@ -392,6 +445,7 @@ export function ChannelGraphEditor({
             <label>
               {tr("优先级")}
               <input
+                disabled={busy}
                 aria-label={tr("优先级")}
                 type="number"
                 min="-1000000"
@@ -404,6 +458,7 @@ export function ChannelGraphEditor({
             </label>
             <label className="checkbox-row">
               <Checkbox
+                disabled={busy}
                 appearance="switch"
                 checked={enabled}
                 onCheckedChange={(value) => setEnabled(value === true)}
@@ -412,7 +467,9 @@ export function ChannelGraphEditor({
             </label>
             <Popover.Root>
               <Popover.Trigger asChild>
-                <button className="secondary">＋ {tr("添加节点")}</button>
+                <button className="secondary" disabled={busy}>
+                  ＋ {tr("添加节点")}
+                </button>
               </Popover.Trigger>
               <Popover.Portal>
                 <Popover.Content
@@ -449,6 +506,8 @@ export function ChannelGraphEditor({
           </div>
           <div className="workflow-grid">
             <ChannelFlowCanvas
+              disabled={busy}
+              invalidNodes={invalidNodes}
               flow={flow}
               channel={channel}
               selected={selected}
@@ -495,12 +554,26 @@ export function ChannelGraphEditor({
 
             <div className="workflow-tools">
               <input
+                disabled={busy}
                 aria-label={tr("预览任务")}
                 className="grow"
                 value={task}
                 onChange={(e) => setTask(e.target.value)}
               />
               <Select
+                aria-label={tr("预览模型")}
+                value={previewModel}
+                disabled={busy}
+                onChange={(event) => setPreviewModel(event.target.value)}
+              >
+                {previewModels.map(([id]) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                disabled={busy}
                 aria-label={tr("预览入口协议")}
                 value={ingressProtocol}
                 onChange={(e) => {
@@ -516,6 +589,7 @@ export function ChannelGraphEditor({
               </Select>
               <label>
                 <Checkbox
+                  disabled={busy}
                   checked={toolTask}
                   onCheckedChange={(e) => setToolTask(e === true)}
                 />{" "}
@@ -523,6 +597,7 @@ export function ChannelGraphEditor({
               </label>
               <label>
                 <Checkbox
+                  disabled={busy}
                   checked={streamTask}
                   onCheckedChange={(e) => setStreamTask(e === true)}
                 />{" "}
@@ -530,7 +605,7 @@ export function ChannelGraphEditor({
               </label>
               <button
                 className="secondary"
-                disabled={busy || !flow}
+                disabled={busy || !flow || !previewModel}
                 onClick={() => void inspect()}
               >
                 {tr("预览路径")}
@@ -559,9 +634,11 @@ export function ChannelGraphEditor({
                           : preview.target,
                     ),
                     "1": textValue(
-                      preview.mode === "explicit"
-                        ? tr("显式重定向")
-                        : tr("隐式重定向"),
+                      preview.provider || preview.routingProfile
+                        ? ""
+                        : preview.mode === "explicit"
+                          ? tr("显式重定向")
+                          : tr("隐式重定向"),
                     ),
                     "2": textValue(
                       preview.request.reasoning?.effort

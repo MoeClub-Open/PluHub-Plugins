@@ -9,6 +9,7 @@ import {
   keysMigration,
   channelBindingsMigration,
   removeSingleBindingMigration,
+  serviceGroupMigration,
   keyChannelIds,
 } from "./keys.js";
 import { sessionMigration } from "./sessions.js";
@@ -67,6 +68,7 @@ export default definePlugin({
       keysMigration,
       channelBindingsMigration,
       removeSingleBindingMigration,
+      serviceGroupMigration,
     ]);
     rawHost.cleanup(() => db.close());
     const history = installSecurityHistory(rawHost, db),
@@ -206,6 +208,7 @@ export default definePlugin({
                 models: JSON.parse(row.models_json),
                 requestsPerMinute: row.requests_per_minute,
                 channelIds: boundChannels,
+                ...(row.group_id ? { groupId: row.group_id } : {}),
               }
             : {}),
         },

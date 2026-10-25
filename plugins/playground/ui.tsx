@@ -1,3 +1,8 @@
+import { requestErrorHint } from "../../lib/ui/request-error.js";
+import {
+  useServiceGroups,
+  ServiceGroupSelect,
+} from "../../lib/ui/service-groups.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -64,6 +69,11 @@ function Page({ host }: { host: UIHost }) {
   const [storageKey] = React.useState(chatStorageKey);
   const [initial] = React.useState(() => readChat(storageKey));
   const [channel, setChannel] = React.useState(initial.channel);
+  const [group, setGroup] = React.useState(
+    initial.group ??
+      (initial.channel.startsWith("personal:") ? "personal" : "default"),
+  );
+  const serviceGroups = useServiceGroups(host);
   const channels = useLoad<any[]>(() =>
     host.request("/api/plugins/official.ai-router/channels").catch(() => []),
   );
@@ -71,9 +81,11 @@ function Page({ host }: { host: UIHost }) {
     () =>
       host.request(
         "/api/plugins/official.playground/models?channel=" +
-          encodeURIComponent(channel),
+          encodeURIComponent(channel) +
+          "&group=" +
+          encodeURIComponent(group),
       ),
-    [channel],
+    [channel, group],
   );
   const [model, setModel] = React.useState(initial.model);
   const [modelChannel, setModelChannel] = React.useState(initial.modelChannel);
@@ -98,6 +110,7 @@ function Page({ host }: { host: UIHost }) {
     version: 1,
     sessionId: session.current,
     channel,
+    group,
     model,
     modelChannel,
     prompt,
@@ -118,6 +131,7 @@ function Page({ host }: { host: UIHost }) {
     return () => clearTimeout(timer);
   }, [
     channel,
+    group,
     model,
     modelChannel,
     prompt,
@@ -189,6 +203,7 @@ function Page({ host }: { host: UIHost }) {
         headers: {
           "content-type": "application/json",
           "x-pluhub-session-id": session.current,
+          ...(group !== "personal" ? { "x-pluhub-group": group } : {}),
           ...(modelChannel ? { "x-pluhub-channel": modelChannel } : {}),
         },
         body: JSON.stringify({
@@ -203,13 +218,17 @@ function Page({ host }: { host: UIHost }) {
           stream_options: { include_usage: true },
         }),
       });
+      setMeta({ id: response.headers.get("x-pluhub-request-id") ?? undefined });
       if (!response.ok) {
         if (response.status === 401) host.refresh();
         const data = await response.json();
-        throw new Error(data.error?.message ?? tr("请求失败"));
+        throw new Error(
+          requestErrorHint(data.error?.code) ||
+            data.error?.message ||
+            tr("请求失败"),
+        );
       }
       if (!response.body) throw new Error(tr("响应流为空"));
-      setMeta({ id: response.headers.get("x-pluhub-request-id") ?? undefined });
       await readChatStream(response.body, (event) => {
         const delta = event.choices?.[0]?.delta?.content;
         if (typeof delta === "string" && delta) {
@@ -297,7 +316,7 @@ function Page({ host }: { host: UIHost }) {
           {tr("新建对话")}
         </button>
       </PageHeading>
-      <Notice message={error || models.error} />
+      <Notice message={error || serviceGroups.error || models.error} />
       {!models.error && models.data && model && !selectedModel && (
         <Notice
           message={tr(
@@ -307,6 +326,19 @@ function Page({ host }: { host: UIHost }) {
       )}
       {!!channels.data?.length && (
         <div className="chat-toolbar">
+          <ServiceGroupSelect
+            value={group}
+            groups={serviceGroups.data}
+            disabled={busy}
+            onChange={(value) => {
+              setGroup(value);
+              setChannel("");
+              setModel("");
+              setModelChannel("");
+              setMeta({});
+              setError("");
+            }}
+          />
           <label>
             {tr("模型来源")}
             <Select
@@ -322,12 +354,21 @@ function Page({ host }: { host: UIHost }) {
               }}
             >
               <option value="">{tr("全部渠道")}</option>
-              {channels.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
-                  {c.name}
-                </option>
-              ))}
+              {channels.data
+                ?.filter((c) =>
+                  group === "personal"
+                    ? c.scope === "personal"
+                    : c.scope === "platform" &&
+                      serviceGroups.data
+                        ?.find((g) => g.id === group)
+                        ?.channelIds.includes(c.id),
+                )
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
+                    {c.name}
+                  </option>
+                ))}
             </Select>
           </label>
         </div>

@@ -1,3 +1,4 @@
+import { consumptionSourceSql } from "./charges.js";
 import { attachCharges, consumptionSummary } from "./charges.js";
 import { attachRequestLabels } from "./request-labels.js";
 import { join } from "node:path";
@@ -191,6 +192,7 @@ export default definePlugin({
                 "tiers",
                 "expression",
                 "context",
+                "serviceGroup",
               ].flatMap((key) => {
                 const value = (state.pricing as any)[key];
                 return value === undefined ? [] : [[key, value]];
@@ -396,12 +398,17 @@ export default definePlugin({
       if (query.has("source")) {
         const source = query.get("source")!;
         if (
-          !["platform", "byoapi", "byosub", "personal", "unknown"].includes(
-            source,
-          )
+          ![
+            "platform",
+            "byoapi",
+            "byosub",
+            "personal",
+            "unrouted",
+            "unknown",
+          ].includes(source)
         )
           throw new HostError("invalid_request", "Invalid consumption source");
-        where.push("COALESCE(consumption_source,'unknown')=?");
+        where.push(consumptionSourceSql + "=?");
         params.push(source);
       }
       return {
@@ -533,7 +540,7 @@ export default definePlugin({
         COALESCE(SUM(status='cancelled'),0) cancelled,
         COALESCE(SUM(input_tokens),0) inputTokens, COALESCE(SUM(output_tokens),0) outputTokens,
         COUNT(input_tokens) usageKnownRequests, COUNT(cost_micro_usd) pricedRequests,
-        AVG(latency_ms) avgLatencyMs, AVG(first_token_ms) avgFirstTokenMs
+        AVG(CASE WHEN status='success' AND stream=1 AND first_token_ms IS NOT NULL THEN latency_ms END) avgLatencyMs, AVG(CASE WHEN status='success' AND stream=1 THEN first_token_ms END) avgFirstTokenMs
         FROM requests WHERE ${f.sql}`,
           )
           .get(...f.params);

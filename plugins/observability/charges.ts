@@ -5,6 +5,10 @@ import type {
 } from "@pluhub/contracts/commerce";
 import type { DatabaseSync } from "node:sqlite";
 
+// Billing admission never starts for these rows; unknown settlement is reserved for requests that reached it.
+export const unroutedSql =
+  "(status IN ('error','cancelled') AND upstream IS NULL AND billing_mode IS NULL AND input_tokens IS NULL AND pricing_json IS NULL)";
+export const consumptionSourceSql = `COALESCE(consumption_source, CASE WHEN ${unroutedSql} THEN 'unrouted' ELSE 'unknown' END)`;
 const exemptSql =
   "(consumption_source IN ('byoapi','byosub','personal') OR billing_mode IN ('personal','disabled'))";
 
@@ -16,31 +20,36 @@ export async function consumptionSummary(
 ) {
   const consumption = db
     .prepare(
-      `SELECT COALESCE(consumption_source,'unknown') source,
+      `SELECT ${consumptionSourceSql} source,
     COUNT(*) requests, COALESCE(SUM(input_tokens),0) inputTokens,
     COALESCE(SUM(output_tokens),0) outputTokens, COUNT(input_tokens) usageKnownRequests,
     COUNT(cost_micro_usd) pricedRequests, SUM(cost_micro_usd)/1000000.0 estimatedCostUSD
-    FROM requests WHERE ${filter.sql} GROUP BY consumption_source`,
+    FROM requests WHERE ${filter.sql} GROUP BY source`,
     )
     .all(...filter.params);
   const scope = `${filter.sql} AND NOT COALESCE(${exemptSql},0)`;
   const pending = db
     .prepare(
-      `SELECT COUNT(*) count, MAX(rowid) last FROM requests WHERE ${scope}`,
+      `SELECT COUNT(*) count, COALESCE(SUM(${unroutedSql}),0) unstarted, MAX(rowid) last FROM requests WHERE ${scope}`,
     )
-    .get(...filter.params) as { count: number; last: number | null };
+    .get(...filter.params) as {
+    count: number;
+    unstarted: number;
+    last: number | null;
+  };
   const totals: RequestChargeTotals = {
     knownRequests: 0,
     pendingRequests: 0,
     charged: 0,
     held: 0,
   };
-  let available =
-    !pending.count || host.hasCapability("billing.request-totals@1");
-  if (available && pending.count) {
+  let unbilled = pending.unstarted;
+  const capability = host.hasCapability("billing.request-totals@1");
+  let available = pending.count === pending.unstarted || capability;
+  if (capability && pending.count) {
     try {
       const page =
-        db.prepare(`SELECT rowid, id, user_id FROM requests WHERE ${scope}
+        db.prepare(`SELECT rowid, id, user_id, ${unroutedSql} AS unstarted FROM requests WHERE ${scope}
         AND rowid>? AND rowid<=? ORDER BY rowid LIMIT 5000`);
       let cursor = 0;
       while (cursor < pending.last!) {
@@ -49,6 +58,7 @@ export async function consumptionSummary(
           rowid: number;
           id: string;
           user_id: string | null;
+          unstarted: number;
         }[];
         if (!rows.length) break;
         cursor = rows.at(-1)!.rowid;
@@ -61,6 +71,17 @@ export async function consumptionSummary(
           { requests },
           signal,
         );
+        const early = rows
+          .filter((row) => row.unstarted && row.user_id)
+          .map((row) => ({ id: row.id, userId: row.user_id! }));
+        if (early.length) {
+          const known = await host.call<RequestChargeTotals>(
+            "billing.request-totals@1",
+            { requests: early },
+            signal,
+          );
+          unbilled -= known.knownRequests + known.pendingRequests;
+        }
         for (const key of [
           "knownRequests",
           "pendingRequests",
@@ -79,7 +100,7 @@ export async function consumptionSummary(
     consumption,
     wallet: {
       chargedUSD:
-        available && (!pending.count || totals.knownRequests > 0)
+        available && (pending.count === unbilled || totals.knownRequests > 0)
           ? totals.charged / 1000000
           : null,
       heldUSD: available ? totals.held / 1000000 : null,
@@ -87,9 +108,12 @@ export async function consumptionSummary(
       unknownRequests: available
         ? Math.max(
             0,
-            pending.count - totals.knownRequests - totals.pendingRequests,
+            pending.count -
+              totals.knownRequests -
+              totals.pendingRequests -
+              unbilled,
           )
-        : pending.count,
+        : pending.count - pending.unstarted,
     },
   };
 }
@@ -128,17 +152,27 @@ export async function attachCharges(
     const personal =
       ["byoapi", "byosub", "personal"].includes(row.consumption_source) ||
       row.billing_mode === "personal";
-    const exempt = personal || row.billing_mode === "disabled";
+    const notStarted =
+      ["error", "cancelled"].includes(row.status) &&
+      !row.upstream &&
+      !row.billing_mode &&
+      row.input_tokens == null &&
+      !row.pricing_json;
+    const exempt = personal || row.billing_mode === "disabled" || notStarted;
     return {
       ...row,
+      consumption_source:
+        row.consumption_source ?? (notStarted ? "unrouted" : "unknown"),
       charged_micro_usd: charge?.charged ?? (exempt ? 0 : null),
       held_micro_usd: charge?.held ?? (exempt ? 0 : null),
       billing_status:
         charge?.status ??
         (exempt
-          ? personal
-            ? "personal"
-            : "disabled"
+          ? notStarted
+            ? "not_started"
+            : personal
+              ? "personal"
+              : "disabled"
           : !available || failed
             ? "unavailable"
             : "unknown"),
