@@ -522,7 +522,8 @@
   color: var(--muted);
   margin-bottom: 6px;
 }
-.issued-token {
+textarea.code.issued-token {
+  min-height: 72px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding: 14px;
