@@ -1,4 +1,5 @@
 import { HostError } from "@pluhub/sdk";
+import { modelPatternMatches } from "./model-pattern.js";
 import type { AIRequest, Protocol } from "@pluhub/contracts/ai";
 import type {
   ChannelWorkflow,
@@ -122,6 +123,18 @@ export function compileWorkflow(flow: ChannelWorkflow) {
       bad("协议分支需要指定有效的入口协议", [node.id]);
     if (!node.id || nodes.has(node.id))
       bad("节点标识不能为空或重复", [node.id]);
+    if (
+      node.type === "condition" &&
+      node.test === "model" &&
+      (!Array.isArray(node.models) ||
+        !node.models.length ||
+        node.models.some(
+          (model) => typeof model !== "string" || !model.trim(),
+        ) ||
+        (node.modelSource !== undefined &&
+          !["requested", "mapped"].includes(node.modelSource)))
+    )
+      bad("模型条件需要填写模型 ID 或匹配规则", [node.id]);
     nodes.set(node.id, Object.freeze(node));
   }
   if (nodes.get(flow.entry)?.type !== "start")
@@ -167,7 +180,11 @@ export function runWorkflow(
   flow: ChannelWorkflow,
   input: AIRequest,
   signal: AbortSignal,
-  context: { ingressProtocol?: Protocol } = {},
+  context: {
+    ingressProtocol?: Protocol;
+    requestedModel?: string;
+    mappedModel?: string;
+  } = {},
 ): WorkflowResult {
   const graph = compileWorkflow(flow),
     request = structuredClone(input);
@@ -250,14 +267,24 @@ export function runWorkflow(
       };
     if (node.type === "condition") {
       const yes =
-        node.test === "hasTools"
-          ? request.tools.length > 0 || !!request.webSearch
-          : node.test === "protocol"
-            ? requireIngressProtocol(context.ingressProtocol) === node.protocol
-            : node.test === "stream"
-              ? request.stream
-              : request.messages.reduce((n, m) => n + m.text.length, 0) >
-                (node.value ?? 0);
+        node.test === "model"
+          ? node.models!.some((rule) =>
+              modelPatternMatches(
+                rule,
+                node.modelSource === "mapped"
+                  ? (context.mappedModel ?? request.model)
+                  : (context.requestedModel ?? request.model),
+              ),
+            )
+          : node.test === "hasTools"
+            ? request.tools.length > 0 || !!request.webSearch
+            : node.test === "protocol"
+              ? requireIngressProtocol(context.ingressProtocol) ===
+                node.protocol
+              : node.test === "stream"
+                ? request.stream
+                : request.messages.reduce((n, m) => n + m.text.length, 0) >
+                  (node.value ?? 0);
       id = yes ? node.yes : node.no;
       continue;
     }

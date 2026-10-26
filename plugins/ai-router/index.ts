@@ -539,8 +539,20 @@ export default definePlugin({
         const ingressProtocol = requireIngressProtocol(
           body.ingressProtocol ?? "openai-chat",
         );
+        const mapping = Object.entries(
+          (host.config().models ?? {}) as Record<string, ModelRoute>,
+        )
+          .filter(([, model]) => model.upstream === id)
+          .find(([key, model]) =>
+            body.mappingId
+              ? key === body.mappingId
+              : key === body.request.model ||
+                model.publicModel === body.request.model,
+          )?.[1];
         const result = runWorkflow(id, flow, body.request, ctx.signal, {
           ingressProtocol,
+          requestedModel: body.request.model,
+          mappedModel: mapping?.model ?? body.request.model,
         });
         if (result.provider) {
           const node = flow.nodes.find((n: any) => n.id === result.providerId);
@@ -550,9 +562,7 @@ export default definePlugin({
               : upstream;
           const model =
             (node?.type === "provider" ? node.model : undefined) ||
-            (host.config().models as Record<string, ModelRoute> | undefined)?.[
-              body.request.model
-            ]?.model;
+            mapping?.model;
           checkProtocolConversion(
             ingressProtocol,
             resolveInterface(

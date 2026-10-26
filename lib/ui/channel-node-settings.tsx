@@ -1,3 +1,4 @@
+import React from "react";
 import { Checkbox } from "./checkbox.js";
 import { Select } from "./select.js";
 import { t as tr } from "./i18n.js";
@@ -53,15 +54,22 @@ export function ChannelNodeSettings({
                   test: e.target.value,
                   protocol:
                     e.target.value === "protocol" ? "openai-chat" : undefined,
+                  models: e.target.value === "model" ? [""] : undefined,
+                  modelSource:
+                    e.target.value === "model" ? "requested" : undefined,
                 })
               }
             >
               <option value="hasTools">{tr("包含工具")}</option>
               <option value="stream">{tr("流式请求")}</option>
               <option value="protocol">{tr("入口协议为")}</option>
+              <option value="model">{tr("模型 ID 匹配")}</option>
               <option value="textLengthAbove">{tr("任务字符数大于")}</option>
             </Select>
           </label>
+          {node.test === "model" && (
+            <ModelConditionFields node={node} change={change} />
+          )}
           {node.test === "protocol" && (
             <Select
               aria-label={tr("条件入口协议")}
@@ -357,6 +365,52 @@ export function ChannelNodeSettings({
           </label>
         </>
       )}
+    </>
+  );
+}
+
+function ModelConditionFields({
+  node,
+  change,
+}: {
+  node: Extract<WorkflowNode, { type: "condition" }>;
+  change: (patch: any) => void;
+}) {
+  const [text, setText] = React.useState(() => node.models?.join("\n") ?? "");
+  const signature = JSON.stringify(node.models ?? []);
+  const parse = (value: string) =>
+    value
+      .split(/\r?\n/)
+      .map((model) => model.trim())
+      .filter(Boolean);
+  React.useEffect(() => {
+    if (JSON.stringify(parse(text)) !== signature)
+      setText(node.models?.join("\n") ?? "");
+  }, [signature]);
+  return (
+    <>
+      <label>
+        {tr("比较对象")}
+        <Select
+          value={node.modelSource ?? "requested"}
+          onChange={(e) => change({ modelSource: e.target.value })}
+        >
+          <option value="requested">{tr("请求模型 ID")}</option>
+          <option value="mapped">{tr("映射后的模型 ID")}</option>
+        </Select>
+      </label>
+      <label>
+        {tr("模型 ID（每行一个，可用 *）")}
+        <textarea
+          rows={3}
+          value={text}
+          placeholder="gpt-*"
+          onChange={(e) => {
+            setText(e.target.value);
+            change({ models: parse(e.target.value) });
+          }}
+        />
+      </label>
     </>
   );
 }

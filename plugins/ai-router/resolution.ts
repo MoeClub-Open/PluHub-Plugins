@@ -164,7 +164,9 @@ export async function resolveRoute(
       if (
         input.purpose === "quote" &&
         !input.request &&
-        upstream.flow.nodes.some((node) => node.type === "condition")
+        upstream.flow.nodes.some(
+          (node) => node.type === "condition" && node.test !== "model",
+        )
       )
         throw new HostError(
           "quote_request_required",
@@ -181,7 +183,7 @@ export async function resolveRoute(
         upstream.flow,
         prepared,
         signal,
-        input,
+        { ...input, requestedModel, mappedModel: route.model },
       );
       workflows.push(result.trace);
       requestLimits.push(...(result.requestLimits ?? []));

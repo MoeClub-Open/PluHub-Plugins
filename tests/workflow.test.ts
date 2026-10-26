@@ -92,6 +92,45 @@ it("honors cancellation before a workflow runs", () => {
   controller.abort();
   expect(() => runWorkflow("p", flow, request, controller.signal)).toThrow();
 });
+it("branches by requested or mapped model ID with exact and wildcard rules", () => {
+  const flow: ChannelWorkflow = {
+    entry: "s",
+    nodes: [
+      { id: "s", type: "start", next: "c" },
+      {
+        id: "c",
+        type: "condition",
+        test: "model",
+        models: ["gpt-*", "claude-*-sonnet*"],
+        yes: "match",
+        no: "other",
+      },
+      { id: "match", type: "provider" },
+      { id: "other", type: "provider" },
+    ],
+  };
+  const signal = new AbortController().signal;
+  const context = { requestedModel: "public", mappedModel: "gpt-5" };
+  expect(runWorkflow("p", flow, request, signal, context).providerId).toBe(
+    "other",
+  );
+  (flow.nodes[1] as any).modelSource = "mapped";
+  expect(runWorkflow("p", flow, request, signal, context).providerId).toBe(
+    "match",
+  );
+  expect(
+    runWorkflow("p", flow, request, signal, {
+      mappedModel: "claude-4-sonnet-latest",
+    }).providerId,
+  ).toBe("match");
+  (flow.nodes[1] as any).models = ["gpt-5"];
+  expect(
+    runWorkflow("p", flow, request, signal, { mappedModel: "gpt-5-mini" })
+      .providerId,
+  ).toBe("other");
+  (flow.nodes[1] as any).models = [];
+  expect(() => compileWorkflow(flow)).toThrow(/模型条件/);
+});
 it("validates protocol gates and maps subscription providers to their wire protocols", () => {
   const policy = { conversion: "disabled" as const };
   for (const [ingress, provider] of [

@@ -22,8 +22,9 @@ import type { ChannelPanel } from "./channel-location.js";
 import {
   ChannelFlowCanvas,
   workflowNodeLabels as labels,
-  workflowNodePositions,
 } from "./channel-flow-canvas.js";
+import { workflowNodePositions } from "./channel-graph-operations.js";
+import { isFlowTextInput } from "./use-flow-clipboard.js";
 import { defaultChannelFlow } from "../ai/channel-config.js";
 import { useUnsavedChanges } from "./unsaved-changes.js";
 type GraphDraft = {
@@ -67,6 +68,10 @@ export function ChannelGraphEditor({
     [personal],
   );
   const [draft, setDraft] = React.useState<GraphDraft>();
+  const currentDraft = React.useRef<GraphDraft | undefined>(undefined);
+  const editing = React.useRef<{ element: Element; at: number } | undefined>(
+    undefined,
+  );
   const [baseline, setBaseline] = React.useState("");
   const channelName = draft?.channelName ?? "";
   const enabled = draft?.enabled ?? false;
@@ -116,7 +121,13 @@ export function ChannelGraphEditor({
       personalInterfaces: channel.interfaces,
       flow: structuredClone(channel.flow ?? defaultChannelFlow()),
     };
+    if (JSON.stringify(currentDraft.current) === JSON.stringify(next)) {
+      setBaseline(JSON.stringify(next));
+      return;
+    }
     setDraft(next);
+    currentDraft.current = next;
+    editing.current = undefined;
     setBaseline(JSON.stringify(next));
     history.current = { past: [], future: [] };
     select(next.flow.entry);
@@ -124,11 +135,25 @@ export function ChannelGraphEditor({
   const node = flow?.nodes.find((n) => n.id === selected);
   const dirty = !!draft && JSON.stringify(draft) !== baseline;
   function change(patch: Partial<GraphDraft>) {
-    if (!draft || busy) return;
-    const next = { ...draft, ...patch };
-    if (JSON.stringify(draft) === JSON.stringify(next)) return;
-    history.current.past = [...history.current.past.slice(-49), draft];
+    const previous = currentDraft.current;
+    if (!previous || busy) return;
+    const next = { ...previous, ...patch };
+    if (JSON.stringify(previous) === JSON.stringify(next)) return;
+    const element = document.activeElement;
+    const at = Date.now();
+    const typing =
+      element &&
+      editor.current?.contains(element) &&
+      element.matches("input, textarea");
+    if (
+      !typing ||
+      editing.current?.element !== element ||
+      at - editing.current.at > 750
+    )
+      history.current.past = [...history.current.past.slice(-49), previous];
+    editing.current = typing ? { element, at } : undefined;
     history.current.future = [];
+    currentDraft.current = next;
     setDraft(next);
   }
   const setChannelName = (channelName: string) => change({ channelName });
@@ -159,24 +184,7 @@ export function ChannelGraphEditor({
     let n = 1;
     while (flow.nodes.some((item) => item.id === key))
       key = (type + n++) as typeof key;
-    const anchor = position
-      ? undefined
-      : flow.nodes.find((n) => n.id === selected);
-    const next = position
-      ? ""
-      : anchor && "next" in anchor
-        ? anchor.next
-        : anchor &&
-            (anchor.type === "provider" ||
-              anchor.type === "upstream" ||
-              anchor.type === "routing")
-          ? anchor.id
-          : (flow.nodes.find(
-              (n) =>
-                n.type === "upstream" ||
-                n.type === "provider" ||
-                n.type === "routing",
-            )?.id ?? "provider");
+    const next = "";
     const extra =
       type === "platform"
         ? { groupId: platformGroups.data?.[0]?.id ?? "" }
@@ -207,65 +215,42 @@ export function ChannelGraphEditor({
                         : type === "tps"
                           ? { next, rate: 30, tokenizer: "o200k_base" }
                           : { target: targets[0] ?? "", mode: "implicit" };
-    const anchorPoint = workflowNodePositions(flow).get(selected);
+    const positions = workflowNodePositions(flow);
+    const anchorPoint = positions.get(selected);
+    const point = position ?? {
+      x: (anchorPoint?.x ?? 0) + 360,
+      y: anchorPoint?.y ?? 40,
+    };
+    if (!position)
+      while (
+        [...positions.values()].some(
+          (p) => Math.abs(p.x - point.x) < 340 && Math.abs(p.y - point.y) < 240,
+        )
+      )
+        point.y += 260;
     update({
       ...flow,
-      layout:
-        position || anchorPoint
-          ? {
-              ...flow.layout,
-              [key]: {
-                x: position?.x ?? anchorPoint!.x + 360,
-                y: position?.y ?? anchorPoint!.y,
-              },
-            }
-          : flow.layout,
-      nodes: [
-        ...flow.nodes.map((n) =>
-          type === "platform" &&
-          !position &&
-          n.id === selected &&
-          n.type === "provider"
-            ? { ...n, fallback: key }
-            : type === "platform" ||
-                type === "provider" ||
-                type === "routing" ||
-                type === "upstream"
-              ? n
-              : !position && n.id === selected && "next" in n
-                ? { ...n, next: key }
-                : anchor &&
-                    (anchor.type === "provider" ||
-                      anchor.type === "upstream" ||
-                      anchor.type === "routing")
-                  ? n.type === "condition"
-                    ? {
-                        ...n,
-                        yes: n.yes === selected ? key : n.yes,
-                        no: n.no === selected ? key : n.no,
-                      }
-                    : "next" in n && n.next === selected
-                      ? { ...n, next: key }
-                      : n
-                  : n,
-        ),
-        { id: key, type, ...extra } as WorkflowNode,
-      ],
+      layout: { ...Object.fromEntries(positions), [key]: point },
+      nodes: [...flow.nodes, { id: key, type, ...extra } as WorkflowNode],
     });
     select(key);
   }
   function undo() {
-    if (!draft || busy) return;
+    if (!currentDraft.current || busy) return;
     const previous = history.current.past.pop();
     if (!previous) return;
-    history.current.future.push(draft);
+    history.current.future.push(currentDraft.current);
+    currentDraft.current = previous;
+    editing.current = undefined;
     setDraft(previous);
   }
   function redo() {
-    if (!draft || busy) return;
+    if (!currentDraft.current || busy) return;
     const next = history.current.future.pop();
     if (!next) return;
-    history.current.past.push(draft);
+    history.current.past.push(currentDraft.current);
+    currentDraft.current = next;
+    editing.current = undefined;
     setDraft(next);
   }
   function showError(error: unknown) {
@@ -345,11 +330,12 @@ export function ChannelGraphEditor({
             method: "POST",
             body: JSON.stringify({
               ...(personal ? { id: channelId } : { upstream: channelId }),
+              ...(!personal ? { mappingId: previewModel } : {}),
               ingressProtocol,
               interfaces: personalInterfaces ?? null,
               flow,
               request: {
-                model: previewModel,
+                model: router.models[previewModel]?.publicModel ?? previewModel,
                 messages: [{ role: "user", text: task }],
                 tools: toolTask
                   ? [{ name: "preview_tool", parameters: { type: "object" } }]
@@ -369,7 +355,28 @@ export function ChannelGraphEditor({
   }
   const guard = useUnsavedChanges(dirty, save, busy);
   return (
-    <section ref={editor} aria-label={tr("渠道流程编辑器")}>
+    <section
+      ref={editor}
+      aria-label={tr("渠道流程编辑器")}
+      onBlurCapture={() => {
+        editing.current = undefined;
+      }}
+      onKeyDown={(event) => {
+        if (busy || !(event.ctrlKey || event.metaKey)) return;
+        const key = event.key.toLowerCase();
+        if (key === "s") {
+          event.preventDefault();
+          if (dirty) void save();
+        } else if (
+          !isFlowTextInput(event.target) &&
+          (key === "z" || key === "y")
+        ) {
+          event.preventDefault();
+          if (key === "y" || event.shiftKey) redo();
+          else undo();
+        }
+      }}
+    >
       <style>{`.workflow-grid{margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
       <div className="page-heading">
         <div>
@@ -409,6 +416,7 @@ export function ChannelGraphEditor({
           </span>
           <button
             disabled={busy || !flow || !dirty}
+            title={tr("保存流程") + " (Ctrl/Cmd+S)"}
             onClick={() => void save()}
           >
             {tr("保存流程")}
@@ -586,9 +594,9 @@ export function ChannelGraphEditor({
                 disabled={busy}
                 onChange={(event) => setPreviewModel(event.target.value)}
               >
-                {previewModels.map(([id]) => (
+                {previewModels.map(([id, model]: [string, any]) => (
                   <option key={id} value={id}>
-                    {id}
+                    {model.publicModel ?? id}
                   </option>
                 ))}
               </Select>

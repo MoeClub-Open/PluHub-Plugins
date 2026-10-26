@@ -784,7 +784,12 @@ export function installPersonalChannels(
         body.flow ? validateFlow(body.flow, config.models) : config.flow,
         body.request,
         ctx.signal,
-        { ingressProtocol },
+        {
+          ingressProtocol,
+          requestedModel: body.request.model,
+          mappedModel:
+            config.models[body.request.model]?.model ?? body.request.model,
+        },
       );
       if (result.provider) {
         const node = (body.flow ?? config.flow).nodes.find(
