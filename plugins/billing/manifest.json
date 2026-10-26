@@ -25,10 +25,7 @@
     "ai.catalog@2",
     "ai.routing@2"
   ],
-  "permissions": [
-    "api.register",
-    "hooks.register"
-  ],
+  "permissions": ["api.register", "hooks.register"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -44,11 +41,7 @@
       },
       "outputBudgetMode": {
         "type": "string",
-        "enum": [
-          "automatic",
-          "bounded",
-          "estimate"
-        ]
+        "enum": ["automatic", "bounded", "estimate"]
       }
     }
   },

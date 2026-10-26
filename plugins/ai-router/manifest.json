@@ -20,11 +20,7 @@
     "ai.groups@1"
   ],
   "requires": [],
-  "permissions": [
-    "api.register",
-    "http.route",
-    "http.dispatch"
-  ],
+  "permissions": ["api.register", "http.route", "http.dispatch"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -91,18 +87,12 @@
               "maxLength": 512
             },
             "authMode": {
-              "enum": [
-                "siwc",
-                "cli"
-              ]
+              "enum": ["siwc", "cli"]
             },
             "flow": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "entry",
-                "nodes"
-              ],
+              "required": ["entry", "nodes"],
               "properties": {
                 "name": {
                   "type": "string",
@@ -118,10 +108,7 @@
                   "additionalProperties": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "x",
-                      "y"
-                    ],
+                    "required": ["x", "y"],
                     "properties": {
                       "x": {
                         "type": "number",
@@ -145,11 +132,7 @@
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "next"
-                        ],
+                        "required": ["id", "type", "next"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -169,13 +152,7 @@
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "test",
-                          "yes",
-                          "no"
-                        ],
+                        "required": ["id", "type", "test", "yes", "no"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -227,9 +204,7 @@
                               }
                             },
                             "then": {
-                              "required": [
-                                "protocol"
-                              ]
+                              "required": ["protocol"]
                             }
                           }
                         ]
@@ -237,12 +212,7 @@
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "next",
-                          "text"
-                        ],
+                        "required": ["id", "type", "next", "text"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -267,12 +237,7 @@
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "next",
-                          "effort"
-                        ],
+                        "required": ["id", "type", "next", "effort"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -303,12 +268,7 @@
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "next",
-                          "limit"
-                        ],
+                        "required": ["id", "type", "next", "limit"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -333,12 +293,7 @@
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "next",
-                          "tokenizer"
-                        ],
+                        "required": ["id", "type", "next", "tokenizer"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -378,26 +333,17 @@
                         },
                         "anyOf": [
                           {
-                            "required": [
-                              "rate"
-                            ]
+                            "required": ["rate"]
                           },
                           {
-                            "required": [
-                              "aggregateRate"
-                            ]
+                            "required": ["aggregateRate"]
                           }
                         ]
                       },
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "target",
-                          "mode"
-                        ],
+                        "required": ["id", "type", "target", "mode"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -413,20 +359,14 @@
                             "maxLength": 256
                           },
                           "mode": {
-                            "enum": [
-                              "implicit",
-                              "explicit"
-                            ]
+                            "enum": ["implicit", "explicit"]
                           }
                         }
                       },
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type"
-                        ],
+                        "required": ["id", "type"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -439,9 +379,7 @@
                           "upstream": {
                             "type": "object",
                             "additionalProperties": false,
-                            "required": [
-                              "protocol"
-                            ],
+                            "required": ["protocol"],
                             "properties": {
                               "protocol": {
                                 "enum": [
@@ -486,10 +424,7 @@
                                 "maxLength": 512
                               },
                               "authMode": {
-                                "enum": [
-                                  "siwc",
-                                  "cli"
-                                ]
+                                "enum": ["siwc", "cli"]
                               },
                               "subscriptionAccountIds": {
                                 "type": "array",
@@ -508,10 +443,7 @@
                                 "items": {
                                   "type": "object",
                                   "additionalProperties": false,
-                                  "required": [
-                                    "incoming",
-                                    "protocol"
-                                  ],
+                                  "required": ["incoming", "protocol"],
                                   "properties": {
                                     "path": {
                                       "type": "string",
@@ -537,9 +469,7 @@
                                     "auth": {
                                       "type": "object",
                                       "additionalProperties": false,
-                                      "required": [
-                                        "type"
-                                      ],
+                                      "required": ["type"],
                                       "properties": {
                                         "type": {
                                           "enum": [
@@ -621,15 +551,10 @@
                               {
                                 "anyOf": [
                                   {
-                                    "required": [
-                                      "baseUrl",
-                                      "keyRef"
-                                    ]
+                                    "required": ["baseUrl", "keyRef"]
                                   },
                                   {
-                                    "required": [
-                                      "subscriptionAccountIds"
-                                    ]
+                                    "required": ["subscriptionAccountIds"]
                                   }
                                 ]
                               }
@@ -645,11 +570,7 @@
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "profile"
-                        ],
+                        "required": ["id", "type", "profile"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -705,22 +626,14 @@
                             }
                           },
                           "conversion": {
-                            "enum": [
-                              "auto",
-                              "disabled"
-                            ]
+                            "enum": ["auto", "disabled"]
                           }
                         }
                       },
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": [
-                          "id",
-                          "type",
-                          "next",
-                          "rule"
-                        ],
+                        "required": ["id", "type", "next", "rule"],
                         "properties": {
                           "id": {
                             "type": "string",
@@ -791,10 +704,7 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "incoming",
-                  "protocol"
-                ],
+                "required": ["incoming", "protocol"],
                 "properties": {
                   "path": {
                     "type": "string",
@@ -820,18 +730,10 @@
                   "auth": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "type"
-                    ],
+                    "required": ["type"],
                     "properties": {
                       "type": {
-                        "enum": [
-                          "default",
-                          "none",
-                          "bearer",
-                          "header",
-                          "query"
-                        ]
+                        "enum": ["default", "none", "bearer", "header", "query"]
                       },
                       "name": {
                         "type": "string"
@@ -922,22 +824,15 @@
                     ]
                   }
                 },
-                "required": [
-                  "protocol"
-                ]
+                "required": ["protocol"]
               },
               "then": {
                 "anyOf": [
                   {
-                    "required": [
-                      "baseUrl",
-                      "keyRef"
-                    ]
+                    "required": ["baseUrl", "keyRef"]
                   },
                   {
-                    "required": [
-                      "subscriptionAccountIds"
-                    ]
+                    "required": ["subscriptionAccountIds"]
                   }
                 ]
               },
@@ -945,14 +840,10 @@
                 "not": {
                   "anyOf": [
                     {
-                      "required": [
-                        "baseUrl"
-                      ]
+                      "required": ["baseUrl"]
                     },
                     {
-                      "required": [
-                        "keyRef"
-                      ]
+                      "required": ["keyRef"]
                     }
                   ]
                 }
@@ -961,15 +852,11 @@
             {
               "if": {
                 "not": {
-                  "required": [
-                    "protocol"
-                  ]
+                  "required": ["protocol"]
                 }
               },
               "then": {
-                "required": [
-                  "flow"
-                ]
+                "required": ["flow"]
               }
             }
           ]
@@ -980,10 +867,7 @@
         "additionalProperties": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "upstream",
-            "model"
-          ],
+          "required": ["upstream", "model"],
           "properties": {
             "upstream": {
               "type": "string",
@@ -1043,11 +927,7 @@
               "additionalProperties": false,
               "properties": {
                 "mode": {
-                  "enum": [
-                    "tokens",
-                    "request",
-                    "expression"
-                  ]
+                  "enum": ["tokens", "request", "expression"]
                 },
                 "request": {
                   "type": "number",
@@ -1075,11 +955,7 @@
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "above",
-                      "input",
-                      "output"
-                    ],
+                    "required": ["above", "input", "output"],
                     "properties": {
                       "above": {
                         "type": "integer",
@@ -1156,10 +1032,7 @@
         "additionalProperties": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "target",
-            "mode"
-          ],
+          "required": ["target", "mode"],
           "properties": {
             "target": {
               "type": "string",
@@ -1167,10 +1040,7 @@
               "maxLength": 256
             },
             "mode": {
-              "enum": [
-                "implicit",
-                "explicit"
-              ]
+              "enum": ["implicit", "explicit"]
             },
             "enabled": {
               "type": "boolean"
@@ -1186,9 +1056,7 @@
         "additionalProperties": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "name"
-          ],
+          "required": ["name"],
           "properties": {
             "name": {
               "type": "string",
