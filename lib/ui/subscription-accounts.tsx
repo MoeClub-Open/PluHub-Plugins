@@ -54,11 +54,13 @@ function ProviderAccounts({
   host,
   personal = false,
   provider,
+  embedded,
   onUse,
 }: {
   host: UIHost;
   personal?: boolean;
   provider: SubscriptionKind;
+  embedded: boolean;
   onUse?: (account: any) => void;
 }) {
   const api = subscriptionApi(provider) + (personal ? "/personal" : "");
@@ -112,16 +114,16 @@ function ProviderAccounts({
     }
   }
   return (
-    <section className="subscription-page">
-      <style>{`.subscription-form{display:grid;gap:12px;margin-top:12px}.subscription-form textarea{min-height:64px;font-family:monospace;font-size:12px}.oauth-connect{display:grid;gap:10px}.subscription-page .subscription-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}.subscription-tools input{flex:1;min-width:160px}.subscription-tools>button{margin-left:auto}.subscription-page td{vertical-align:middle}.subscription-page td small{display:block;color:var(--muted);margin-top:4px}.subscription-page .row-actions{display:flex;flex-wrap:wrap;gap:4px}.subscription-page .row-actions button{padding:5px 8px;font-size:12px}.subscription-page .subscription-table{overflow:auto}.subscription-form .actions{justify-content:flex-end}.subscription-quota-list{display:grid;gap:12px;margin-block:12px}.subscription-quota-row{display:grid;gap:4px}.subscription-quota-row>div{display:flex;justify-content:space-between;gap:12px}.subscription-quota-row progress{width:100%;height:5px;accent-color:var(--accent)}.subscription-quota-row small{color:var(--muted)}`}</style>
-      <PageHeading title={providers[provider] + " · " + tr("订阅账号")}>
-        <button onClick={() => setEdit({})}>
-          <Icon name="plus" size={15} />
-          {tr("添加账号")}
-        </button>
-      </PageHeading>
+    <section
+      className="subscription-page"
+      aria-label={providers[provider] + " · " + tr("订阅账号")}
+    >
+      <style>{`.subscription-form{display:grid;gap:12px;margin-top:12px}.subscription-form textarea{min-height:64px;font-family:monospace;font-size:12px}.oauth-connect{display:grid;gap:10px}.subscription-page td{vertical-align:middle}.subscription-page td small{display:block;color:var(--muted);margin-top:4px}.subscription-page .row-actions{display:flex;flex-wrap:wrap;gap:4px}.subscription-page .row-actions button{padding:5px 8px;font-size:12px}.subscription-form .actions{justify-content:flex-end}.subscription-quota-list{display:grid;gap:12px;margin-block:12px}.subscription-quota-row{display:grid;gap:4px}.subscription-quota-row>div{display:flex;justify-content:space-between;gap:12px}.subscription-quota-row progress{width:100%;height:5px;accent-color:var(--accent)}.subscription-quota-row small{color:var(--muted)}`}</style>
+      {!embedded && (
+        <PageHeading title={providers[provider] + " · " + tr("订阅账号")} />
+      )}
       <Notice message={message || data.error} />
-      <div className="subscription-tools">
+      <div className="list-toolbar">
         <input
           type="search"
           aria-label={tr("搜索订阅账号")}
@@ -133,18 +135,25 @@ function ProviderAccounts({
           }}
         />
 
-        <button
-          className="secondary"
-          onClick={data.reload}
-          aria-label={tr("刷新")}
-        >
-          <Icon name="refresh" size={15} />
-        </button>
+        <div className="actions">
+          <button
+            className="secondary"
+            onClick={data.reload}
+            aria-label={tr("刷新")}
+            title={tr("刷新")}
+          >
+            <Icon name="refresh" size={15} />
+          </button>
+          <button onClick={() => setEdit({})}>
+            <Icon name="plus" size={15} />
+            {tr("添加账号")}
+          </button>
+        </div>
       </div>
       {data.data && !rows.length ? (
         <Empty title={tr("暂无订阅账号")} />
       ) : (
-        <div className="card subscription-table">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -419,7 +428,12 @@ export function SubscriptionAccounts(props: {
         </div>
       )}
       {provider ? (
-        <ProviderAccounts key={provider} {...props} provider={provider} />
+        <ProviderAccounts
+          key={provider}
+          {...props}
+          provider={provider}
+          embedded={!props.provider}
+        />
       ) : (
         available.data && <Empty title={tr("未安装订阅接入插件")} />
       )}

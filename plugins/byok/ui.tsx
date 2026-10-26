@@ -6,12 +6,7 @@ import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
-import {
-  PageHeading,
-  Dialog,
-  Icon,
-  ListPagination,
-} from "../../lib/ui/components.js";
+import { Dialog, Icon, ListPagination } from "../../lib/ui/components.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { ChannelAdmin } from "./admin-ui.js";
 import { SubscriptionAccounts } from "../../lib/ui/subscription-accounts.js";
@@ -371,20 +366,6 @@ function Page({ host }: { host: UIHost }) {
         />
       ) : (
         <>
-          <PageHeading title={tr("个人渠道")}>
-            <button
-              className="secondary"
-              aria-label={tr("刷新个人渠道")}
-              title={tr("刷新个人渠道")}
-              onClick={channels.reload}
-            >
-              <Icon name="refresh" size={15} />
-            </button>
-            <button onClick={() => edit()}>
-              <Icon name="plus" size={15} />
-              {tr("添加渠道")}
-            </button>
-          </PageHeading>
           {!editing && !removing && !testing && (
             <Notice message={message || channels.error || presets.error} />
           )}
@@ -402,6 +383,20 @@ function Page({ host }: { host: UIHost }) {
             <span className="muted">
               {tr("{0} 个渠道", { "0": textValue(channels.data?.length ?? 0) })}
             </span>
+            <div className="actions">
+              <button
+                className="secondary"
+                aria-label={tr("刷新个人渠道")}
+                title={tr("刷新个人渠道")}
+                onClick={channels.reload}
+              >
+                <Icon name="refresh" size={15} />
+              </button>
+              <button onClick={() => edit()}>
+                <Icon name="plus" size={15} />
+                {tr("添加渠道")}
+              </button>
+            </div>
           </div>
           <div className="table-wrap">
             <table>
