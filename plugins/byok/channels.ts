@@ -11,8 +11,6 @@ import {
   type Host,
 } from "@pluhub/sdk";
 import type {
-  AIEvent,
-  AIPlan,
   PersonalChannel,
   Protocol,
   UpstreamInterface,
@@ -141,6 +139,11 @@ export function installPersonalChannels(
               "invalid_workflow",
               "个人流程的上游由渠道配置提供，节点模型必须在渠道模型列表中",
             );
+          break;
+        case "platform":
+          requiredString(node.groupId, "groupId", 128);
+          if (node.model !== undefined)
+            requiredString(node.model, "model", 256);
           break;
         case "upstream":
           if (
@@ -528,6 +531,21 @@ export function installPersonalChannels(
         if (!channelPresets.some((p) => p.id === preset))
           throw new HostError("invalid_preset", "未知渠道预设");
         const id = previous?.id ?? "personal:" + randomUUID();
+        if (config.flow.nodes.some((node) => node.type === "platform")) {
+          const groups = await host.call<{ id: string }[]>("ai.groups@1", {
+            userId,
+          });
+          for (const node of config.flow.nodes)
+            if (
+              node.type === "platform" &&
+              !groups.some((group) => group.id === node.groupId)
+            )
+              throw new HostError(
+                "group_unavailable",
+                "使用分组已停用或无权访问",
+                403,
+              );
+        }
         await subscriptionCheck(config, userId);
         const kind = config.subscriptionAccountId ? "subscription" : "key";
         const credential = { id, user_id: userId, channel: id, kind };
@@ -802,48 +820,41 @@ export function installPersonalChannels(
       runtime(rowFor(id, userId));
       const signal = AbortSignal.any([ctx.signal, AbortSignal.timeout(30000)]),
         start = performance.now();
-      const task = {
-        model,
-        messages: [{ role: "user" as const, text: "Reply OK" }],
-        tools: [],
-        stream: false,
-        ...(JSON.parse(rowFor(id, userId).settings_json).protocol === "codex" &&
-        JSON.parse(rowFor(id, userId).settings_json).authMode !== "siwc"
-          ? {}
-          : { maxTokens: 64 }),
-      };
-      const plan = await host.call<AIPlan>(
-        "ai.routing@2",
-        {
-          model,
-          channelId: id,
-          principalId: userId,
-          request: task,
-          features: ["text"],
-        },
-        signal,
+      const headers = new Headers(request.headers);
+      headers.set("content-type", "application/json");
+      headers.set("x-pluhub-channel", id);
+      headers.delete("content-length");
+      headers.delete("x-pluhub-group");
+      const response = await host.dispatch(
+        new Request(new URL("/v1/chat/completions", request.url), {
+          method: "POST",
+          headers,
+          signal,
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: "Reply OK" }],
+            stream: false,
+            max_tokens: 64,
+          }),
+        }),
       );
-      const events = await host.call<AsyncIterable<AIEvent>>(
-        "ai.execution@1",
-        { plan, request: task },
-        signal,
-      );
-      let usage,
-        finished = false,
-        text = "";
-      for await (const event of events) {
-        if (event.type === "usage") usage = event.usage;
-        if (event.type === "text") text += event.text;
-        if (event.type === "finish") finished = event.reason === "stop";
-      }
-      if (!finished || !text.trim())
+      const value = await response.json();
+      if (!response.ok)
+        throw new HostError(
+          value.error?.code ?? "upstream_error",
+          value.error?.message ?? "渠道测试失败",
+          response.status,
+        );
+      const text = value.choices?.[0]?.message?.content;
+      if (value.choices?.[0]?.finish_reason !== "stop" || !text?.trim())
         throw new HostError("upstream_protocol", "上游没有返回完整文本", 502);
       return json({
         ok: true,
         model,
         text,
+        usage: value.usage,
+        requestId: response.headers.get("x-pluhub-request-id"),
         latencyMs: Math.round(performance.now() - start),
-        usage,
       });
     },
   });

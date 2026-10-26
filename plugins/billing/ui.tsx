@@ -1,4 +1,5 @@
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
+import { billingNote } from "../../lib/ui/billing-note.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -113,7 +114,11 @@ function Page({ host }: { host: UIHost }) {
       {settings && me.data?.role === "admin" && (
         <div className="card">
           <h2>{tr("待核对请求")}</h2>
-          <p className="muted">{tr("填 0 可释放预留。")}</p>
+          <p className="muted">
+            {tr(
+              "待核账是预留尚未结算，并非已经扣费。核对上游账单后填写实际费用，填 0 释放预留。",
+            )}
+          </p>
           {reviews.data?.length ? (
             <form onSubmit={reconcile} className="inline-form">
               <label>
@@ -121,7 +126,7 @@ function Page({ host }: { host: UIHost }) {
                 <Select name="id">
                   {reviews.data.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.id} · {usd(r.amount)} · {r.note}
+                      {r.id} · {usd(r.amount)} · {billingNote(r.note)}
                     </option>
                   ))}
                 </Select>

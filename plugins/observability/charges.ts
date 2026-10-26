@@ -172,6 +172,7 @@ export async function attachCharges(
             ? "unavailable"
             : "unknown"),
       billing_receipt: charge?.receipt,
+      billing_note: charge?.note,
     };
   });
 }

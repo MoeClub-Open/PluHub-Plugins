@@ -46,7 +46,7 @@ export function ServiceGroupSelect({
           {group.name} · ×{group.multiplier}
         </option>
       ))}
-      <option value="personal">{tr("个人渠道 · 不扣平台余额")}</option>
+      <option value="personal">{tr("个人渠道")}</option>
     </Select>
   );
 }

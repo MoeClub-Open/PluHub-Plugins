@@ -1,3 +1,4 @@
+import type { RequestContext } from "@pluhub/sdk";
 import { installRequestCharges } from "./request-charges.js";
 import { consumptionSource } from "../../lib/commerce/consumption.js";
 import { join } from "node:path";
@@ -138,78 +139,86 @@ export default definePlugin({
     host.provide("billing.balance@1", ({ userId }) =>
       wallet(requiredString(userId, "userId")),
     );
+    function admit(ctx: RequestContext, retry = false) {
+      if (retry && ctx.state.get("billing.reserved"))
+        db.prepare(
+          "UPDATE reservations SET status='released',note='Upstream rejected before generation' WHERE id=? AND status='reserved'",
+        ).run(ctx.id);
+      ctx.state.set("billing.reserved", false);
+
+      const request = ctx.state.get("ai.request") as AIRequest | undefined;
+      const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
+      if (!request || !plan) return;
+      const personal = consumptionSource(plan) !== "platform";
+      ctx.state.set(
+        "billing.mode",
+        personal ? "personal" : host.config().enabled ? "platform" : "disabled",
+      );
+      if (personal || !host.config().enabled) return;
+      if (!plan.pricing)
+        throw new HostError(
+          "price_unavailable",
+          "Model has no billing price",
+          503,
+        );
+      // Conservative UTF-8 byte bound plus per-message/tool framing; actual provider usage is authoritative.
+      const { request: prepared, budget } = outputBudget(
+        request,
+        plan,
+        host.config(),
+      );
+      plan.preparedRequest = prepared;
+      const inputBound = prepared.operation
+        ? mediaInputBound(prepared)
+        : Buffer.byteLength(
+            JSON.stringify({
+              messages: prepared.messages,
+              tools: prepared.tools,
+            }),
+          ) + 1024;
+      const pricing = structuredClone(plan.pricing);
+      plan.pricing = pricing;
+      const state = observation(ctx);
+      if (state) {
+        state.pricing = pricing;
+        state.routing = { ...state.routing, outputBudget: budget };
+      }
+      const amount = reserveCost(
+        inputBound,
+        budget.reservedTokens,
+        pricing,
+        prepared.webSearch ? (prepared.webSearch.maxCalls ?? 3) : 0,
+      );
+      transaction(db, () => {
+        const userId = ctx.principal!.id;
+        if (wallet(userId).available < amount)
+          throw new HostError(
+            "insufficient_balance",
+            "Insufficient available balance",
+            402,
+          );
+        db.prepare(
+          "INSERT INTO reservations(id,user_id,amount,status,created_at,pricing,budget) VALUES(?,?,?,'reserved',?,?,?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,amount=excluded.amount,status='reserved',created_at=excluded.created_at,pricing=excluded.pricing,budget=excluded.budget,actual=NULL,receipt=NULL,reported_usage=NULL,note=NULL WHERE reservations.status='released'",
+        ).run(
+          ctx.id,
+          userId,
+          amount,
+          Date.now(),
+          JSON.stringify(pricing),
+          JSON.stringify({ ...budget, inputTokens: inputBound }),
+        );
+      });
+      ctx.state.set("billing.reserved", true);
+    }
+    host.provide(
+      "billing.admit@1",
+      ({ context, retry }: { context: RequestContext; retry?: boolean }) =>
+        admit(context, retry),
+    );
     host.hook({
       id: "reserve",
       phase: "Admission",
-      handle(ctx) {
-        const request = ctx.state.get("ai.request") as AIRequest | undefined;
-        const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
-        if (!request || !plan) return;
-        const personal = consumptionSource(plan) !== "platform";
-        ctx.state.set(
-          "billing.mode",
-          personal
-            ? "personal"
-            : host.config().enabled
-              ? "platform"
-              : "disabled",
-        );
-        if (personal || !host.config().enabled) return;
-        if (!plan.pricing)
-          throw new HostError(
-            "price_unavailable",
-            "Model has no billing price",
-            503,
-          );
-        // Conservative UTF-8 byte bound plus per-message/tool framing; actual provider usage is authoritative.
-        const { request: prepared, budget } = outputBudget(
-          request,
-          plan,
-          host.config(),
-        );
-        plan.preparedRequest = prepared;
-        const inputBound = prepared.operation
-          ? mediaInputBound(prepared)
-          : Buffer.byteLength(
-              JSON.stringify({
-                messages: prepared.messages,
-                tools: prepared.tools,
-              }),
-            ) + 1024;
-        const pricing = structuredClone(plan.pricing);
-        plan.pricing = pricing;
-        const state = observation(ctx);
-        if (state) {
-          state.pricing = pricing;
-          state.routing = { ...state.routing, outputBudget: budget };
-        }
-        const amount = reserveCost(
-          inputBound,
-          budget.reservedTokens,
-          pricing,
-          prepared.webSearch ? (prepared.webSearch.maxCalls ?? 3) : 0,
-        );
-        transaction(db, () => {
-          const userId = ctx.principal!.id;
-          if (wallet(userId).available < amount)
-            throw new HostError(
-              "insufficient_balance",
-              "Insufficient available balance",
-              402,
-            );
-          db.prepare(
-            "INSERT INTO reservations(id,user_id,amount,status,created_at,pricing,budget) VALUES(?,?,?,'reserved',?,?,?)",
-          ).run(
-            ctx.id,
-            userId,
-            amount,
-            Date.now(),
-            JSON.stringify(pricing),
-            JSON.stringify({ ...budget, inputTokens: inputBound }),
-          );
-        });
-        ctx.state.set("billing.reserved", true);
-      },
+      handle: (ctx) => admit(ctx),
     });
     host.hook({
       id: "settle",
@@ -228,6 +237,12 @@ export default definePlugin({
           if (!ctx.state.get("ai.executionStarted")) {
             db.prepare(
               "UPDATE reservations SET status='released' WHERE id=?",
+            ).run(ctx.id);
+            return;
+          }
+          if (ctx.state.get("ai.executionRejected")) {
+            db.prepare(
+              "UPDATE reservations SET status='released',note='Upstream rejected before generation' WHERE id=?",
             ).run(ctx.id);
             return;
           }
@@ -271,7 +286,11 @@ export default definePlugin({
             ).run(
               state?.errorCode === "upstream_budget_exceeded"
                 ? "Output limit exceeded"
-                : "Usage unavailable",
+                : ctx.signal.aborted
+                  ? "Canceled before complete usage"
+                  : !state?.finished
+                    ? "Response interrupted before settlement"
+                    : "Usage unavailable",
               ctx.id,
             );
             return;

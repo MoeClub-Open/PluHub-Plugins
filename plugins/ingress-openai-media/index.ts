@@ -1,8 +1,9 @@
 import { definePlugin, HostError, json } from "@pluhub/sdk";
-import type { AIEvent, AIPlan, AIRequest } from "@pluhub/contracts/ai";
+import type { AIPlan, AIRequest } from "@pluhub/contracts/ai";
 import { mediaKinds, mediaPaths, readMedia } from "../../lib/ai/media.js";
 import { channelScope } from "../../lib/ai/channel-scope.js";
 import { capturePricingContext } from "../../lib/commerce/expression.js";
+import { executeRequest } from "../../lib/ai/execution.js";
 import {
   beginObservation,
   observation,
@@ -81,11 +82,7 @@ export default definePlugin({
           const controller = new AbortController();
           const signal = AbortSignal.any([ctx.signal, controller.signal]);
           ctx.state.set("ai.executionStarted", true);
-          const events = await host.call<AsyncIterable<AIEvent>>(
-            "ai.execution@1",
-            { request, plan },
-            signal,
-          );
+          const events = await executeRequest(host, ctx, request, plan, signal);
           const iterator = observeEvents(events, ctx)[Symbol.asyncIterator]();
           const nextMedia = async () => {
             for (;;) {

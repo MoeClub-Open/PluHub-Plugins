@@ -3,6 +3,10 @@ import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
 import type { AIEvent, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { mediaPaths, mediaUsage, readBytes } from "../../lib/ai/media.js";
 import {
+  upstreamRejection,
+  prepareBeforeGeneration,
+} from "../../lib/ai/rejection.js";
+import {
   interfaceHeaders,
   upstreamUrl,
 } from "../../lib/ai/upstream-interfaces.js";
@@ -23,11 +27,8 @@ export default definePlugin({
               "adapter_mismatch",
               "Wrong media upstream adapter",
             );
-          const key = await upstreamKey(
-            host,
-            upstream,
-            signal,
-            request.sessionId,
+          const key = await prepareBeforeGeneration(() =>
+            upstreamKey(host, upstream, signal, request.sessionId),
           );
           const url = upstreamUrl(
             requiredString(upstream.baseUrl, "upstream URL", 2048),
@@ -93,11 +94,7 @@ export default definePlugin({
           );
           if (!response.ok) {
             await response.body?.cancel();
-            throw new HostError(
-              "upstream_error",
-              "Media upstream rejected request",
-              response.status === 429 ? 429 : 502,
-            );
+            throw upstreamRejection(response.status);
           }
           if (!response.body)
             throw new HostError(

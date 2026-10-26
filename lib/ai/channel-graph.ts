@@ -66,6 +66,11 @@ export function compileWorkflow(flow: ChannelWorkflow) {
   const nodes = new Map<string, WorkflowNode>();
   for (const raw of flow.nodes) {
     const node = structuredClone(raw);
+    if (
+      node.type === "platform" &&
+      (!node.groupId || (node.model !== undefined && !node.model.trim()))
+    )
+      bad("平台分组节点需要选择分组和有效模型", [node.id]);
     if (node.type === "rateLimit") {
       const keys = ["rpm", "tpm", "concurrency", "bytesPerSecond"];
       if (
@@ -130,10 +135,16 @@ export function compileWorkflow(flow: ChannelWorkflow) {
     const node = nodes.get(id);
     if (!node) bad("连线指向不存在的节点", source ? [source] : [id]);
     visiting.add(id);
+    if (node!.type === "provider" && node!.fallback) {
+      if (nodes.get(node!.fallback)?.type !== "platform")
+        bad("备用出口需要连接平台分组节点", [id]);
+      visit(node!.fallback, id);
+    }
     if (
       node!.type !== "upstream" &&
       node!.type !== "provider" &&
-      node!.type !== "routing"
+      node!.type !== "routing" &&
+      node!.type !== "platform"
     ) {
       if (node!.type === "condition") {
         visit(node!.yes, id);
@@ -179,12 +190,34 @@ export function runWorkflow(
         "This channel node requires a conversational request",
         400,
       );
+    if (node.type === "platform")
+      return {
+        request,
+        target: "",
+        platformGroup: { groupId: node.groupId, model: node.model },
+        mode: "implicit",
+        trace,
+        outputPolicy,
+        outputPolicies,
+        requestLimits,
+        protocolPolicy,
+      };
     if (node.type === "provider")
       return {
         request,
         target: "",
         provider: true,
         providerId: node.id,
+        ...(node.fallback
+          ? {
+              fallback: (() => {
+                const target = graph.nodes.get(node.fallback)!;
+                return target.type === "platform"
+                  ? { groupId: target.groupId, model: target.model }
+                  : undefined;
+              })(),
+            }
+          : {}),
         mode: "implicit",
         trace,
         outputPolicy,

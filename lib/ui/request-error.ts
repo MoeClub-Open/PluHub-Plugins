@@ -2,6 +2,7 @@ import { t as tr } from "./i18n.js";
 
 export function requestErrorHint(code?: string) {
   const messages: Record<string, string> = {
+    upstream_rejected: "上游拒绝了请求，请检查模型权限、额度和请求参数。",
     subscription_unavailable:
       "订阅账号当前无法使用。请检查授权、额度和模型支持情况，或选择其他可用渠道。",
     group_unavailable: "使用分组已停用或无权访问，请检查密钥分组。",

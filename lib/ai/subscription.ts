@@ -1,4 +1,5 @@
 import { upstreamKey } from "./upstream-key.js";
+import { prepareBeforeGeneration } from "./rejection.js";
 import {
   definePlugin,
   HostError,
@@ -135,11 +136,8 @@ async function* execute(
               signal,
             )
           : {
-              secret: await upstreamKey(
-                host,
-                upstream,
-                signal,
-                request.sessionId,
+              secret: await prepareBeforeGeneration(() =>
+                upstreamKey(host, upstream, signal, request.sessionId),
               ),
             });
       if (
@@ -155,7 +153,9 @@ async function* execute(
             signal,
           ),
         };
-      let prepared = subscriptionRequest(kind, request, upstream, credential);
+      let prepared = prepareBeforeGeneration(() =>
+        subscriptionRequest(kind, request, upstream, credential!),
+      );
       const send = async () => {
         const response = await host.call<Response>(
           "http.transport@1",
@@ -195,7 +195,9 @@ async function* execute(
               : 503,
           );
         }
-        prepared = subscriptionRequest(kind, request, upstream, credential);
+        prepared = prepareBeforeGeneration(() =>
+          subscriptionRequest(kind, request, upstream, credential!),
+        );
       };
       for (;;) {
         const response = await send();

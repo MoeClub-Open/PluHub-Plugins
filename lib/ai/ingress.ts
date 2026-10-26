@@ -1,15 +1,11 @@
 import { definePlugin, readObject, json, HostError } from "@pluhub/sdk";
-import type {
-  Protocol,
-  AIRequest,
-  AIEvent,
-  AIPlan,
-} from "@pluhub/contracts/ai";
+import type { Protocol, AIRequest, AIPlan } from "@pluhub/contracts/ai";
 import { decode, collect, encodeResult, protocolError } from "./protocols.js";
 import { encodeStream } from "./streams.js";
 import { clientSession } from "./session.js";
 import { channelScope } from "./channel-scope.js";
 import { capturePricingContext } from "../commerce/expression.js";
+import { executeRequest } from "./execution.js";
 import {
   beginObservation,
   planObservation,
@@ -138,9 +134,11 @@ export function createIngress(protocol: Protocol) {
             ctx.signal,
             execution.signal,
           ]);
-          const events = await host.call<AsyncIterable<AIEvent>>(
-            "ai.execution@1",
-            { plan, request: decoded },
+          const events = await executeRequest(
+            host,
+            ctx,
+            decoded,
+            plan,
             executionSignal,
           );
           if (!decoded.stream) {

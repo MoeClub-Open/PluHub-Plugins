@@ -24,6 +24,7 @@ export interface AIObservation {
     effort?: string;
     logicalUpstream?: string;
     decision?: AIPlan["decision"];
+    attempts?: AIPlan["attempts"];
     redirection?: AIPlan["redirection"];
     workflows?: AIPlan["workflows"];
     outputBudget?: OutputBudget;
@@ -64,6 +65,7 @@ export function planObservation(
             effort: plan.reasoning?.effort,
             logicalUpstream: plan.logicalUpstreamId,
             decision: plan.decision,
+            attempts: plan.attempts,
             redirection: plan.redirection,
             workflows: plan.workflows,
           },

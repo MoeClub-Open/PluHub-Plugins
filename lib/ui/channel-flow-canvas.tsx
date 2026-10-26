@@ -33,6 +33,9 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   get provider() {
     return tr("调用上游");
   },
+  get platform() {
+    return tr("平台分组");
+  },
   get routing() {
     return tr("自动路由");
   },
@@ -62,16 +65,18 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   },
 };
 
-type Port = "next" | "yes" | "no";
+type Port = "next" | "yes" | "no" | "fallback";
 const outputs = (node: WorkflowNode): { field: Port; target: string }[] =>
-  node.type === "condition"
-    ? [
-        { field: "yes", target: node.yes },
-        { field: "no", target: node.no },
-      ]
-    : "next" in node
-      ? [{ field: "next", target: node.next }]
-      : [];
+  node.type === "provider" && node.fallback
+    ? [{ field: "fallback", target: node.fallback }]
+    : node.type === "condition"
+      ? [
+          { field: "yes", target: node.yes },
+          { field: "no", target: node.no },
+        ]
+      : "next" in node
+        ? [{ field: "next", target: node.next }]
+        : [];
 
 export function workflowNodePositions(
   flow: ChannelWorkflow,
@@ -116,15 +121,17 @@ export function removeFlowNodes(
       nodes: next.nodes
         .filter((node) => node.id !== id)
         .map((node) =>
-          node.type === "condition"
-            ? {
-                ...node,
-                yes: node.yes === id ? fallback : node.yes,
-                no: node.no === id ? fallback : node.no,
-              }
-            : "next" in node && node.next === id
-              ? { ...node, next: fallback }
-              : node,
+          node.type === "provider" && node.fallback === id
+            ? { ...node, fallback: undefined }
+            : node.type === "condition"
+              ? {
+                  ...node,
+                  yes: node.yes === id ? fallback : node.yes,
+                  no: node.no === id ? fallback : node.no,
+                }
+              : "next" in node && node.next === id
+                ? { ...node, next: fallback }
+                : node,
         ),
     };
   }
@@ -232,9 +239,15 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
       )}
       {outputs(node).map((port, index) => (
         <React.Fragment key={port.field}>
-          {node.type === "condition" && (
+          {(node.type === "condition" || port.field === "fallback") && (
             <span className="flow-port-label" style={{ top: 42 + index * 24 }}>
-              {tr(port.field === "yes" ? "是" : "否")}
+              {tr(
+                port.field === "fallback"
+                  ? "失败后"
+                  : port.field === "yes"
+                    ? "是"
+                    : "否",
+              )}
             </span>
           )}
           <Handle
@@ -259,6 +272,8 @@ function summary(node: WorkflowNode, channel?: Upstream) {
         tr(" 种入口 · ") +
         tr(node.conversion === "auto" ? "自动转换" : "仅同协议")
       );
+    case "platform":
+      return node.model || tr("平台分组");
     case "routing":
       return node.profile;
     case "upstream":

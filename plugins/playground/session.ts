@@ -7,6 +7,8 @@ export type Message = {
   channel?: string;
   incomplete?: boolean;
   citations?: UrlCitation[];
+  reasoning?: string;
+  createdAt?: number;
 };
 export type ChatMeta = {
   id?: string;
@@ -25,6 +27,7 @@ export type ChatSession = {
   system: string;
   temperature: string;
   maxTokens: string;
+  effort?: string;
   messages: Message[];
   meta: ChatMeta;
 };
@@ -72,8 +75,9 @@ export function readChat(key: string): ChatSession {
     modelChannel: channel ?? "",
     prompt: "",
     system: saved?.system ?? "",
-    temperature: saved?.temperature ?? "0.7",
-    maxTokens: saved?.maxTokens ?? "1024",
+    temperature: saved?.temperature ?? "",
+    maxTokens: saved?.maxTokens ?? "",
+    effort: saved?.effort ?? "",
     messages: [],
     meta: {},
   };

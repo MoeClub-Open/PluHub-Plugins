@@ -5,7 +5,7 @@
   "name": "个人渠道",
   "description": "管理用户自带密钥、订阅与个人渠道。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.37",
+  "version": "0.1.0-alpha.38",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -38,9 +38,10 @@
     "ai.upstream-models.anthropic@1",
     "ai.upstream-models.gemini@1",
     "ai.upstream.grok@1",
-    "ai.subscription.grok@1"
+    "ai.subscription.grok@1",
+    "ai.groups@1"
   ],
-  "permissions": ["api.register", "secrets.read"],
+  "permissions": ["api.register", "secrets.read", "http.dispatch"],
   "configReload": "restart",
   "configSchema": {
     "type": "object",

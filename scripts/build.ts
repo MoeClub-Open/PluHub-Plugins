@@ -48,7 +48,14 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
   if (existsSync(resolve(directory, "ui.tsx")))
     await build({
       entryPoints: [resolve(directory, "ui.tsx")],
-      outfile: resolve(out, "ui.js"),
+      ...(entry.name === "playground"
+        ? {
+            outdir: out,
+            entryNames: "ui",
+            chunkNames: "chunk-[name]-[hash]",
+            splitting: true,
+          }
+        : { outfile: resolve(out, "ui.js") }),
       bundle: true,
       platform: "browser",
       format: "esm",
@@ -69,5 +76,31 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
         : undefined,
       loader: { ".svg": "text" },
       define: { "process.env.NODE_ENV": '"production"' },
+    });
+  if (entry.name === "playground")
+    await build({
+      entryPoints: [resolve(directory, "ui.css")],
+      outfile: resolve(out, "ui.css"),
+      bundle: true,
+      minify: true,
+      loader: { ".woff2": "dataurl" },
+      plugins: [
+        {
+          name: "modern-math-fonts",
+          setup(builder) {
+            builder.onLoad(
+              { filter: /katex\.min\.css$/ },
+              async ({ path }) => ({
+                contents: (await readFile(path, "utf8")).replace(
+                  /,url\([^)]*\.(?:woff|ttf)\) format\("(?:woff|truetype)"\)/g,
+                  "",
+                ),
+                loader: "css",
+                resolveDir: resolve(path, ".."),
+              }),
+            );
+          },
+        },
+      ],
     });
 }

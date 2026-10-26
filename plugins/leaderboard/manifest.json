@@ -5,7 +5,7 @@
   "name": "整站排行榜",
   "description": "展示用户用量榜和平台模型热度榜。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

@@ -16,6 +16,7 @@ import {
   number,
   latency,
 } from "../../lib/ui/components.js";
+import { RichText } from "./rich-text.js";
 import { readChatStream } from "./chat-stream.js";
 import {
   chatStorageKey,
@@ -25,44 +26,80 @@ import {
   type ChatMeta,
   type ChatSession,
 } from "./session.js";
-function Answer({ message }: { message: Message }) {
-  const citations = [...(message.citations ?? [])].sort(
-    (a, b) => a.startIndex - b.startIndex,
-  );
-  const parts: React.ReactNode[] = [];
-  let cursor = 0;
-  for (const citation of citations) {
-    if (
-      citation.startIndex < cursor ||
-      citation.endIndex > message.content.length ||
-      !/^https?:\/\//i.test(citation.url)
-    )
-      continue;
-    parts.push(message.content.slice(cursor, citation.startIndex));
-    parts.push(
-      <a
-        key={JSON.stringify(citation)}
-        className="text-link"
-        href={citation.url}
-        title={citation.title}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {message.content.slice(citation.startIndex, citation.endIndex) ||
-          citation.title}
-      </a>,
-    );
-    cursor = citation.endIndex;
-  }
-  parts.push(message.content.slice(cursor));
+function Answer({
+  message,
+  streaming,
+}: {
+  message: Message;
+  streaming: boolean;
+}) {
+  const [copied, setCopied] = React.useState(false);
+  const citations = [
+    ...new Map(
+      (message.citations ?? [])
+        .filter((c) => /^https?:\/\//i.test(c.url))
+        .map((c) => [c.url, c]),
+    ).values(),
+  ];
   return (
-    <p>
-      {message.content
-        ? parts
-        : message.incomplete
-          ? tr("调用未完成")
-          : tr("正在等待模型响应…")}
-    </p>
+    <>
+      {message.reasoning && (
+        <details className="chat-reasoning">
+          <summary>{tr("思考过程")}</summary>
+          <RichText text={message.reasoning} streaming={streaming} />
+        </details>
+      )}
+      {message.content ? (
+        message.role === "assistant" ? (
+          <RichText text={message.content} streaming={streaming} />
+        ) : (
+          <p className="chat-user-text">{message.content}</p>
+        )
+      ) : (
+        <p className="muted" role="status">
+          {tr(
+            message.incomplete
+              ? "调用未完成"
+              : !streaming
+                ? "模型未返回回答"
+                : message.reasoning
+                  ? "正在思考…"
+                  : "正在等待模型响应…",
+          )}
+        </p>
+      )}
+      {!!citations.length && (
+        <div className="chat-sources">
+          {citations.map((c) => (
+            <a
+              key={c.url}
+              href={c.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {c.title || c.url}
+            </a>
+          ))}
+        </div>
+      )}
+      {message.role === "assistant" && message.content && !streaming && (
+        <button
+          type="button"
+          className="ghost chat-copy"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(message.content);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            } catch {
+              setCopied(false);
+            }
+          }}
+        >
+          {tr(copied ? "已复制" : "复制回答")}
+        </button>
+      )}
+    </>
   );
 }
 function Page({ host }: { host: UIHost }) {
@@ -97,6 +134,10 @@ function Page({ host }: { host: UIHost }) {
   const [system, setSystem] = React.useState(initial.system);
   const [temperature, setTemperature] = React.useState(initial.temperature);
   const [maxTokens, setMaxTokens] = React.useState(initial.maxTokens);
+  const [effort, setEffort] = React.useState(initial.effort ?? "");
+  const efforts = selectedModel?.reasoningEfforts ?? ["low", "medium", "high"];
+  const follow = React.useRef(true);
+  const [away, setAway] = React.useState(false);
   const [messages, setMessages] = React.useState<Message[]>(initial.messages);
   const [busy, setBusy] = React.useState(false);
   const [settings, setSettings] = React.useState(false);
@@ -117,6 +158,7 @@ function Page({ host }: { host: UIHost }) {
     system,
     temperature,
     maxTokens,
+    effort,
     meta,
     messages: busy
       ? messages.map((message, index) =>
@@ -138,6 +180,7 @@ function Page({ host }: { host: UIHost }) {
     system,
     temperature,
     maxTokens,
+    effort,
     messages,
     meta,
     busy,
@@ -173,17 +216,33 @@ function Page({ host }: { host: UIHost }) {
     setModelChannel(match.channel?.id ?? "");
   }, [models.data]);
   React.useEffect(() => {
-    if (transcript.current)
+    if (transcript.current && follow.current)
       transcript.current.scrollTop = transcript.current.scrollHeight;
   }, [messages]);
+  React.useEffect(() => {
+    const element = transcript.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      if (follow.current) element.scrollTop = element.scrollHeight;
+    });
+    for (const child of element.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [messages.length]);
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (busy || !prompt.trim() || !selectedModel) return;
     const history = [
       ...messages.filter((m) => !m.incomplete),
-      { role: "user" as const, content: prompt },
+      { role: "user" as const, content: prompt, createdAt: Date.now() },
     ];
-    const answer = { role: "assistant" as const, model, channel: modelChannel };
+    const answer = {
+      role: "assistant" as const,
+      model,
+      channel: modelChannel,
+      createdAt: Date.now(),
+    };
+    follow.current = true;
+    setAway(false);
     setMessages([...history, { ...answer, content: "" }]);
     setPrompt("");
     setBusy(true);
@@ -191,7 +250,8 @@ function Page({ host }: { host: UIHost }) {
     setMeta({});
     const abort = new AbortController();
     controller.current = abort;
-    let text = "";
+    let text = "",
+      reasoning = "";
     const citations: UrlCitation[] = [];
     let first: number | undefined;
     const started = performance.now();
@@ -213,6 +273,9 @@ function Page({ host }: { host: UIHost }) {
             ...history.map(({ role, content }) => ({ role, content })),
           ],
           stream: true,
+          ...(effort && efforts.includes(effort as any)
+            ? { reasoning_effort: effort }
+            : {}),
           ...(temperature !== "" ? { temperature: Number(temperature) } : {}),
           ...(maxTokens !== "" ? { max_tokens: Number(maxTokens) } : {}),
           stream_options: { include_usage: true },
@@ -230,6 +293,14 @@ function Page({ host }: { host: UIHost }) {
       }
       if (!response.body) throw new Error(tr("响应流为空"));
       await readChatStream(response.body, (event) => {
+        const thought = event.choices?.[0]?.delta?.reasoning_content;
+        if (typeof thought === "string" && thought) {
+          reasoning += thought;
+          setMessages([
+            ...history,
+            { ...answer, content: text, reasoning, citations: [...citations] },
+          ]);
+        }
         const delta = event.choices?.[0]?.delta?.content;
         if (typeof delta === "string" && delta) {
           if (first === undefined) {
@@ -239,7 +310,7 @@ function Page({ host }: { host: UIHost }) {
           text += delta;
           setMessages([
             ...history,
-            { ...answer, content: text, citations: [...citations] },
+            { ...answer, content: text, reasoning, citations: [...citations] },
           ]);
         }
         for (const annotation of event.choices?.[0]?.delta?.annotations ?? []) {
@@ -265,7 +336,7 @@ function Page({ host }: { host: UIHost }) {
             citations.push(citation);
           setMessages([
             ...history,
-            { ...answer, content: text, citations: [...citations] },
+            { ...answer, content: text, reasoning, citations: [...citations] },
           ]);
         }
         if (event.usage)
@@ -286,6 +357,7 @@ function Page({ host }: { host: UIHost }) {
             text ||
             (abort.signal.aborted ? tr("已停止生成") : tr("调用未完成")),
           incomplete: true,
+          reasoning,
           citations: [...citations],
         },
       ]);
@@ -297,6 +369,7 @@ function Page({ host }: { host: UIHost }) {
   }
   return (
     <div className="playground-page">
+      <link rel="stylesheet" href="/extensions/official.playground/ui.css" />
       <PageHeading title={tr("在线对话")}>
         <button className="secondary" onClick={() => setSettings(true)}>
           <Icon name="settings" size={15} />
@@ -375,7 +448,18 @@ function Page({ host }: { host: UIHost }) {
       )}
       <div className="playground-grid">
         <section className="chat-panel">
-          <div className="chat-messages" ref={transcript} aria-live="polite">
+          <div
+            className="chat-messages"
+            ref={transcript}
+            role="log"
+            aria-label={tr("对话记录")}
+            onScroll={() => {
+              const e = transcript.current!;
+              follow.current =
+                e.scrollHeight - e.scrollTop - e.clientHeight < 100;
+              setAway(!follow.current);
+            }}
+          >
             {messages.length ? (
               messages.map((m, i) => (
                 <article key={i} className={"chat-message " + m.role}>
@@ -387,7 +471,18 @@ function Page({ host }: { host: UIHost }) {
                       {m.role === "user" ? tr("你") : (m.model ?? model)}
                       {m.incomplete ? tr(" · 未完成") : ""}
                     </strong>
-                    <Answer message={m} />
+                    {m.createdAt && (
+                      <time dateTime={new Date(m.createdAt).toISOString()}>
+                        {new Date(m.createdAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </time>
+                    )}
+                    <Answer
+                      message={m}
+                      streaming={busy && i === messages.length - 1}
+                    />
                   </div>
                 </article>
               ))
@@ -398,18 +493,33 @@ function Page({ host }: { host: UIHost }) {
               </div>
             )}
           </div>
+          {away && (
+            <button
+              type="button"
+              className="secondary chat-latest"
+              onClick={() => {
+                follow.current = true;
+                setAway(false);
+                transcript.current?.scrollTo({
+                  top: transcript.current.scrollHeight,
+                  behavior: "smooth",
+                });
+              }}
+            >
+              {tr("回到最新")}
+            </button>
+          )}
           <form className="chat-composer" onSubmit={send}>
             <textarea
               aria-label={tr("消息内容")}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={tr("输入消息…")}
-              disabled={busy}
               maxLength={64000}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
-                  (event.ctrlKey || event.metaKey) &&
+                  !event.shiftKey &&
                   !event.nativeEvent.isComposing
                 ) {
                   event.preventDefault();
@@ -418,7 +528,7 @@ function Page({ host }: { host: UIHost }) {
               }}
             />
             <div className="chat-composer-bottom">
-              <kbd aria-hidden="true">Ctrl / ⌘ ↵</kbd>
+              <kbd aria-hidden="true">Enter ↵ · Shift + Enter</kbd>
               <div className="chat-composer-actions">
                 <Select
                   aria-label={tr("选择模型")}
@@ -486,6 +596,35 @@ function Page({ host }: { host: UIHost }) {
               />
             </label>
             <label>
+              {tr("思考强度")}
+              <Select
+                value={efforts.includes(effort as any) ? effort : ""}
+                disabled={busy}
+                onChange={(e) => setEffort(e.target.value)}
+              >
+                <option value="">{tr("模型默认")}</option>
+                {efforts.map((value) => (
+                  <option value={value} key={value}>
+                    {tr(
+                      value === "none"
+                        ? "关闭"
+                        : value === "minimal"
+                          ? "最低"
+                          : value === "low"
+                            ? "低"
+                            : value === "medium"
+                              ? "中"
+                              : value === "high"
+                                ? "高"
+                                : value === "xhigh"
+                                  ? "很高"
+                                  : "最高",
+                    )}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label>
               Temperature
               <input
                 type="number"
@@ -508,13 +647,8 @@ function Page({ host }: { host: UIHost }) {
                 value={maxTokens}
                 disabled={busy}
                 onChange={(e) => setMaxTokens(e.target.value)}
-                placeholder={tr("留空由上游决定")}
+                placeholder={tr("模型默认")}
               />
-              <small>
-                {tr(
-                  "预付计费要求指定。Codex CLI 模式须清空此项和 Temperature。",
-                )}
-              </small>
             </label>
           </div>
         </Dialog>

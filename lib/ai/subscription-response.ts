@@ -7,6 +7,9 @@ import { decodeResult, resultEvents } from "./protocols.js";
 import { upstreamEvents } from "./streams.js";
 
 export class SubscriptionFailure extends HostError {
+  get generationRejected() {
+    return [400, 401, 403, 404, 422, 429, 503].includes(this.upstreamStatus);
+  }
   constructor(
     public upstreamStatus: number,
     public quotaExhausted = false,

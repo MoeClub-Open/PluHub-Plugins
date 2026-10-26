@@ -15,7 +15,6 @@ export const en: Record<string, string> = {
   未知用户: "Unknown user",
   名称不可用: "Name unavailable",
   控制台会话: "Console session",
-  历史个人渠道: "Historical personal channels",
   未分类: "Unclassified",
   不扣余额: "No wallet charge",
   余额扣费: "Wallet charges",
@@ -2450,4 +2449,46 @@ export const en: Record<string, string> = {
   "自动路由尚未确定计费模型，无法提供固定费用试算":
     "Automatic routing has not selected a billing model, so a fixed cost cannot be calculated.",
   添加使用分组: "Add service group",
+  查看图表: "View diagram",
+  查看代码: "View source",
+  "图表语法无效，已显示原始代码。":
+    "Invalid diagram syntax. Source is shown instead.",
+  复制回答: "Copy answer",
+  回到最新: "Jump to latest",
+  模型默认: "Model default",
+  最低: "Minimal",
+  很高: "Extra high",
+  最高: "Maximum",
+  对话记录: "Conversation",
+  平台分组: "Platform group",
+  失败后切换: "Fallback on rejection",
+  不切换: "No fallback",
+  使用模型映射: "Use model mapping",
+  请选择分组: "Select a group",
+  "调用此节点会按平台分组价格扣除余额。":
+    "Calls through this node are charged at the platform group rate.",
+  备用切换: "Fallback",
+  计费说明: "Billing details",
+  "上游未提供完整用量，费用尚未确认。":
+    "The upstream did not report complete usage. The cost is not confirmed.",
+  "请求已取消，未收到完整用量，费用尚未确认。":
+    "The request was canceled before complete usage arrived. The cost is not confirmed.",
+  "响应未完整结束，费用尚未确认。":
+    "The response was interrupted. The cost is not confirmed.",
+  "上游用量超过输出上限，需要核对实际费用。":
+    "Reported usage exceeded the output limit. The actual cost needs reconciliation.",
+  "服务重启时请求尚未完成结算。":
+    "The service restarted before settlement completed.",
+  "上游用量或金额异常，需要人工核对。":
+    "Reported usage or cost is invalid and needs reconciliation.",
+  "上游在生成前拒绝请求，预留已释放。":
+    "The upstream rejected the request before generation. The reservation was released.",
+  "待核账是预留尚未结算，并非已经扣费。核对上游账单后填写实际费用，填 0 释放预留。":
+    "Pending reconciliation means the reservation has not been settled. Check the upstream bill and enter the actual cost, or 0 to release it.",
+  "备用切换可能使用不同计费模型，无法提供固定费用试算":
+    "Fallback may select a different billing model, so a fixed cost cannot be quoted.",
+  "上游拒绝了请求，请检查模型权限、额度和请求参数。":
+    "The upstream rejected the request. Check model access, quota, and request parameters.",
+  模型未返回回答: "The model returned no answer",
+  "正在渲染图表…": "Rendering diagram…",
 };

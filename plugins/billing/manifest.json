@@ -5,7 +5,7 @@
   "name": "计费与余额",
   "description": "管理余额预留、结算和资金账本。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.29",
+  "version": "0.1.0-alpha.30",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -16,7 +16,8 @@
     "billing.credit@1",
     "billing.balance@1",
     "billing.request-charges@1",
-    "billing.request-totals@1"
+    "billing.request-totals@1",
+    "billing.admit@1"
   ],
   "requires": [],
   "optionalRequires": [

@@ -344,6 +344,14 @@ export default definePlugin({
           compileWorkflow(upstream.flow);
           for (const node of upstream.flow.nodes) {
             if (
+              node.type === "platform" ||
+              (node.type === "provider" && node.fallback)
+            )
+              throw new HostError(
+                "invalid_config",
+                "平台分组节点仅用于个人渠道",
+              );
+            if (
               node.type === "upstream" &&
               !Object.hasOwn(config.models ?? {}, node.target) &&
               !Object.hasOwn(config.redirects ?? {}, node.target)

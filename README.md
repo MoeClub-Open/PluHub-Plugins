@@ -47,3 +47,5 @@ BYOK 提供用户独立的个人渠道、可编辑服务商预设、模型原价
 工单与支持 Tickets 插件提供用户新建、分类、优先级、双方回复、关闭与重新打开；管理入口在「系统管理 → 工单管理」。数据通过独立 SQLite 迁移保存，需控制台会话，支持用户隔离、幂等提交、并发版本检查、配额和分页。Console 账号菜单显示真实可用余额、冻结及订阅，主题可跟随系统，统一下拉组件支持键盘与主题样式。
 
 路由执行、自动路由候选和费用试算共用 AI Router 的 `resolution.ts`。Auto Router 仅提供决策能力 `ai.auto-routing@1`，不再提供旧生成适配器；Token Speed 仅提供 `ai.output-pace@2`。费用试算不调用远程决策、生成接口或租约接口，不能确定目标时返回明确错误。插件所有权、请求和资金流程见主仓 `docs/PLUGIN_ARCHITECTURE.md`；生产适用边界见 `docs/IMPLEMENTATION.md`。
+
+在线对话支持 Markdown、KaTeX 数学公式、Mermaid 图表和思考强度；个人渠道图可显式委托平台使用分组，并在首事件前明确拒绝时切换。平台调用仍由 Billing 预留和结算，渠道测试也通过标准入口，不另建绕过计费的测试链路。配置与限制见主仓 `docs/GATEWAY.md`、`docs/PERSONAL_CHANNELS.md`。

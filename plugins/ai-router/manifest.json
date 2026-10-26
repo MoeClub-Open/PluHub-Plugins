@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.42",
+  "version": "0.1.0-alpha.43",
   "host": ">=0.1.0-alpha.15 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -1097,7 +1097,16 @@
     "path": "/channels",
     "public": false,
     "group": "routing",
-    "order": 10
+    "order": 10,
+    "pages": [
+      {
+        "title": "使用分组",
+        "path": "/settings/service-groups",
+        "public": false,
+        "group": "routing",
+        "order": 20
+      }
+    ]
   },
   "optionalRequires": [
     "http.transport@1",

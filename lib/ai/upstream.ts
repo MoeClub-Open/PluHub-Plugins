@@ -1,4 +1,5 @@
 import { upstreamKey } from "./upstream-key.js";
+import { upstreamRejection, prepareBeforeGeneration } from "./rejection.js";
 import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
 import type { Protocol, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { encodeRequest, decodeResult, resultEvents } from "./protocols.js";
@@ -31,13 +32,12 @@ export function createUpstream(protocol: Protocol) {
           const { request, upstream } = input;
           if (upstream.protocol !== protocol)
             throw new HostError("adapter_mismatch", "Wrong upstream adapter");
-          const key = await upstreamKey(
-            host,
-            upstream,
-            signal,
-            request.sessionId,
+          const key = await prepareBeforeGeneration(() =>
+            upstreamKey(host, upstream, signal, request.sessionId),
           );
-          const body = encodeRequest(protocol, request);
+          const body = prepareBeforeGeneration(() =>
+            encodeRequest(protocol, request),
+          );
           const url = upstreamUrl(
             requiredString(upstream.baseUrl, "upstream URL", 2048),
             requestPath(protocol, upstream.http, request.stream),
@@ -74,11 +74,7 @@ export function createUpstream(protocol: Protocol) {
           );
           if (!response.ok) {
             await response.body?.cancel();
-            throw new HostError(
-              "upstream_error",
-              "Upstream rejected request",
-              response.status === 429 ? 429 : 502,
-            );
+            throw upstreamRejection(response.status);
           }
           if (!response.body)
             throw new HostError(

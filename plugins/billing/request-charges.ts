@@ -49,7 +49,7 @@ export function installRequestCharges(host: Host, db: DatabaseSync) {
           "Expected at most 500 request identities",
         );
       const find =
-        db.prepare(`SELECT r.id,r.user_id,r.status,r.amount,r.receipt,l.amount AS posted
+        db.prepare(`SELECT r.id,r.user_id,r.status,r.amount,r.receipt,r.note,l.amount AS posted
       FROM reservations r LEFT JOIN ledger l ON l.source='request:'||r.id AND l.user_id=r.user_id
       WHERE r.id=? AND r.user_id=?`);
       return requests.flatMap(({ id, userId }) => {
@@ -60,6 +60,7 @@ export function installRequestCharges(host: Host, db: DatabaseSync) {
             requestId: row.id,
             userId: row.user_id,
             status: row.status,
+            note: row.note ?? undefined,
             charged:
               row.posted == null
                 ? row.status === "released"

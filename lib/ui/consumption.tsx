@@ -35,7 +35,7 @@ export const consumptionSources: Record<string, string> = {
   platform: "平台渠道",
   byoapi: "BYOAPI",
   byosub: "BYOSUB",
-  personal: "历史个人渠道",
+  personal: "个人渠道",
   unknown: "未分类",
   unrouted: "未进入渠道",
 };

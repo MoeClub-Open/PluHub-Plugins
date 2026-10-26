@@ -52,6 +52,7 @@ function catalog(
       provider: m.provider || upstreams[m.upstream]?.protocol || "Custom",
       description: m.description ?? "",
       contextWindow: m.contextWindow,
+      reasoningEfforts: m.reasoningEfforts,
       inputPrice: m.inputPrice,
       outputPrice: m.outputPrice,
       pricing: m.pricing,

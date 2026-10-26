@@ -13,6 +13,10 @@ export const ingressOptions: { value: Protocol; label: string }[] = [
 ];
 export interface ChannelNodeContext {
   personal: boolean;
+  platformGroups?: {
+    data?: { id: string; name: string; multiplier: number }[];
+  };
+  platformNodes?: Extract<WorkflowNode, { type: "platform" }>[];
   channel: any;
   references?: { routingProfiles?: string[]; tokenizers?: string[] };
   personalInterfaces?: UpstreamInterface[];
@@ -251,7 +255,61 @@ export function ChannelNodeSettings({
         </>
       )}
       {node.type === "provider" && (
-        <ProviderNodeSettings node={node} change={change} context={context} />
+        <>
+          <ProviderNodeSettings node={node} change={change} context={context} />
+          {personal && (
+            <label>
+              {tr("失败后切换")}
+              <Select
+                value={node.fallback ?? ""}
+                onChange={(e) =>
+                  change({ fallback: e.target.value || undefined })
+                }
+              >
+                <option value="">{tr("不切换")}</option>
+                {context.platformNodes?.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {context.platformGroups?.data?.find(
+                      (group) => group.id === target.groupId,
+                    )?.name ?? target.groupId}{" "}
+                    · {target.model || tr("使用模型映射")}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
+        </>
+      )}
+      {node.type === "platform" && (
+        <>
+          <label>
+            {tr("使用分组")}
+            <Select
+              value={node.groupId}
+              onChange={(e) => change({ groupId: e.target.value })}
+            >
+              <option value="" disabled>
+                {tr("请选择分组")}
+              </option>
+              {context.platformGroups?.data?.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name} · ×{group.multiplier}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label>
+            {tr("平台模型")}
+            <input
+              value={node.model ?? ""}
+              placeholder={tr("使用模型映射")}
+              onChange={(e) => change({ model: e.target.value || undefined })}
+            />
+          </label>
+          <p className="field-note">
+            {tr("调用此节点会按平台分组价格扣除余额。")}
+          </p>
+        </>
       )}
       {node.type === "routing" && (
         <label>

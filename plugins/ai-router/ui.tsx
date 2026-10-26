@@ -256,6 +256,22 @@ function Page({ host }: { host: UIHost }) {
       )}
     </>
   );
+  if (host.page === "/settings/service-groups" || requestedTab === "groups")
+    return (
+      <>
+        <PageHeading title={tr("使用分组")} />
+        <Notice message={message || loaded.error} />
+        {loaded.data && (
+          <Groups
+            host={host}
+            groups={router.groups}
+            upstreams={upstreams}
+            save={save}
+            busy={busy}
+          />
+        )}
+      </>
+    );
   if (graph)
     return (
       <>
@@ -323,14 +339,6 @@ function Page({ host }: { host: UIHost }) {
         </button>
         <button
           role="tab"
-          aria-selected={tab === "groups"}
-          className={tab === "groups" ? "active" : ""}
-          onClick={() => setTab("groups")}
-        >
-          {tr("使用分组")}
-        </button>
-        <button
-          role="tab"
           aria-selected={tab === "redirects"}
           className={tab === "redirects" ? "active" : ""}
           onClick={() => setTab("redirects")}
@@ -348,15 +356,6 @@ function Page({ host }: { host: UIHost }) {
           {tr("高级 JSON")}
         </button>
       </div>
-      {tab === "groups" && (
-        <Groups
-          host={host}
-          groups={router.groups}
-          upstreams={upstreams}
-          save={save}
-          busy={busy}
-        />
-      )}
       {tab === "redirects" && (
         <Redirects
           rules={router.redirects ?? {}}

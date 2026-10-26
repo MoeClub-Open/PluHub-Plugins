@@ -57,6 +57,15 @@ export function ChannelGraphEditor({
         : "/api/plugins/official.ai-router/configuration",
     ),
   );
+  const platformGroups = useLoad<
+    { id: string; name: string; multiplier: number }[]
+  >(
+    () =>
+      personal
+        ? host.request("/api/plugins/official.ai-router/groups")
+        : Promise.resolve([]),
+    [personal],
+  );
   const [draft, setDraft] = React.useState<GraphDraft>();
   const [baseline, setBaseline] = React.useState("");
   const channelName = draft?.channelName ?? "";
@@ -169,32 +178,35 @@ export function ChannelGraphEditor({
                 n.type === "routing",
             )?.id ?? "provider");
     const extra =
-      type === "provider"
-        ? {}
-        : type === "routing"
-          ? {
-              profile:
-                (loaded.data?.references?.routingProfiles ?? [])[0] ?? "$model",
-            }
-          : type === "protocol"
+      type === "platform"
+        ? { groupId: platformGroups.data?.[0]?.id ?? "" }
+        : type === "provider"
+          ? {}
+          : type === "routing"
             ? {
-                next,
-                allow: ingressOptions.map((p) => p.value),
-                conversion: "auto",
+                profile:
+                  (loaded.data?.references?.routingProfiles ?? [])[0] ??
+                  "$model",
               }
-            : type === "condition"
-              ? { test: "hasTools", yes: next, no: next }
-              : type === "prompt"
-                ? { next, text: "请准确、简洁地回答。" }
-                : type === "reasoning"
-                  ? { next, effort: "medium" }
-                  : type === "maxTokens"
-                    ? { next, limit: 1024 }
-                    : type === "rateLimit"
-                      ? { next, rule: { rpm: 60 } }
-                      : type === "tps"
-                        ? { next, rate: 30, tokenizer: "o200k_base" }
-                        : { target: targets[0] ?? "", mode: "implicit" };
+            : type === "protocol"
+              ? {
+                  next,
+                  allow: ingressOptions.map((p) => p.value),
+                  conversion: "auto",
+                }
+              : type === "condition"
+                ? { test: "hasTools", yes: next, no: next }
+                : type === "prompt"
+                  ? { next, text: "请准确、简洁地回答。" }
+                  : type === "reasoning"
+                    ? { next, effort: "medium" }
+                    : type === "maxTokens"
+                      ? { next, limit: 1024 }
+                      : type === "rateLimit"
+                        ? { next, rule: { rpm: 60 } }
+                        : type === "tps"
+                          ? { next, rate: 30, tokenizer: "o200k_base" }
+                          : { target: targets[0] ?? "", mode: "implicit" };
     const anchorPoint = workflowNodePositions(flow).get(selected);
     update({
       ...flow,
@@ -210,24 +222,32 @@ export function ChannelGraphEditor({
           : flow.layout,
       nodes: [
         ...flow.nodes.map((n) =>
-          type === "provider" || type === "routing" || type === "upstream"
-            ? n
-            : !position && n.id === selected && "next" in n
-              ? { ...n, next: key }
-              : anchor &&
-                  (anchor.type === "provider" ||
-                    anchor.type === "upstream" ||
-                    anchor.type === "routing")
-                ? n.type === "condition"
-                  ? {
-                      ...n,
-                      yes: n.yes === selected ? key : n.yes,
-                      no: n.no === selected ? key : n.no,
-                    }
-                  : "next" in n && n.next === selected
-                    ? { ...n, next: key }
-                    : n
-                : n,
+          type === "platform" &&
+          !position &&
+          n.id === selected &&
+          n.type === "provider"
+            ? { ...n, fallback: key }
+            : type === "platform" ||
+                type === "provider" ||
+                type === "routing" ||
+                type === "upstream"
+              ? n
+              : !position && n.id === selected && "next" in n
+                ? { ...n, next: key }
+                : anchor &&
+                    (anchor.type === "provider" ||
+                      anchor.type === "upstream" ||
+                      anchor.type === "routing")
+                  ? n.type === "condition"
+                    ? {
+                        ...n,
+                        yes: n.yes === selected ? key : n.yes,
+                        no: n.no === selected ? key : n.no,
+                      }
+                    : "next" in n && n.next === selected
+                      ? { ...n, next: key }
+                      : n
+                  : n,
         ),
         { id: key, type, ...extra } as WorkflowNode,
       ],
@@ -475,7 +495,8 @@ export function ChannelGraphEditor({
                   {(Object.keys(labels) as WorkflowNode["type"][])
                     .filter(
                       (type) =>
-                        type !== "start" && (!personal || type !== "routing"),
+                        type !== "start" &&
+                        (personal ? type !== "routing" : type !== "platform"),
                     )
                     .map((type) => (
                       <Popover.Close asChild key={type}>
@@ -522,6 +543,10 @@ export function ChannelGraphEditor({
                       node={current}
                       context={{
                         personal,
+                        platformGroups,
+                        platformNodes: flow.nodes.filter(
+                          (node) => node.type === "platform",
+                        ),
                         channel,
                         personalInterfaces,
                         setPersonalInterfaces,

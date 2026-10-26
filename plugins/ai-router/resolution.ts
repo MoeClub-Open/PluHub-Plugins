@@ -91,6 +91,8 @@ export async function resolveRoute(
   const responsePath: string[] = [requestedModel];
   let decision: AIPlan["decision"], logicalUpstreamId: string | undefined;
   let outputPolicy: AIPlan["outputPolicy"], resolved: AIPlan | undefined;
+  let finalRoute: ModelRoute | undefined;
+  let fallback: RoutingRequest | undefined;
   const requestLimits: NonNullable<AIPlan["requestLimits"]> = [];
   const outputPolicies: (NonNullable<
     WorkflowResult["outputPolicies"]
@@ -99,7 +101,7 @@ export async function resolveRoute(
   let sessionChannel = input.channelId;
   let providerNodeId: string | undefined;
   let consumptionMultiplier: number | undefined;
-  let protocolPolicy = options.protocolPolicy;
+  let protocolPolicy = options.protocolPolicy ?? input.protocolPolicy;
   while (path.length < 32) {
     signal.throwIfAborted();
     if (path.includes(model))
@@ -201,6 +203,47 @@ export async function resolveRoute(
             result.outputPolicy.tps ?? Infinity,
           ),
         };
+      if (result.platformGroup || result.fallback) {
+        if (!input.channelId?.startsWith("personal:") || !input.principalId)
+          throw new HostError(
+            "invalid_route",
+            "平台分组节点仅用于个人渠道",
+            400,
+          );
+        const target = (result.platformGroup ?? result.fallback)!;
+        if (result.platformGroup)
+          resolveGroup(host.config(), target.groupId, input.principalId);
+        const delegated: RoutingRequest = {
+          purpose: input.purpose,
+          operation: input.operation,
+          model: target.model ?? route.model,
+          groupId: target.groupId,
+          principalId: input.principalId,
+          request: prepared,
+          ingressProtocol: input.ingressProtocol,
+          features: input.features,
+          pricingContext: input.pricingContext,
+          protocolPolicy,
+        };
+        if (result.platformGroup) {
+          resolved = await host.call<AIPlan>("ai.routing@2", delegated, signal);
+          finalRoute = (host.config().models as Record<string, ModelRoute>)[
+            resolved.targetModelId!
+          ];
+          workflows.push(...(resolved.workflows ?? []));
+          requestLimits.push(...(resolved.requestLimits ?? []));
+          outputPolicy = resolved.outputPolicy;
+          credentialId = undefined;
+          break;
+        }
+        if (input.purpose === "quote")
+          throw new HostError(
+            "quote_fallback_required",
+            "备用切换可能使用不同计费模型，无法提供固定费用试算",
+            409,
+          );
+        fallback = delegated;
+      }
       if (result.provider) {
         providerNodeId = result.providerId;
         const node = upstream.flow?.nodes.find(
@@ -445,9 +488,10 @@ export async function resolveRoute(
       ]),
     };
   return {
-    route: models[resolved.targetModelId!]!,
+    route: finalRoute ?? models[resolved.targetModelId!]!,
     plan: {
       ...resolved,
+      ...(fallback ? { fallback } : {}),
       ...(resolved.pricing
         ? {
             pricing: bindPricingContext(

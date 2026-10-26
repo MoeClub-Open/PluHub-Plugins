@@ -23,6 +23,18 @@ export function RoutingDetails({
     budget.reservedTokens > 0;
   return (
     <>
+      {routing.attempts?.length > 0 && (
+        <dl className="detail-grid">
+          <div>
+            <dt>{tr("备用切换")}</dt>
+            <dd>
+              {routing.attempts
+                .map((attempt: any) => attempt.model + " · " + attempt.error)
+                .join(" → ")}
+            </dd>
+          </div>
+        </dl>
+      )}
       {typeof routing.targetModel === "string" &&
         routing.targetModel !== requestedModel && (
           <dl className="detail-grid">

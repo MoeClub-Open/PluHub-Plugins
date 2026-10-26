@@ -1,4 +1,5 @@
 import { requestErrorHint } from "../../lib/ui/request-error.js";
+import { billingNote } from "../../lib/ui/billing-note.js";
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import { modelEndpoints } from "../../lib/ui/model-endpoints.js";
@@ -664,6 +665,9 @@ function Page({ host }: { host: UIHost }) {
                   : selected.held_micro_usd / 1000000,
               ),
               计费状态: billingStatus(selected.billing_status),
+              ...(selected.billing_note
+                ? { 计费说明: billingNote(selected.billing_note) }
+                : {}),
               错误代码: selected.error_code || "—",
             }).map(([k, v]) => (
               <div key={k}>

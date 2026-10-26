@@ -1,4 +1,10 @@
-import { definePlugin, HostError, json, type Principal } from "@pluhub/sdk";
+import {
+  definePlugin,
+  HostError,
+  json,
+  type RequestContext,
+  type Principal,
+} from "@pluhub/sdk";
 import type { AIRequest, AIPlan } from "@pluhub/contracts/ai";
 import type { RequestLimitRule } from "@pluhub/contracts/workflow";
 import { observation } from "../../lib/ai/telemetry.js";
@@ -43,6 +49,7 @@ export default definePlugin({
       rules: [string, Rule][],
       tokens: number,
       checkOnly = false,
+      skipRequests = new Set<string>(),
     ) {
       // A redirect may revisit one channel through a different public model.
       // Count one request per node rather than reserving that bucket twice.
@@ -61,7 +68,7 @@ export default definePlugin({
           bucket.tokens = 0;
         }
         if (
-          (rule.rpm && bucket.requests >= rule.rpm) ||
+          (rule.rpm && !skipRequests.has(id) && bucket.requests >= rule.rpm) ||
           (rule.tpm && bucket.tokens + tokens > rule.tpm) ||
           (rule.concurrency && bucket.active >= rule.concurrency)
         )
@@ -70,11 +77,11 @@ export default definePlugin({
             "Gateway rate or concurrency limit exceeded",
             429,
           );
-        return { bucket, window, tokens };
+        return { id, bucket, window, tokens };
       });
       if (checkOnly) return;
       for (const item of items) {
-        item.bucket.requests++;
+        if (!skipRequests.has(item.id)) item.bucket.requests++;
         item.bucket.tokens += tokens;
         item.bucket.active++;
       }
@@ -92,48 +99,63 @@ export default definePlugin({
         }
       };
     }
+    function admit(ctx: RequestContext, retry = false) {
+      const request = ctx.state.get("ai.request") as AIRequest | undefined;
+      const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
+      if (!request || !plan) return;
+      const c = host.config();
+      const rules = principalRules(ctx.principal);
+      const channel = (c.channels as Record<string, Rule> | undefined)?.[
+        plan.upstreamId!
+      ];
+      if (channel) rules.push(["channel:" + plan.upstreamId, channel]);
+      for (const policy of plan.requestLimits ?? []) {
+        // The channel ID includes the personal owner/channel identity. A graph
+        // redirect retains policies from every traversed channel.
+        rules.push([
+          JSON.stringify(["graph", policy.channel, policy.node]),
+          policy.rule,
+        ]);
+      }
+      const prepared = plan.preparedRequest ?? request;
+      const tokens =
+        Buffer.byteLength(JSON.stringify(prepared.messages)) +
+        Buffer.byteLength(JSON.stringify(prepared.tools)) +
+        (prepared.maxTokens ?? 4096) +
+        1024;
+      const previous = retry
+        ? new Set<string>(
+            (ctx.state.get("limits.rules") as string[] | undefined) ?? [],
+          )
+        : new Set<string>();
+      if (retry)
+        (
+          ctx.state.get("limits.release") as
+            ((actual: number) => void) | undefined
+        )?.(0);
+      ctx.state.set("limits.release", reserve(rules, tokens, false, previous));
+      ctx.state.set(
+        "limits.rules",
+        rules.map(([id]) => id),
+      );
+      ctx.state.set("limits.tokens", tokens);
+    }
     host.provide(
       "ai.request-limits@1",
       (
         input:
           | { action: "preflight"; principal?: Principal }
+          | { action: "admit"; context: RequestContext; retry?: boolean }
           | { rules: [string, Rule][]; tokens: number },
-      ) =>
-        "action" in input
-          ? reserve(principalRules(input.principal), 0, true)
-          : reserve(input.rules, input.tokens),
-    );
-    host.hook({
-      id: "admit",
-      phase: "Admission",
-      handle(ctx) {
-        const request = ctx.state.get("ai.request") as AIRequest | undefined;
-        const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
-        if (!request || !plan) return;
-        const c = host.config();
-        const rules = principalRules(ctx.principal);
-        const channel = (c.channels as Record<string, Rule> | undefined)?.[
-          plan.upstreamId!
-        ];
-        if (channel) rules.push(["channel:" + plan.upstreamId, channel]);
-        for (const policy of plan.requestLimits ?? []) {
-          // The channel ID includes the personal owner/channel identity. A graph
-          // redirect retains policies from every traversed channel.
-          rules.push([
-            JSON.stringify(["graph", policy.channel, policy.node]),
-            policy.rule,
-          ]);
-        }
-        const prepared = plan.preparedRequest ?? request;
-        const tokens =
-          Buffer.byteLength(JSON.stringify(prepared.messages)) +
-          Buffer.byteLength(JSON.stringify(prepared.tools)) +
-          (prepared.maxTokens ?? 4096) +
-          1024;
-        ctx.state.set("limits.release", reserve(rules, tokens));
-        ctx.state.set("limits.tokens", tokens);
+      ) => {
+        if ("action" in input)
+          return input.action === "preflight"
+            ? reserve(principalRules(input.principal), 0, true)
+            : admit(input.context, input.retry);
+        return reserve(input.rules, input.tokens);
       },
-    });
+    );
+    host.hook({ id: "admit", phase: "Admission", handle: (ctx) => admit(ctx) });
     host.hook({
       id: "release",
       phase: "Finalize",
@@ -145,9 +167,11 @@ export default definePlugin({
         release?.(
           usage
             ? usage.input + usage.output
-            : ctx.state.get("ai.executionStarted")
-              ? Number(ctx.state.get("limits.tokens"))
-              : 0,
+            : ctx.state.get("ai.executionRejected")
+              ? 0
+              : ctx.state.get("ai.executionStarted")
+                ? Number(ctx.state.get("limits.tokens"))
+                : 0,
         );
         ctx.state.delete("limits.release");
       },
