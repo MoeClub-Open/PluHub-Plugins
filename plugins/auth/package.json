@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-auth",
-  "version": "0.1.0-alpha.26",
+  "version": "0.1.0-alpha.29",
   "type": "module",
   "license": "Apache-2.0",
   "files": [

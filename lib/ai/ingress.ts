@@ -88,6 +88,11 @@ export function createIngress(protocol: Protocol) {
           }
           observation(ctx)!.model = decoded.model;
           observation(ctx)!.stream = decoded.stream;
+          await host.call(
+            "ai.request-limits@1",
+            { action: "preflight", principal: ctx.principal },
+            ctx.signal,
+          );
           ctx.state.set(
             "ai.plan",
             await host.call<AIPlan>(

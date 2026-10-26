@@ -5,10 +5,11 @@ import {
   requiredString,
   type Host,
 } from "@pluhub/sdk";
-import type { CatalogModel, RequestPricing } from "@pluhub/contracts/ai";
+import type { AIPlan, CatalogModel } from "@pluhub/contracts/ai";
+import { decode } from "../../lib/ai/protocols.js";
 import { priceUsage } from "../../lib/commerce/pricing.js";
 import { channelScope } from "../../lib/ai/channel-scope.js";
-import { freezePricing } from "../../lib/commerce/expression.js";
+import { capturePricingContext } from "../../lib/commerce/expression.js";
 
 export function installPriceQuote(host: Host) {
   host.api({
@@ -34,36 +35,15 @@ export function installPriceQuote(host: Host) {
         ...channels,
       });
       const candidates = models.filter((entry) => entry.id === model);
-      if (
-        !selectedChannel &&
-        new Set(candidates.map((entry) => JSON.stringify(entry.billing))).size >
-          1
-      )
+      if (!selectedChannel && candidates.length > 1)
         throw new HostError(
           "price_ambiguous",
-          "同名模型存在不同价格，请选择渠道后试算",
+          "同名模型存在多个路由，请选择渠道后试算",
           409,
         );
       const selected = candidates[0];
-      if (
-        !selected ||
-        (!["request", "expression"].includes(
-          selected.pricing?.mode ?? "tokens",
-        ) &&
-          (selected.inputPrice === undefined ||
-            selected.outputPrice === undefined))
-      )
-        throw new HostError(
-          "price_unavailable",
-          "Model has no billing price",
-          404,
-        );
-      const pricing: RequestPricing = selected.billing ?? {
-        ...selected.pricing,
-        input: selected.inputPrice ?? 0,
-        output: selected.outputPrice ?? 0,
-        multiplier: selected.consumptionMultiplier,
-      };
+      if (!selected)
+        throw new HostError("model_not_found", "当前使用范围内没有此模型", 404);
       if (!body.usage || typeof body.usage !== "object")
         throw new HostError("invalid_usage", "Usage is required");
       const context = body.context ?? {};
@@ -72,17 +52,34 @@ export function installPriceQuote(host: Host) {
         (typeof context.headers !== "object" || Array.isArray(context.headers))
       )
         throw new HostError("invalid_request", "Invalid billing headers");
-      return json(
-        priceUsage(
-          body.usage,
-          freezePricing(
-            pricing,
-            context.at ?? Date.now(),
-            context.params,
+      const plan = await host.call<AIPlan>(
+        "ai.routing@2",
+        {
+          purpose: "quote",
+          model: selected.routeId ?? selected.id,
+          ...channels,
+          channelId: selected.channelId,
+          principalId: ctx.principal!.id,
+          ingressProtocol: "openai-chat",
+          features: ["text", "usage"],
+          ...(body.request
+            ? { request: decode("openai-chat", { ...body.request, model }) }
+            : {}),
+          pricingContext: capturePricingContext(
+            context.params ?? body.request,
             new Headers(context.headers),
+            context.at ?? Date.now(),
           ),
-        ),
+        },
+        ctx.signal,
       );
+      if (!plan.pricing)
+        throw new HostError(
+          "price_unavailable",
+          "Model has no billing price",
+          404,
+        );
+      return json(priceUsage(body.usage, plan.pricing));
     },
   });
 }

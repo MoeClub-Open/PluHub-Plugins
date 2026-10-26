@@ -5,13 +5,7 @@ import {
   readObject,
   requiredString,
 } from "@pluhub/sdk";
-import type {
-  AIPlan,
-  AIRequest,
-  AIEvent,
-  ModelRoute,
-  ReasoningEffort,
-} from "@pluhub/contracts/ai";
+import type { AIPlan, ModelRoute, ReasoningEffort } from "@pluhub/contracts/ai";
 import type {
   RoutingProfile,
   RoutingCandidate,
@@ -181,6 +175,8 @@ export default definePlugin({
               principalId: input.principalId,
               groupId: input.groupId,
               allowedChannelIds: input.allowedChannelIds,
+              consumptionMultiplier: input.consumptionMultiplier,
+              pricingContext: input.pricingContext,
             },
             signal,
           );
@@ -188,6 +184,9 @@ export default definePlugin({
           if (
             [
               "model_not_found",
+              "invalid_route",
+              "adapter_unavailable",
+              "group_forbidden",
               "subscription_unavailable",
               "protocol_not_allowed",
               "protocol_conversion_forbidden",
@@ -443,25 +442,6 @@ export default definePlugin({
       };
     }
     host.provide("ai.auto-routing@1", resolve);
-    host.provide(
-      "ai.upstream.auto-router@1",
-      async ({ request }: { request: AIRequest }, signal) => {
-        const plan = await resolve({ profile: request.model, request }, signal);
-        const events = await host.call<AsyncIterable<AIEvent>>(
-          plan.capability,
-          {
-            upstream: plan.upstream,
-            request: {
-              ...request,
-              model: plan.model,
-              reasoning: plan.reasoning,
-            },
-          },
-          signal,
-        );
-        return events;
-      },
-    );
     host.api({
       method: "GET",
       path: "/targets",

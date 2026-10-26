@@ -1,12 +1,6 @@
-import {
-  serviceGroups,
-  groupAccess,
-  resolveGroup,
-  groupPricing,
-} from "./groups.js";
+import { serviceGroups, groupAccess } from "./groups.js";
 import { modelDefinition } from "../../lib/ai/model-definition.js";
 import { installConfiguration } from "./configuration.js";
-import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
 import {
   definePlugin,
   HostError,
@@ -24,7 +18,6 @@ import type {
   CatalogModel,
   ModelRedirect,
   PersonalChannel,
-  Protocol,
   ProviderConnection,
 } from "@pluhub/contracts/ai";
 import { readCatalog, type CatalogScope } from "./catalog.js";
@@ -36,13 +29,13 @@ import { channelScope } from "../../lib/ai/channel-scope.js";
 import { redirectModel } from "./redirects.js";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { planRoute } from "./planning.js";
+import { resolveRoute } from "./resolution.js";
 import {
   compileWorkflow,
   runWorkflow,
   checkProtocolConversion,
   requireIngressProtocol,
 } from "../../lib/ai/channel-graph.js";
-import type { WorkflowResult } from "@pluhub/contracts/workflow";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
@@ -208,133 +201,31 @@ export default definePlugin({
         return json(await channels({ userId: ctx.principal.id }));
       },
     });
-    function physical(
-      modelId: string,
-      request?: AIRequest,
-      path: string[] = [],
-      ingressProtocol?: Protocol,
-      protocolPolicy?: WorkflowResult["protocolPolicy"],
-      allowedChannels?: readonly string[],
-    ): { plan: AIPlan; route: ModelRoute } {
-      if (path.length >= 32 || path.includes(modelId))
-        throw new HostError("routing_cycle", "Target channel graph cycle");
-      const c = host.config();
-      const redirected = redirectModel(
-        modelId,
-        (c.redirects ?? {}) as Record<string, ModelRedirect>,
-      ).model;
-      if (redirected !== modelId)
-        return physical(
-          redirected,
-          request,
-          [...path, modelId],
-          ingressProtocol,
-          protocolPolicy,
-          allowedChannels,
-        );
-      const route = (c.models as Record<string, ModelRoute> | undefined)?.[
-        modelId
-      ];
-      const channel =
-        route &&
-        (c.upstreams as Record<string, Upstream> | undefined)?.[route.upstream];
-      if (
-        !route ||
-        !channel ||
-        route.enabled === false ||
-        channel.enabled === false
-      )
-        throw new HostError("model_not_found", "Target model unavailable", 404);
-      if (
-        request &&
-        !(route.operations ?? ["chat"]).includes(
-          request.operation?.kind ?? "chat",
-        )
-      )
-        throw new HostError(
-          "operation_not_supported",
-          "Model does not support this endpoint",
-          400,
-        );
-      if (allowedChannels && !allowedChannels.includes(route.upstream))
-        throw new HostError("group_forbidden", "目标渠道不在使用分组内", 403);
-      let upstream = channel;
-      let providerModel = route.model;
-      if (channel.flow) {
-        const result = runWorkflow(
-          route.upstream,
-          channel.flow,
-          request ?? {
-            model: modelId,
-            messages: [],
-            tools: [],
-            stream: false,
-          },
-          new AbortController().signal,
-          { ingressProtocol },
-        );
-        if (result.protocolPolicy && protocolPolicy?.conversion !== "disabled")
-          protocolPolicy = result.protocolPolicy;
-        if (result.routingProfile)
-          throw new HostError(
-            "routing_cycle",
-            "Automatic router candidates must resolve to provider nodes",
-          );
-        if (!result.provider)
-          return physical(
-            result.target,
-            result.request,
-            [...path, modelId],
-            ingressProtocol,
-            protocolPolicy,
-            allowedChannels,
-          );
-        const node = channel.flow.nodes.find((n) => n.id === result.providerId);
-        upstream =
-          node?.type === "provider" && node.upstream ? node.upstream : channel;
-        if (node?.type === "provider" && node.model) providerModel = node.model;
-      }
-      if (!upstream.protocol || upstream.protocol === "auto-router")
-        throw new HostError(
-          "routing_cycle",
-          "Automatic router candidates must resolve to provider nodes",
-        );
-      upstream = resolveInterface(upstream, ingressProtocol, providerModel);
-      if (request) validateWebSearchTarget(request, upstream);
-      checkProtocolConversion(
-        ingressProtocol,
-        upstream.protocol,
-        protocolPolicy,
-      );
-      return {
-        route,
-        plan: {
-          capability: "ai.upstream." + upstream.protocol + "@1",
-          upstream,
-          model: providerModel,
-          upstreamId: route.upstream,
-          targetModelId: modelId,
-          pricing: routePricing(route, channel),
-        },
-      };
-    }
     host.provide("ai.targets@1", async (input, signal) => {
       const c = host.config();
       const models = (c.models ?? {}) as Record<string, ModelRoute>;
       const channels = (c.upstreams ?? {}) as Record<string, Upstream>;
       if (input?.target) {
-        const target = physical(
-          requiredString(input.target, "target"),
-          input.request,
-          [],
-          input.ingressProtocol,
-          input.protocolPolicy,
-          input.allowedChannelIds,
+        const target = await resolveRoute(
+          host,
+          {
+            model: requiredString(input.target, "target"),
+            request: input.request,
+            features: ["text", "usage"],
+            principalId: input.principalId,
+            groupId: input.groupId,
+            ingressProtocol: input.ingressProtocol,
+            pricingContext: input.pricingContext,
+          },
+          signal,
+          input.target,
+          {
+            physicalOnly: true,
+            protocolPolicy: input.protocolPolicy,
+            allowedChannelIds: input.allowedChannelIds,
+            consumptionMultiplier: input.consumptionMultiplier,
+          },
         );
-        const group = input.groupId
-          ? resolveGroup(c, input.groupId, input.principalId)
-          : undefined;
-        target.plan.pricing = groupPricing(target.plan.pricing, group);
         const { upstream, model } = target.plan;
         if (upstream.subscriptionAccountIds) {
           const state = await host.call<{ available: boolean }>(
@@ -599,12 +490,9 @@ export default definePlugin({
           },
           signal,
         );
-        const pacing = host.hasCapability("ai.output-pace@2")
-          ? "ai.output-pace@2"
-          : "ai.output-pace@1";
-        return !actual.operation && host.hasCapability(pacing)
+        return !actual.operation && host.hasCapability("ai.output-pace@2")
           ? host.call<AsyncIterable<AIEvent>>(
-              pacing,
+              "ai.output-pace@2",
               { events, plan, request: actual },
               signal,
             )

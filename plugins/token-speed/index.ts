@@ -173,7 +173,6 @@ export default definePlugin({
         }
       })();
     };
-    host.provide("ai.output-pace@1", pace);
     host.provide("ai.output-pace@2", pace);
     host.api({
       method: "GET",

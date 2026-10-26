@@ -1,4 +1,4 @@
-import { definePlugin, HostError, json } from "@pluhub/sdk";
+import { definePlugin, HostError, json, type Principal } from "@pluhub/sdk";
 import type { AIRequest, AIPlan } from "@pluhub/contracts/ai";
 import type { RequestLimitRule } from "@pluhub/contracts/workflow";
 import { observation } from "../../lib/ai/telemetry.js";
@@ -20,7 +20,30 @@ export default definePlugin({
     }, 60000);
     sweep.unref();
     host.cleanup(() => clearInterval(sweep));
-    function reserve(rules: [string, Rule][], tokens: number) {
+    function principalRules(principal?: Principal): [string, Rule][] {
+      const c = host.config();
+      const rules: [string, Rule][] = [];
+      if (c.user && principal)
+        rules.push(["user:" + principal.id, c.user as Rule]);
+      const key = principal?.attributes?.keyId;
+      const keyLimit = Number(principal?.attributes?.requestsPerMinute ?? 0);
+      if (key && (c.key || keyLimit)) {
+        const rule = (c.key ?? {}) as Rule;
+        const limits = [rule.rpm, keyLimit].filter(
+          (value): value is number => !!value,
+        );
+        rules.push([
+          "key:" + key,
+          { ...rule, ...(limits.length ? { rpm: Math.min(...limits) } : {}) },
+        ]);
+      }
+      return rules;
+    }
+    function reserve(
+      rules: [string, Rule][],
+      tokens: number,
+      checkOnly = false,
+    ) {
       // A redirect may revisit one channel through a different public model.
       // Count one request per node rather than reserving that bucket twice.
       rules = [...new Map(rules).entries()];
@@ -49,6 +72,7 @@ export default definePlugin({
           );
         return { bucket, window, tokens };
       });
+      if (checkOnly) return;
       for (const item of items) {
         item.bucket.requests++;
         item.bucket.tokens += tokens;
@@ -70,8 +94,14 @@ export default definePlugin({
     }
     host.provide(
       "ai.request-limits@1",
-      ({ rules, tokens }: { rules: [string, Rule][]; tokens: number }) =>
-        reserve(rules, tokens),
+      (
+        input:
+          | { action: "preflight"; principal?: Principal }
+          | { rules: [string, Rule][]; tokens: number },
+      ) =>
+        "action" in input
+          ? reserve(principalRules(input.principal), 0, true)
+          : reserve(input.rules, input.tokens),
     );
     host.hook({
       id: "admit",
@@ -81,11 +111,7 @@ export default definePlugin({
         const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
         if (!request || !plan) return;
         const c = host.config();
-        const rules: [string, Rule][] = [];
-        if (c.user && ctx.principal)
-          rules.push(["user:" + ctx.principal.id, c.user as Rule]);
-        if (c.key && ctx.principal?.attributes?.keyId)
-          rules.push(["key:" + ctx.principal.attributes.keyId, c.key as Rule]);
+        const rules = principalRules(ctx.principal);
         const channel = (c.channels as Record<string, Rule> | undefined)?.[
           plan.upstreamId!
         ];

@@ -2391,7 +2391,6 @@ export const en: Record<string, string> = {
   使用分组: "Service group",
   使用范围: "Usage scope",
   保存并离开: "Save and leave",
-  保留原渠道授权: "Keep existing channel access",
   允许使用的用户: "Allowed users",
   全部平台渠道: "All platform channels",
   分组倍率: "Group multiplier",
@@ -2407,8 +2406,6 @@ export const en: Record<string, string> = {
   指定用户: "Selected users",
   放弃更改并离开: "Discard and leave",
   无可用渠道: "No available channels",
-  "此密钥保留原渠道授权和计费。选择分组后将按分组设置调用。":
-    "This key keeps its existing channel access and pricing. Selecting a group applies its settings.",
   添加分组: "Add group",
   继续编辑: "Continue editing",
   编辑使用分组: "Edit service group",
@@ -2446,7 +2443,11 @@ export const en: Record<string, string> = {
     "This model is outside your usage scope. Choose another model or group.",
   "当前没有可用渠道，请稍后重试或联系管理员。":
     "No channel is available. Retry later or contact an administrator.",
-  "同名模型存在不同价格，请选择渠道后试算":
-    "This model has different prices across channels. Select a channel to calculate the cost.",
+  "同名模型存在多个路由，请选择渠道后试算":
+    "This model has multiple routes. Select a channel to calculate the cost.",
+  "此渠道按请求内容选择计费模型，请提供请求内容后试算":
+    "This channel selects its billing model from the request. Provide the request to calculate the cost.",
+  "自动路由尚未确定计费模型，无法提供固定费用试算":
+    "Automatic routing has not selected a billing model, so a fixed cost cannot be calculated.",
   添加使用分组: "Add service group",
 };

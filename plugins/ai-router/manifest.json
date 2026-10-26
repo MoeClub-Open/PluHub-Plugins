@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.40",
+  "version": "0.1.0-alpha.41",
   "host": ">=0.1.0-alpha.15 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -1110,8 +1110,6 @@
     "ai.upstream.claude-subscription@1",
     "ai.upstream.antigravity@1",
     "ai.auto-routing@1",
-    "ai.upstream.auto-router@1",
-    "ai.output-pace@1",
     "ai.user-channels@1",
     "ai.subscription.codex@1",
     "ai.subscription.claude-subscription@1",

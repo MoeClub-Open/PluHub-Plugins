@@ -46,6 +46,11 @@ export default definePlugin({
             );
             ctx.state.set("auth.preflight", decoded.model);
           }
+          await host.call(
+            "ai.request-limits@1",
+            { action: "preflight", principal: ctx.principal },
+            ctx.signal,
+          );
           const plan = await host.call<AIPlan>(
             "ai.routing@2",
             {

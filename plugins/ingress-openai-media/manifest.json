@@ -5,14 +5,14 @@
   "name": "OpenAI 媒体入口",
   "description": "图片、向量和音频接口。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
   "provides": ["ai.ingress.openai-media@1"],
-  "requires": ["ai.routing@2", "ai.execution@1"],
+  "requires": ["ai.routing@2", "ai.execution@1", "ai.request-limits@1"],
   "permissions": ["http.route"],
   "configReload": "snapshot",
   "configSchema": {

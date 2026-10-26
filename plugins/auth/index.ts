@@ -256,7 +256,6 @@ export default definePlugin({
         return json(user, 201);
       },
     });
-    const windows = new Map<string, { minute: number; count: number }>();
     function admit({
       model,
       principal,
@@ -273,24 +272,6 @@ export default definePlugin({
           "API key cannot access this model",
           403,
         );
-      const limit = Number(policy.requestsPerMinute);
-      if (!limit) return;
-      const minute = Math.floor(Date.now() / 60000);
-      const id = String(policy.keyId);
-      let window = windows.get(id);
-      if (!window || window.minute !== minute) {
-        window = { minute, count: 0 };
-        windows.set(id, window);
-      }
-      if (++window.count > limit)
-        throw new HostError(
-          "rate_limited",
-          "API key request limit exceeded",
-          429,
-        );
-      if (windows.size > 5000)
-        for (const [k, w] of windows)
-          if (w.minute !== minute) windows.delete(k);
     }
     host.provide("auth.admit@1", admit);
     host.hook({

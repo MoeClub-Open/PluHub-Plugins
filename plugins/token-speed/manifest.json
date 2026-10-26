@@ -5,13 +5,13 @@
   "name": "输出速度控制",
   "description": "限制单个请求的输出 Token 速度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": ["ai.output-pace@1", "ai.output-pace@2"],
+  "provides": ["ai.output-pace@2"],
   "requires": [],
   "optionalRequires": [],
   "permissions": ["api.register"],

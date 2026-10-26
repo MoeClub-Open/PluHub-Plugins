@@ -23,17 +23,12 @@ export function ChannelBinding({
   initialGroup?: string | null;
   disabled?: boolean;
 }) {
-  const legacy =
-    initialGroup == null &&
-    initialChannels.some((id) => !id.startsWith("personal:"));
   const [scope, setScope] = React.useState(
     initialGroup
       ? "group:" + initialGroup
-      : legacy
-        ? "legacy"
-        : initialChannels.length
-          ? "personal"
-          : "group:default",
+      : initialChannels.length
+        ? "personal"
+        : "group:default",
   );
   const [selected, setSelected] = React.useState(initialChannels);
   const personal = [
@@ -76,23 +71,12 @@ export function ChannelBinding({
           </option>
         ))}
         <option value="personal">{tr("个人渠道 · 不扣平台余额")}</option>
-        {legacy && <option value="legacy">{tr("保留原渠道授权")}</option>}
       </Select>
       <input
         type="hidden"
         name="groupId"
         value={scope.startsWith("group:") ? scope.slice(6) : ""}
       />
-      {scope === "legacy" && (
-        <>
-          <p className="field-note">
-            {tr("此密钥保留原渠道授权和计费。选择分组后将按分组设置调用。")}
-          </p>
-          {initialChannels.map((id) => (
-            <input key={id} type="hidden" name="channelIds" value={id} />
-          ))}
-        </>
-      )}
       {scope === "personal" && (
         <div className="key-channel-options">
           {personal.map((channel) => (

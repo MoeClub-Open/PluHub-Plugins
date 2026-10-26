@@ -149,13 +149,7 @@ export function installKeys(
       !channel.length ||
       channel.some((id) => !id.startsWith("personal:"))
     ) {
-      const unchanged =
-        previous &&
-        previous.group_id === null &&
-        JSON.stringify([...channel].sort()) ===
-          JSON.stringify([...keyChannelIds(previous)].sort());
-      if (!unchanged)
-        throw new HostError("invalid_binding", "请选择使用分组或个人渠道");
+      throw new HostError("invalid_binding", "请选择使用分组或个人渠道");
     }
     return {
       groupId: groupId ?? null,
