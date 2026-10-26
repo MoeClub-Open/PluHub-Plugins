@@ -65,6 +65,10 @@ export async function resolveRoute(
   const models = (config.models ?? {}) as Record<string, ModelRoute>;
   const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
   const redirects = (config.redirects ?? {}) as Record<string, ModelRedirect>;
+  const operation =
+    input.request?.operation?.kind ??
+    (input.purpose === "quote" ? input.operation : undefined) ??
+    "chat";
   let model = input.model,
     explicit = false,
     prepared =
@@ -75,6 +79,11 @@ export async function resolveRoute(
             messages: [],
             tools: [],
             stream: false,
+            ...(operation !== "chat"
+              ? {
+                  operation: { kind: operation, input: { model: input.model } },
+                }
+              : {}),
           }
         : undefined);
   const path: string[] = [],
@@ -116,11 +125,7 @@ export async function resolveRoute(
     )
       throw new HostError("group_forbidden", "目标渠道不在使用分组内", 403);
     validateOperations(route.operations);
-    if (
-      !(route.operations ?? ["chat"]).includes(
-        input.request?.operation?.kind ?? "chat",
-      )
-    )
+    if (!(route.operations ?? ["chat"]).includes(operation))
       throw new HostError(
         "operation_not_supported",
         "Model does not support this endpoint",

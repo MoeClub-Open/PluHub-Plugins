@@ -7,6 +7,7 @@ import {
 } from "@pluhub/sdk";
 import type { AIPlan, CatalogModel } from "@pluhub/contracts/ai";
 import { decode } from "../../lib/ai/protocols.js";
+import { readMedia } from "../../lib/ai/media.js";
 import { priceUsage } from "../../lib/commerce/pricing.js";
 import { channelScope } from "../../lib/ai/channel-scope.js";
 import { capturePricingContext } from "../../lib/commerce/expression.js";
@@ -47,6 +48,25 @@ export function installPriceQuote(host: Host) {
       if (!body.usage || typeof body.usage !== "object")
         throw new HostError("invalid_usage", "Usage is required");
       const context = body.context ?? {};
+      const operation = body.operation ?? selected.operations?.[0] ?? "chat";
+      if (!(selected.operations ?? ["chat"]).includes(operation))
+        throw new HostError(
+          "operation_not_supported",
+          "Model does not support this endpoint",
+          400,
+        );
+      const quoteRequest = body.request
+        ? operation === "chat"
+          ? decode("openai-chat", { ...body.request, model })
+          : await readMedia(
+              new Request("http://localhost/quote", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ ...body.request, model }),
+              }),
+              operation,
+            )
+        : undefined;
       if (
         context.headers &&
         (typeof context.headers !== "object" || Array.isArray(context.headers))
@@ -56,15 +76,14 @@ export function installPriceQuote(host: Host) {
         "ai.routing@2",
         {
           purpose: "quote",
+          operation,
           model: selected.routeId ?? selected.id,
           ...channels,
           channelId: selected.channelId,
           principalId: ctx.principal!.id,
           ingressProtocol: "openai-chat",
           features: ["text", "usage"],
-          ...(body.request
-            ? { request: decode("openai-chat", { ...body.request, model }) }
-            : {}),
+          ...(quoteRequest ? { request: quoteRequest } : {}),
           pricingContext: capturePricingContext(
             context.params ?? body.request,
             new Headers(context.headers),

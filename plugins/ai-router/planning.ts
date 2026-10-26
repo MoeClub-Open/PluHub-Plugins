@@ -32,7 +32,9 @@ export async function planRoute(
     (model) =>
       (model.id === input.model || model.routeId === input.model) &&
       (model.operations ?? ["chat"]).includes(
-        input.request?.operation?.kind ?? "chat",
+        input.request?.operation?.kind ??
+          (input.purpose === "quote" ? input.operation : undefined) ??
+          "chat",
       ),
   );
   if (!matches.length) {
