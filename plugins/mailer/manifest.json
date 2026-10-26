@@ -5,8 +5,8 @@
   "name": "邮件服务",
   "description": "发送注册、登录及安全验证邮件。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.15",
-  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "version": "0.1.0-alpha.16",
+  "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
@@ -28,7 +28,7 @@
         "uniqueItems": true,
         "items": {
           "type": "string",
-          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+          "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
         }
       },
       "host": {
@@ -64,7 +64,7 @@
       },
       "passwordRef": {
         "type": "string",
-        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
       }
     }
   },

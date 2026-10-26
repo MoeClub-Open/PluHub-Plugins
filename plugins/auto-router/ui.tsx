@@ -1,3 +1,4 @@
+import { SecretInput } from "../../lib/ui/secret-input.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
@@ -315,16 +316,16 @@ function Page({ host }: { host: UIHost }) {
                     />
                   </label>
                   <label>
-                    {tr("密钥引用（可选）")}
-                    <input
-                      value={draft.decision.keyRef ?? ""}
-                      onChange={(e) => {
+                    {tr("API Key（可选）")}
+                    <SecretInput
+                      key={selected}
+                      value={draft.decision.keyRef}
+                      onChange={(value) => {
                         const next = { ...draft.decision };
-                        if (e.target.value) next.keyRef = e.target.value;
+                        if (value) next.keyRef = String(value);
                         else delete next.keyRef;
                         update({ decision: next });
                       }}
-                      placeholder="env:DECISION_API_KEY"
                     />
                   </label>
                 </>

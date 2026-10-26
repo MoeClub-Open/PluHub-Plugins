@@ -94,7 +94,8 @@ function Page({ host }: { host: UIHost }) {
           [next, ...nextMethods].flatMap((m) =>
             [m.keyRef, m.privateKeyRef, m.platformPublicKeyRef].filter(
               (reference) =>
-                typeof reference === "string" && reference.startsWith("env:"),
+                typeof reference === "string" &&
+                reference.startsWith("secret:"),
             ),
           ),
         ),

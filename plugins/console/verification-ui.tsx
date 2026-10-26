@@ -1,3 +1,4 @@
+import { SecretInput } from "../../lib/ui/secret-input.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr } from "../../lib/ui/i18n.js";
 import React from "react";
@@ -142,24 +143,33 @@ export function VerificationSettings({
   ) => (
     <label>
       {title}
-      <input
-        type={type}
-        step={key === "minScore" ? "any" : undefined}
-        min={key === "minScore" ? 0 : undefined}
-        max={key === "minScore" ? 1 : undefined}
-        value={drafts[kind]?.[key] ?? ""}
-        placeholder={placeholder}
-        disabled={!active(kind) || busy}
-        onChange={(e) => {
-          const next = { ...drafts[kind] };
-          if (e.target.value)
-            next[key] =
-              type === "number" ? Number(e.target.value) : e.target.value;
-          else delete next[key];
-          setDrafts((all) => ({ ...all, [kind]: next }));
-          setMessage("");
-        }}
-      />
+      {key.endsWith("Ref") ? (
+        <SecretInput
+          key={kind + key}
+          value={drafts[kind]?.[key]}
+          disabled={!active(kind) || busy}
+          onChange={(value) => patch(kind, { [key]: value })}
+        />
+      ) : (
+        <input
+          type={type}
+          step={key === "minScore" ? "any" : undefined}
+          min={key === "minScore" ? 0 : undefined}
+          max={key === "minScore" ? 1 : undefined}
+          value={drafts[kind]?.[key] ?? ""}
+          placeholder={placeholder}
+          disabled={!active(kind) || busy}
+          onChange={(e) => {
+            const next = { ...drafts[kind] };
+            if (e.target.value)
+              next[key] =
+                type === "number" ? Number(e.target.value) : e.target.value;
+            else delete next[key];
+            setDrafts((all) => ({ ...all, [kind]: next }));
+            setMessage("");
+          }}
+        />
+      )}
     </label>
   );
   async function save(e: React.FormEvent) {
@@ -317,12 +327,7 @@ export function VerificationSettings({
                       tr("TLS 证书主机名（可选）"),
                       tr("默认使用 SMTP 服务器名"),
                     )}
-                    {input(
-                      "mailer",
-                      "passwordRef",
-                      tr("SMTP 密码引用"),
-                      "env:SMTP_PASSWORD",
-                    )}
+                    {input("mailer", "passwordRef", tr("SMTP 密码"))}
                     {check(
                       "mailer",
                       "secure",
@@ -412,16 +417,7 @@ export function VerificationSettings({
                         ? "Captcha ID"
                         : tr("公开 Site Key"),
                     )}
-                    {input(
-                      "turnstile",
-                      "secretRef",
-                      tr("Secret Key 引用"),
-                      turnstile.provider === "geetest"
-                        ? "env:GEETEST_SECRET"
-                        : turnstile.provider === "recaptcha"
-                          ? "env:RECAPTCHA_SECRET"
-                          : "env:TURNSTILE_SECRET",
-                    )}
+                    {input("turnstile", "secretRef", tr("Secret Key"))}
                     {turnstile.provider !== "geetest" && (
                       <label>
                         {tr("允许的站点主机名")}

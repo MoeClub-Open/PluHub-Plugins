@@ -90,6 +90,11 @@ export function installConfiguration(host: Host) {
             "invalid_config",
             "Invalid channel configuration",
           );
+        for (const connection of Object.values(
+          body.config.upstreams ?? {},
+        ).flatMap((value) => channelConnections(value as Upstream)))
+          if (connection.keyRef !== undefined)
+            connection.keyRef = keyReferences(connection.keyRef);
         const references = (settings: any, capability: string) =>
           new Set<string>(
             Object.values(
@@ -99,7 +104,8 @@ export function installConfiguration(host: Host) {
               .flatMap(connectionInterfaces)
               .filter(
                 (connection) =>
-                  capability === `ai.upstream.${connection.protocol}@1`,
+                  capability === `ai.upstream.${connection.protocol}@1` ||
+                  capability === `ai.media.${connection.protocol}@1`,
               )
               .flatMap((connection) => keyReferences(connection.keyRef)),
           );

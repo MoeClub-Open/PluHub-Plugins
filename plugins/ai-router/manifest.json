@@ -5,8 +5,8 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.44",
-  "host": ">=0.1.0-alpha.15 <0.2.0-0",
+  "version": "0.1.0-alpha.45",
+  "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
@@ -57,7 +57,7 @@
               "oneOf": [
                 {
                   "type": "string",
-                  "pattern": "^env:[A-Z][A-Z0-9_]*$"
+                  "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
                 },
                 {
                   "type": "array",
@@ -66,7 +66,7 @@
                   "uniqueItems": true,
                   "items": {
                     "type": "string",
-                    "pattern": "^env:[A-Z][A-Z0-9_]*$"
+                    "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
                   }
                 }
               ]
@@ -401,7 +401,7 @@
                                 "oneOf": [
                                   {
                                     "type": "string",
-                                    "pattern": "^env:[A-Z][A-Z0-9_]*$"
+                                    "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
                                   },
                                   {
                                     "type": "array",
@@ -410,7 +410,7 @@
                                     "uniqueItems": true,
                                     "items": {
                                       "type": "string",
-                                      "pattern": "^env:[A-Z][A-Z0-9_]*$"
+                                      "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
                                     }
                                   }
                                 ]

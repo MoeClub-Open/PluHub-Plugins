@@ -44,7 +44,8 @@ export function paymentSecretStore<T extends string>(
   const aad = (reference: string, kind: T) =>
     Buffer.from(JSON.stringify([reference, kind]));
   function read(reference: string, kind: T) {
-    if (reference.startsWith("env:")) return host.secret(reference);
+    if (reference.startsWith("secret:") || reference.startsWith("env:"))
+      return host.secret(reference);
     const row = localReference.test(reference)
       ? (db
           .prepare("SELECT cipher FROM secrets WHERE reference=? AND kind=?")

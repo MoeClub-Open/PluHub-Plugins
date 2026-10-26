@@ -1,3 +1,4 @@
+import { SecretInput } from "./secret-input.js";
 import { Checkbox } from "./checkbox.js";
 import { t as tr } from "./i18n.js";
 import React from "react";
@@ -94,12 +95,16 @@ export function SecurityProviderForm({
   ) => (
     <label key={name}>
       {title}
-      <input
-        name={name}
-        defaultValue={value ?? settings[name] ?? ""}
-        placeholder={placeholder}
-        autoComplete="off"
-      />
+      {name.endsWith("Ref") ? (
+        <SecretInput name={name} value={value ?? settings[name]} />
+      ) : (
+        <input
+          name={name}
+          defaultValue={value ?? settings[name] ?? ""}
+          placeholder={placeholder}
+          autoComplete="off"
+        />
+      )}
     </label>
   );
   const check = (name: string, title: string, value?: boolean) => (
@@ -130,7 +135,7 @@ export function SecurityProviderForm({
                   tr("TLS 证书主机名（可选）"),
                   tr("默认使用 SMTP 服务器名"),
                 )}
-                {input("passwordRef", tr("SMTP 密码引用"), "env:SMTP_PASSWORD")}
+                {input("passwordRef", tr("SMTP 密码"))}
                 {check("secure", tr("隐式 TLS（通常使用 465 端口）"))}
                 {check("allowInsecure", tr("允许本地 SMTP 测试服务明文连接"))}
               </>

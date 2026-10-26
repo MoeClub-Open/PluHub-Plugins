@@ -34,7 +34,7 @@ export function paymentSettings() {
         const entered: Record<string, string> = {};
         for (const k of fields) {
           const value = String(f.get(k) ?? "").trim();
-          if (value.startsWith("env:")) next[k] = value;
+          if (value.startsWith("secret:")) next[k] = value;
           else if (value) entered[k] = value;
           else if (settings[k]) next[k] = settings[k];
         }
@@ -59,7 +59,7 @@ export function paymentSettings() {
             fields
               .filter((k) => k.endsWith("Ref"))
               .map((k) => next[k])
-              .filter((value) => value?.startsWith("env:")),
+              .filter((value) => value?.startsWith("secret:")),
           ),
         ];
         p.config = next;

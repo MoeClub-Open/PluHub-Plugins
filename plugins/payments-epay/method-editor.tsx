@@ -103,9 +103,10 @@ export function MethodEditor({
             const value = String(form.get(field) ?? "").trim();
             if (!value) {
               if (method[field]) next[field] = method[field];
-            } else if (/^env:[A-Z][A-Z0-9_]*$/.test(value)) next[field] = value;
-            else if (value.startsWith("env:")) {
-              setError(tr("环境变量引用格式应为 env:NAME"));
+            } else if (/^secret:[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value))
+              next[field] = value;
+            else if (value.startsWith("secret:")) {
+              setError(tr("凭据引用格式无效"));
               return;
             } else secrets[field] = value;
           }

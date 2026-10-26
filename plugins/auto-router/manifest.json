@@ -5,8 +5,8 @@
   "name": "智能路由",
   "description": "根据任务选择模型和思考强度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.23",
-  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "version": "0.1.0-alpha.24",
+  "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
@@ -138,7 +138,7 @@
                 },
                 "keyRef": {
                   "type": "string",
-                  "pattern": "^env:[A-Z][A-Z0-9_]*$"
+                  "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
                 },
                 "timeoutMs": {
                   "type": "integer",
@@ -262,7 +262,7 @@
         "type": "array",
         "items": {
           "type": "string",
-          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+          "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
         },
         "uniqueItems": true
       },

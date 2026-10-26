@@ -5,8 +5,8 @@
   "name": "人机验证",
   "description": "提供 Turnstile、reCAPTCHA 与极验人机验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.15",
-  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "version": "0.1.0-alpha.16",
+  "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
@@ -27,7 +27,7 @@
         "uniqueItems": true,
         "items": {
           "type": "string",
-          "pattern": "^env:[A-Z][A-Z0-9_]*$"
+          "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
         }
       },
       "siteKey": {
@@ -37,7 +37,7 @@
       },
       "secretRef": {
         "type": "string",
-        "pattern": "^env:[A-Z][A-Z0-9_]*$"
+        "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
       },
       "hostnames": {
         "type": "array",

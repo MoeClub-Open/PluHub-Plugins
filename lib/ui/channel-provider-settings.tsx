@@ -1,3 +1,4 @@
+import { SecretInput } from "./secret-input.js";
 import { Checkbox } from "./checkbox.js";
 import { Select } from "./select.js";
 import { Notice } from "./mount.js";
@@ -108,7 +109,7 @@ export function ProviderNodeSettings({
                       }}
                     >
                       <option value="accounts">{tr("订阅账号")}</option>
-                      <option value="static">{tr("环境变量")}</option>
+                      <option value="static">{tr("API Key")}</option>
                     </Select>
                   </label>
                   {node.upstream?.subscriptionAccountIds && (
@@ -212,31 +213,13 @@ export function ProviderNodeSettings({
                     />
                   </label>
                   <label>
-                    {tr("密钥引用")}
-                    <textarea
-                      aria-label={tr("上游密钥引用")}
-                      rows={3}
-                      value={
-                        Array.isArray(node.upstream?.keyRef)
-                          ? node.upstream.keyRef.join("\n")
-                          : (node.upstream?.keyRef ?? "")
-                      }
-                      onChange={(e) =>
-                        connection({ keyRef: e.target.value.split(/\r?\n/) })
-                      }
-                      onBlur={(e) =>
-                        connection({
-                          keyRef: [
-                            ...new Set(
-                              e.target.value
-                                .split(/\r?\n/)
-                                .map((key) => key.trim())
-                                .filter(Boolean),
-                            ),
-                          ],
-                        })
-                      }
-                      placeholder={"env:OPENAI_API_KEY_1\nenv:OPENAI_API_KEY_2"}
+                    {tr("API Key")}
+                    <SecretInput
+                      key={node.id}
+                      multiline
+                      value={node.upstream?.keyRef}
+                      label={tr("上游 API Key")}
+                      onChange={(keyRef) => connection({ keyRef })}
                     />
                   </label>
                 </>

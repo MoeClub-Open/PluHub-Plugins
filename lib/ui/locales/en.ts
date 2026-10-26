@@ -2534,4 +2534,9 @@ export const en: Record<string, string> = {
   "正在生成视频…": "Generating video…",
   "提供多轮对话、图片和视频模型试用。":
     "Try conversation, image and video models.",
+  "每行一个 API Key": "One API key per line",
+  "上游 API Key": "Upstream API key",
+  "API Key（可选）": "API key (optional)",
+  "SMTP 密码": "SMTP password",
+  凭据引用格式无效: "Invalid credential reference",
 };
