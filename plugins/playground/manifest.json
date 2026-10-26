@@ -3,9 +3,9 @@
   "id": "official.playground",
   "category": "tools",
   "name": "模型试用",
-  "description": "提供多轮对话和流式模型试用。",
+  "description": "提供多轮对话、图片和视频模型试用。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.24",
+  "version": "0.1.0-alpha.25",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "entry": "dist/index.js",
@@ -21,7 +21,7 @@
     "type": "object"
   },
   "ui": {
-    "title": "在线对话",
+    "title": "模型试用",
     "entry": "dist/ui.js",
     "public": true,
     "path": "/playground"

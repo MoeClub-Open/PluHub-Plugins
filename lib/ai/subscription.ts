@@ -225,6 +225,7 @@ async function* execute(
             !!prepared.body.stream || request.stream,
             request.model,
             signal,
+            request.operation,
           )) {
             signal.throwIfAborted();
             delivered = true;
@@ -289,44 +290,48 @@ async function* execute(
 export function createSubscription(kind: SubscriptionKind) {
   return definePlugin({
     setup(host) {
-      host.provide(
+      for (const capability of [
         "ai.upstream." + kind + "@1",
-        async (
-          { request, upstream }: { request: AIRequest; upstream: Upstream },
-          signal,
-        ) => {
-          if (upstream.protocol !== kind)
-            throw new HostError(
-              "adapter_mismatch",
-              "Wrong subscription adapter",
-            );
-          const iterator = execute(host, kind, request, upstream, signal);
-          // Resolve initial provider errors and failover before the ingress sends HTTP headers.
-          let pending: IteratorResult<AIEvent> | undefined =
-            await iterator.next();
-          return {
-            [Symbol.asyncIterator]() {
-              return this;
-            },
-            next() {
-              if (pending) {
-                const value = pending;
+        ...(kind === "codex" ? ["ai.media.codex@1"] : []),
+      ])
+        host.provide(
+          capability,
+          async (
+            { request, upstream }: { request: AIRequest; upstream: Upstream },
+            signal,
+          ) => {
+            if (upstream.protocol !== kind)
+              throw new HostError(
+                "adapter_mismatch",
+                "Wrong subscription adapter",
+              );
+            const iterator = execute(host, kind, request, upstream, signal);
+            // Resolve initial provider errors and failover before the ingress sends HTTP headers.
+            let pending: IteratorResult<AIEvent> | undefined =
+              await iterator.next();
+            return {
+              [Symbol.asyncIterator]() {
+                return this;
+              },
+              next() {
+                if (pending) {
+                  const value = pending;
+                  pending = undefined;
+                  return Promise.resolve(value);
+                }
+                return iterator.next();
+              },
+              return() {
                 pending = undefined;
-                return Promise.resolve(value);
-              }
-              return iterator.next();
-            },
-            return() {
-              pending = undefined;
-              return iterator.return(undefined);
-            },
-            throw(error: unknown) {
-              pending = undefined;
-              return iterator.throw(error);
-            },
-          } satisfies AsyncIterableIterator<AIEvent>;
-        },
-      );
+                return iterator.return(undefined);
+              },
+              throw(error: unknown) {
+                pending = undefined;
+                return iterator.throw(error);
+              },
+            } satisfies AsyncIterableIterator<AIEvent>;
+          },
+        );
     },
   });
 }

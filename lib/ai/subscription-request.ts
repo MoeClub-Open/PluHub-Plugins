@@ -13,6 +13,7 @@ import {
 import { antigravityUserAgent } from "./antigravity-control.js";
 import { validateWebSearchTarget } from "./web-search.js";
 import { prepareAntigravityRequest } from "./antigravity-reasoning.js";
+import { codexImageRequest, codexImageTool } from "./codex-images.js";
 export function subscriptionRequest(
   kind: SubscriptionKind,
   request: AIRequest,
@@ -24,6 +25,9 @@ export function subscriptionRequest(
     authMode?: "siwc";
   },
 ) {
+  const imageTool =
+    kind === "codex" && request.operation ? codexImageTool(request) : undefined;
+  if (imageTool) request = codexImageRequest(request);
   if (kind === "antigravity") request = prepareAntigravityRequest(request);
   if (credential.authMode === "siwc")
     upstream = {
@@ -92,6 +96,10 @@ export function subscriptionRequest(
     if (account && upstream.authMode !== "siwc")
       headers["chatgpt-account-id"] = account;
     if (request.sessionId) headers.session_id = request.sessionId;
+    if (imageTool) {
+      body.tools = [imageTool];
+      body.tool_choice = { type: "image_generation" };
+    }
   } else if (kind === "grok") {
     suffix = "/responses";
     body.stream = true;

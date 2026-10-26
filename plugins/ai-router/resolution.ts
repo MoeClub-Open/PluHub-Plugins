@@ -423,8 +423,12 @@ export async function resolveRoute(
     throw new HostError("limiter_unavailable", "TPS 插件未安装或已停用", 503);
   if (
     prepared?.operation &&
-    !["openai-chat", "openai-responses"].includes(
-      resolved.upstream.protocol ?? "",
+    !(
+      ["openai-chat", "openai-responses"].includes(
+        resolved.upstream.protocol ?? "",
+      ) ||
+      (resolved.upstream.protocol === "codex" &&
+        prepared.operation.kind.startsWith("images/"))
     )
   )
     throw new HostError(

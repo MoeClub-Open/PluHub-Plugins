@@ -8,6 +8,7 @@ export const modelEndpoints = [
   ["embeddings", "向量"],
   ["images/generations", "图片生成"],
   ["images/edits", "图片编辑"],
+  ["videos/generations", "视频生成"],
   ["audio/speech", "语音合成"],
   ["audio/transcriptions", "语音转写"],
   ["audio/translations", "音频翻译"],

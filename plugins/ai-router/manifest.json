@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.43",
+  "version": "0.1.0-alpha.44",
   "host": ">=0.1.0-alpha.15 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -540,6 +540,10 @@
                                         "audio/translations": {
                                           "type": "string",
                                           "pattern": "^/(?!/)"
+                                        },
+                                        "videos/generations": {
+                                          "type": "string",
+                                          "pattern": "^/(?!/)"
                                         }
                                       }
                                     }
@@ -795,6 +799,10 @@
                       "audio/translations": {
                         "type": "string",
                         "pattern": "^/(?!/)"
+                      },
+                      "videos/generations": {
+                        "type": "string",
+                        "pattern": "^/(?!/)"
                       }
                     }
                   }
@@ -1012,6 +1020,7 @@
                   "embeddings",
                   "images/generations",
                   "images/edits",
+                  "videos/generations",
                   "audio/speech",
                   "audio/transcriptions",
                   "audio/translations"
@@ -1133,6 +1142,7 @@
     "ai.media.openai-responses@1",
     "ai.upstream.grok@1",
     "ai.subscription.grok@1",
-    "auth.admin@1"
+    "auth.admin@1",
+    "ai.media.codex@1"
   ]
 }

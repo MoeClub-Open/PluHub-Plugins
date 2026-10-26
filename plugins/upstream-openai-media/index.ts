@@ -11,6 +11,7 @@ import {
   upstreamUrl,
 } from "../../lib/ai/upstream-interfaces.js";
 import { parseSSE, cancelSSE } from "../../lib/ai/sse.js";
+import { completedVideo } from "../../lib/ai/video.js";
 
 export default definePlugin({
   setup(host) {
@@ -49,7 +50,13 @@ export default definePlugin({
             const form = new FormData();
             const overrides = new Set(Object.keys(upstream.http?.params ?? {}));
             for (const part of operation.parts) {
-              if (part.name === "model" || overrides.has(part.name)) continue;
+              if (
+                part.name === "model" ||
+                (operation.kind === "videos/generations" &&
+                  part.name === "stream") ||
+                overrides.has(part.name)
+              )
+                continue;
               if (typeof part.value === "string")
                 form.append(part.name, part.value);
               else
@@ -77,12 +84,16 @@ export default definePlugin({
             body = new Uint8Array(await encoded.arrayBuffer());
           } else {
             // stream_format governs speech streaming; its API does not accept a stream parameter.
-            if (operation.kind === "audio/speech") delete input.stream;
+            if (
+              operation.kind === "audio/speech" ||
+              operation.kind === "videos/generations"
+            )
+              delete input.stream;
             headers.set("content-type", "application/json");
             body = JSON.stringify(input);
           }
           headers.delete("content-length");
-          const response = await host.call<Response>(
+          let response = await host.call<Response>(
             "http.transport@1",
             {
               url: url.href,
@@ -96,6 +107,15 @@ export default definePlugin({
             await response.body?.cancel();
             throw upstreamRejection(response.status);
           }
+          if (operation.kind === "videos/generations")
+            response = await completedVideo(
+              host,
+              response,
+              url,
+              headers,
+              upstream.publicOnly,
+              signal,
+            );
           if (!response.body)
             throw new HostError(
               "upstream_protocol",
@@ -233,22 +253,27 @@ export default definePlugin({
                 if (usage) yield { type: "usage", usage };
                 yield { type: "media", contentType, body: data };
               } else {
-                if (!operation.kind.startsWith("audio/"))
+                const video = operation.kind === "videos/generations";
+                if (!operation.kind.startsWith("audio/") && !video)
                   throw new HostError(
                     "upstream_protocol",
                     "Expected a JSON media response",
                     502,
                   );
                 if (
-                  operation.kind === "audio/speech"
-                    ? !/^(audio\/|application\/octet-stream)/i.test(contentType)
-                    : !/^text\/(plain|vtt|srt)|^application\/(x-subrip|octet-stream)/i.test(
-                        contentType,
-                      )
+                  video
+                    ? !/^(video\/|application\/octet-stream)/i.test(contentType)
+                    : operation.kind === "audio/speech"
+                      ? !/^(audio\/|application\/octet-stream)/i.test(
+                          contentType,
+                        )
+                      : !/^text\/(plain|vtt|srt)|^application\/(x-subrip|octet-stream)/i.test(
+                          contentType,
+                        )
                 )
                   throw new HostError(
                     "upstream_protocol",
-                    "Unexpected audio response content type",
+                    "Unexpected media response content type",
                     502,
                   );
                 const reader = source.getReader();

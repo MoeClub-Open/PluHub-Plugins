@@ -1,5 +1,6 @@
 import { HostError } from "@pluhub/sdk";
-import type { AIEvent, Protocol } from "@pluhub/contracts/ai";
+import type { AIEvent, Protocol, MediaOperation } from "@pluhub/contracts/ai";
+import { codexImageEvents } from "./codex-images.js";
 import type { SubscriptionKind } from "./subscription-auth.js";
 import { responseObject } from "./json-response.js";
 import { parseSSE, cancelSSE } from "./sse.js";
@@ -134,10 +135,14 @@ export async function rejectedSubscription(
     kind,
   );
 }
-function streamBody(kind: SubscriptionKind, body: ReadableStream<Uint8Array>) {
+function streamBody(
+  kind: SubscriptionKind,
+  body: ReadableStream<Uint8Array>,
+  maximum?: number,
+) {
   const iterator = (async function* () {
     const encoder = new TextEncoder();
-    for await (const frame of parseSSE(body)) {
+    for await (const frame of parseSSE(body, maximum)) {
       if (frame.data === "[DONE]") {
         yield encoder.encode("data: [DONE]\n\n");
         continue;
@@ -182,6 +187,7 @@ export async function* subscriptionEvents(
   expectedStream: boolean,
   model: string,
   signal: AbortSignal,
+  operation?: MediaOperation,
 ): AsyncGenerator<AIEvent> {
   if (!response.body)
     throw new HostError(
@@ -194,6 +200,17 @@ export async function* subscriptionEvents(
     contentType?.includes("text/event-stream") ||
     (kind === "codex" && expectedStream && !contentType)
   ) {
+    if (kind === "codex" && operation) {
+      yield* codexImageEvents(
+        streamBody(kind, response.body, 64 * 1024 * 1024),
+        model,
+        !!operation.input.stream,
+        typeof operation.input.output_format === "string"
+          ? operation.input.output_format
+          : "png",
+      );
+      return;
+    }
     yield* upstreamEvents(protocol, streamBody(kind, response.body));
     return;
   }

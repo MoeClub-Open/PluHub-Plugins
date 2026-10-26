@@ -14,10 +14,16 @@ export default definePlugin({
         );
         const allowed = ctx.principal?.attributes?.models as
           string[] | undefined;
+        const operation =
+          new URL(request.url).searchParams.get("operation") ?? "chat";
         return Response.json(
           models.filter(
             (m) =>
-              (m.operations ?? ["chat"]).includes("chat") &&
+              (m.operations ?? ["chat"]).some((op) =>
+                operation === "images"
+                  ? op.startsWith("images/")
+                  : op === operation,
+              ) &&
               (!allowed?.length || allowed.includes(m.id)),
           ),
           {

@@ -11,12 +11,16 @@ export const mediaKinds: readonly MediaKind[] = [
   "embeddings",
   "images/generations",
   "images/edits",
+  "videos/generations",
   "audio/speech",
   "audio/transcriptions",
   "audio/translations",
 ];
 export const mediaPaths = Object.fromEntries(
-  mediaKinds.map((kind) => [kind, "/v1/" + kind]),
+  mediaKinds.map((kind) => [
+    kind,
+    kind === "videos/generations" ? "/v1/videos" : "/v1/" + kind,
+  ]),
 ) as Record<MediaKind, string>;
 const limit = 32 * 1024 * 1024;
 const bad = (message: string): never => {
@@ -109,6 +113,12 @@ export async function readMedia(
       !(Array.isArray(input.images) && input.images.length)
     )
       bad("Provide an input image");
+  } else if (kind === "videos/generations") {
+    requiredString(input.prompt, "prompt", 32000);
+    if (input.stream)
+      bad(
+        "Video generation returns the completed video; streaming is not supported",
+      );
   } else if (kind === "audio/speech") {
     requiredString(input.input, "input", 65536);
     if (

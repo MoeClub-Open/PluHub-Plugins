@@ -17,6 +17,7 @@ import {
   latency,
 } from "../../lib/ui/components.js";
 import { RichText } from "./rich-text.js";
+import { MediaPage } from "./media-ui.js";
 import { readChatStream } from "./chat-stream.js";
 import {
   chatStorageKey,
@@ -102,7 +103,13 @@ function Answer({
     </>
   );
 }
-function Page({ host }: { host: UIHost }) {
+function ChatPage({
+  host,
+  onBusy,
+}: {
+  host: UIHost;
+  onBusy: (value: boolean) => void;
+}) {
   const [storageKey] = React.useState(chatStorageKey);
   const [initial] = React.useState(() => readChat(storageKey));
   const [channel, setChannel] = React.useState(initial.channel);
@@ -140,6 +147,7 @@ function Page({ host }: { host: UIHost }) {
   const [away, setAway] = React.useState(false);
   const [messages, setMessages] = React.useState<Message[]>(initial.messages);
   const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => onBusy(busy), [busy, onBusy]);
   const [settings, setSettings] = React.useState(false);
   const [error, setError] = React.useState("");
   const [meta, setMeta] = React.useState<ChatMeta>(initial.meta);
@@ -368,27 +376,7 @@ function Page({ host }: { host: UIHost }) {
     }
   }
   return (
-    <div className="playground-page">
-      <link rel="stylesheet" href="/extensions/official.playground/ui.css" />
-      <PageHeading title={tr("在线对话")}>
-        <button className="secondary" onClick={() => setSettings(true)}>
-          <Icon name="settings" size={15} />
-          {tr("对话设置")}
-        </button>
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() => {
-            session.current = crypto.randomUUID();
-            setMessages([]);
-            setMeta({});
-            setError("");
-          }}
-        >
-          <Icon name="plus" size={16} />
-          {tr("新建对话")}
-        </button>
-      </PageHeading>
+    <div className="chat-page">
       <Notice message={error || serviceGroups.error || models.error} />
       {!models.error && models.data && model && !selectedModel && (
         <Notice
@@ -397,55 +385,72 @@ function Page({ host }: { host: UIHost }) {
           )}
         />
       )}
-      {!!channels.data?.length && (
-        <div className="chat-toolbar">
-          <ServiceGroupSelect
-            value={group}
-            groups={serviceGroups.data}
+      <div className="chat-toolbar">
+        <ServiceGroupSelect
+          value={group}
+          groups={serviceGroups.data}
+          disabled={busy}
+          onChange={(value) => {
+            setGroup(value);
+            setChannel("");
+            setModel("");
+            setModelChannel("");
+            setMeta({});
+            setError("");
+          }}
+        />
+        <label>
+          {tr("模型来源")}
+          <Select
+            aria-label={tr("对话模型来源")}
+            value={channel}
             disabled={busy}
-            onChange={(value) => {
-              setGroup(value);
-              setChannel("");
+            onChange={(e) => {
+              setChannel(e.target.value);
               setModel("");
               setModelChannel("");
               setMeta({});
               setError("");
             }}
-          />
-          <label>
-            {tr("模型来源")}
-            <Select
-              aria-label={tr("对话模型来源")}
-              value={channel}
-              disabled={busy}
-              onChange={(e) => {
-                setChannel(e.target.value);
-                setModel("");
-                setModelChannel("");
-                setMeta({});
-                setError("");
-              }}
-            >
-              <option value="">{tr("全部渠道")}</option>
-              {channels.data
-                ?.filter((c) =>
-                  group === "personal"
-                    ? c.scope === "personal"
-                    : c.scope === "platform" &&
-                      serviceGroups.data
-                        ?.find((g) => g.id === group)
-                        ?.channelIds.includes(c.id),
-                )
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
-                    {c.name}
-                  </option>
-                ))}
-            </Select>
-          </label>
+          >
+            <option value="">{tr("全部渠道")}</option>
+            {channels.data
+              ?.filter((c) =>
+                group === "personal"
+                  ? c.scope === "personal"
+                  : c.scope === "platform" &&
+                    serviceGroups.data
+                      ?.find((g) => g.id === group)
+                      ?.channelIds.includes(c.id),
+              )
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
+                  {c.name}
+                </option>
+              ))}
+          </Select>
+        </label>
+        <div className="actions">
+          <button className="secondary" onClick={() => setSettings(true)}>
+            <Icon name="settings" size={15} />
+            {tr("对话设置")}
+          </button>
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() => {
+              session.current = crypto.randomUUID();
+              setMessages([]);
+              setMeta({});
+              setError("");
+            }}
+          >
+            <Icon name="plus" size={16} />
+            {tr("新建对话")}
+          </button>
         </div>
-      )}
+      </div>
       <div className="playground-grid">
         <section className="chat-panel">
           <div
@@ -679,6 +684,49 @@ function Page({ host }: { host: UIHost }) {
           </span>
           <span>{number(meta.tokens)} Token</span>
         </div>
+      )}
+    </div>
+  );
+}
+function Page({ host }: { host: UIHost }) {
+  const [mode, setMode] = React.useState(
+    () =>
+      new URLSearchParams(location.hash.split("?")[1]).get("mode") ?? "chat",
+  );
+  const [busy, setBusy] = React.useState(false);
+  return (
+    <div className="playground-page">
+      <link rel="stylesheet" href="/extensions/official.playground/ui.css" />
+      <PageHeading title={tr("模型试用")} />
+      <div className="tabs" role="tablist" aria-label={tr("试用类型")}>
+        {[
+          ["chat", "对话"],
+          ["image", "图片"],
+          ["video", "视频"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={mode === id}
+            className={mode === id ? "active" : ""}
+            disabled={busy}
+            onClick={() => {
+              if (mode === id) return;
+              const params = new URLSearchParams(location.hash.split("?")[1]);
+              params.delete("model");
+              params.set("mode", id!);
+              history.replaceState(history.state, "", "#/playground?" + params);
+              setMode(id!);
+            }}
+          >
+            {tr(label!)}
+          </button>
+        ))}
+      </div>
+      {mode === "image" || mode === "video" ? (
+        <MediaPage key={mode} host={host} kind={mode} onBusy={setBusy} />
+      ) : (
+        <ChatPage host={host} onBusy={setBusy} />
       )}
     </div>
   );

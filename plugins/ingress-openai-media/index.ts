@@ -20,7 +20,10 @@ export default definePlugin({
     for (const kind of mediaKinds)
       host.route({
         method: "POST",
-        path: mediaPaths[kind],
+        path:
+          kind === "videos/generations"
+            ? "/v1/videos/generations"
+            : mediaPaths[kind],
         access: "authenticated",
         error: (error) => protocolError("openai-chat", error),
         prepare: async (request, ctx) => {

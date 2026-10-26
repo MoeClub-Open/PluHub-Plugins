@@ -34,6 +34,9 @@ const featureNames: Record<string, string> = {
   get "images/edits"() {
     return tr("图片编辑");
   },
+  get "videos/generations"() {
+    return tr("视频生成");
+  },
   get "audio/speech"() {
     return tr("语音合成");
   },
@@ -52,6 +55,16 @@ const featureNames: Record<string, string> = {
   get stream() {
     return tr("流式回复");
   },
+};
+const playgroundMode = (model: CatalogModel) => {
+  const operations = model.operations ?? ["chat"];
+  return operations.includes("chat")
+    ? "chat"
+    : operations.some((op) => op.startsWith("images/"))
+      ? "image"
+      : operations.includes("videos/generations")
+        ? "video"
+        : undefined;
 };
 function Page({ host }: { host: UIHost }) {
   const guest = host.authenticated === false;
@@ -154,7 +167,10 @@ function Page({ host }: { host: UIHost }) {
       "group",
       model?.channel?.scope === "personal" ? "personal" : group,
     );
-    if (model) params.set("model", model.id);
+    if (model) {
+      params.set("model", model.id);
+      params.set("mode", playgroundMode(model) ?? "chat");
+    }
     const chosen = model?.channel?.id ?? channel;
     if (chosen) params.set("channel", chosen);
     return "/playground" + (params.size ? "?" + params : "");
@@ -177,7 +193,7 @@ function Page({ host }: { host: UIHost }) {
     const input =
       operation === "embeddings"
         ? { model: model.id, input: "Hello" }
-        : operation === "images/generations"
+        : ["images/generations", "videos/generations"].includes(operation)
           ? { model: model.id, prompt: "A cat" }
           : operation === "audio/speech"
             ? { model: model.id, input: "Hello", voice: "alloy" }
@@ -408,7 +424,7 @@ function Page({ host }: { host: UIHost }) {
                       >
                         {tr("详情")}
                       </button>
-                      {(model.operations ?? ["chat"]).includes("chat") && (
+                      {playgroundMode(model) && (
                         <button
                           className="secondary"
                           onClick={() => host.navigate(destination(model))}
@@ -558,9 +574,9 @@ function Page({ host }: { host: UIHost }) {
                 {tr("管理 API Key")}
               </button>
             )}
-            {(selected.operations ?? ["chat"]).includes("chat") && (
+            {playgroundMode(selected) && (
               <button onClick={() => host.navigate(destination(selected))}>
-                {guest ? tr("登录并开始对话") : tr("开始对话")}
+                {guest ? tr("登录并试用") : tr("试用模型")}
               </button>
             )}
           </div>
