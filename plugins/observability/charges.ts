@@ -62,33 +62,28 @@ export async function consumptionSummary(
         }[];
         if (!rows.length) break;
         cursor = rows.at(-1)!.rowid;
-        const requests = rows.flatMap((row) =>
-          row.user_id ? [{ id: row.id, userId: row.user_id }] : [],
-        );
-        if (!requests.length) continue;
-        const result = await host.call<RequestChargeTotals>(
-          "billing.request-totals@1",
-          { requests },
-          signal,
-        );
-        const early = rows
-          .filter((row) => row.unstarted && row.user_id)
-          .map((row) => ({ id: row.id, userId: row.user_id! }));
-        if (early.length) {
-          const known = await host.call<RequestChargeTotals>(
+        for (const unstarted of [false, true]) {
+          const requests = rows.flatMap((row) =>
+            row.user_id && !!row.unstarted === unstarted
+              ? [{ id: row.id, userId: row.user_id }]
+              : [],
+          );
+          if (!requests.length) continue;
+          const result = await host.call<RequestChargeTotals>(
             "billing.request-totals@1",
-            { requests: early },
+            { requests },
             signal,
           );
-          unbilled -= known.knownRequests + known.pendingRequests;
+          if (unstarted)
+            unbilled -= result.knownRequests + result.pendingRequests;
+          for (const key of [
+            "knownRequests",
+            "pendingRequests",
+            "charged",
+            "held",
+          ] as const)
+            totals[key] += result[key];
         }
-        for (const key of [
-          "knownRequests",
-          "pendingRequests",
-          "charged",
-          "held",
-        ] as const)
-          totals[key] += result[key];
       }
     } catch {
       signal.throwIfAborted();

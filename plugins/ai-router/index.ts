@@ -70,14 +70,13 @@ export default definePlugin({
     const getCatalog = (input?: CatalogScope) => readCatalog(host, input);
     host.provide("ai.catalog@2", getCatalog);
     async function channels(input?: { userId?: string }) {
+      const allowed = new Set(
+        groups(input).flatMap((group) => group.channelIds),
+      );
       const platform = Object.entries(
         (host.config().upstreams ?? {}) as Record<string, Upstream>,
       )
-        .filter(
-          ([id, u]) =>
-            u.enabled !== false &&
-            groups(input).some((group) => group.channelIds.includes(id)),
-        )
+        .filter(([id, u]) => u.enabled !== false && allowed.has(id))
         .map(([id, u]) => ({
           id,
           name: u.name ?? id,

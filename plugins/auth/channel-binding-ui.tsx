@@ -1,28 +1,28 @@
 import { t as tr } from "../../lib/ui/i18n.js";
 import React from "react";
-import type { UIHost } from "@pluhub/ui-sdk";
-import { useLoad, Notice } from "../../lib/ui/mount.js";
+import type { ServiceGroupOption } from "../../lib/ui/service-groups.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { Select } from "../../lib/ui/select.js";
 
-type Group = { id: string; name: string; multiplier: number };
+export type KeyChannel = {
+  id: string;
+  name: string;
+  scope: string;
+  consumptionMultiplier?: number;
+};
 export function ChannelBinding({
-  host,
+  channels,
+  groups,
   initialChannels = [],
   initialGroup,
   disabled = false,
 }: {
-  host: UIHost;
+  channels: KeyChannel[];
+  groups?: ServiceGroupOption[];
   initialChannels?: string[];
   initialGroup?: string | null;
   disabled?: boolean;
 }) {
-  const loaded = useLoad<{ id: string; name: string; scope: string }[]>(() =>
-    host.request("/api/plugins/official.ai-router/channels"),
-  );
-  const groups = useLoad<Group[]>(() =>
-    host.request("/api/plugins/official.ai-router/groups"),
-  );
   const legacy =
     initialGroup == null &&
     initialChannels.some((id) => !id.startsWith("personal:"));
@@ -37,11 +37,11 @@ export function ChannelBinding({
   );
   const [selected, setSelected] = React.useState(initialChannels);
   const personal = [
-    ...(loaded.data ?? []).filter((c) => c.scope === "personal"),
+    ...channels.filter((c) => c.scope === "personal"),
     ...initialChannels
       .filter(
         (id) =>
-          id.startsWith("personal:") && !loaded.data?.some((c) => c.id === id),
+          id.startsWith("personal:") && !channels.some((c) => c.id === id),
       )
       .map((id) => ({
         id,
@@ -50,8 +50,8 @@ export function ChannelBinding({
       })),
   ];
   const availableGroups = [
-    ...(groups.data ?? []),
-    ...(initialGroup && !groups.data?.some((g) => g.id === initialGroup)
+    ...(groups ?? []),
+    ...(initialGroup && !groups?.some((g) => g.id === initialGroup)
       ? [
           {
             id: initialGroup,
@@ -64,12 +64,11 @@ export function ChannelBinding({
   return (
     <fieldset className="key-channel-bindings" disabled={disabled}>
       <legend>{tr("使用范围")}</legend>
-      <Notice message={loaded.error || groups.error} />
       <Select
         aria-label={tr("密钥使用范围")}
         value={scope}
         onChange={(e) => setScope(e.target.value)}
-        disabled={disabled || !groups.data}
+        disabled={disabled || !groups}
       >
         {availableGroups.map((group) => (
           <option key={group.id} value={"group:" + group.id}>

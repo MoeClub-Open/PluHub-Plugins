@@ -3,7 +3,8 @@ import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import { ChannelBinding } from "./channel-binding-ui.js";
+import { ChannelBinding, type KeyChannel } from "./channel-binding-ui.js";
+import { useServiceGroups } from "../../lib/ui/service-groups.js";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
 import {
   PageHeading,
@@ -40,12 +41,10 @@ export function Keys({ host }: { host: UIHost }) {
   const [busy, setBusy] = React.useState(false);
   const [editing, setEditing] = React.useState<Key>();
   const [rotate, setRotate] = React.useState<Key>();
-  const channelNames = useLoad<any[]>(() =>
-    host.request("/api/plugins/official.ai-router/channels").catch(() => []),
+  const channelNames = useLoad<KeyChannel[]>(() =>
+    host.request("/api/plugins/official.ai-router/channels"),
   );
-  const groups = useLoad<{ id: string; name: string; multiplier: number }[]>(
-    () => host.request("/api/plugins/official.ai-router/groups"),
-  );
+  const groups = useServiceGroups(host);
   const groupLabel = (id: string) => {
     const group = groups.data?.find((g) => g.id === id);
     return group
@@ -95,7 +94,11 @@ export function Keys({ host }: { host: UIHost }) {
           className="secondary"
           aria-label={tr("刷新密钥")}
           title={tr("刷新密钥")}
-          onClick={keys.reload}
+          onClick={() => {
+            keys.reload();
+            channelNames.reload();
+            groups.reload();
+          }}
         >
           <Icon name="refresh" size={15} />
         </button>
@@ -322,7 +325,7 @@ export function Keys({ host }: { host: UIHost }) {
           }
           close={close}
         >
-          <Notice message={message} />
+          <Notice message={message || channelNames.error || groups.error} />
           {token ? (
             <SecretCopy value={token} close={close} onMessage={setMessage} />
           ) : (
@@ -377,7 +380,8 @@ export function Keys({ host }: { host: UIHost }) {
                 />
               </label>
               <ChannelBinding
-                host={host}
+                channels={channelNames.data ?? []}
+                groups={groups.data}
                 initialGroup={editing?.groupId}
                 initialChannels={
                   editing?.channelIds ??

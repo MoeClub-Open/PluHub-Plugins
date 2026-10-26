@@ -28,8 +28,13 @@ export function Groups({
     group: ServiceGroup;
   }>();
   const [message, setMessage] = React.useState("");
-  const users = useLoad<{ id: string; username: string }[]>(() =>
-    host.request("/api/plugins/official.users/users"),
+  const restricted = !!editing?.group.userIds;
+  const users = useLoad<{ id: string; username: string }[]>(
+    () =>
+      restricted
+        ? host.request("/api/plugins/official.users/users")
+        : Promise.resolve([]),
+    [restricted],
   );
   const all = serviceGroups({ groups });
   const patch = (value: Partial<ServiceGroup>) =>

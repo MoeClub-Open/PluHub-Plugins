@@ -152,6 +152,7 @@ type FlowNode = Node<
   "channel"
 >;
 const NodeContext = React.createContext<{
+  personal: boolean;
   expanded: ReadonlySet<string>;
   toggle: (id: string) => void;
   settings: (id: string) => React.ReactNode;
@@ -164,6 +165,7 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
   const context = React.useContext(NodeContext),
     { node } = data;
   const expanded = context.expanded.has(id);
+  const expandable = node.type !== "start" || !context.personal;
   return (
     <div
       className={"flow-node" + (selected ? " is-selected" : "")}
@@ -178,16 +180,18 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
       )}
       <div
         className="flow-node-header"
-        onDoubleClick={() => context.toggle(id)}
+        onDoubleClick={expandable ? () => context.toggle(id) : undefined}
       >
-        <button
-          className="ghost icon-button nodrag"
-          type="button"
-          aria-label={tr(expanded ? "收起设置" : "展开设置")}
-          onClick={() => context.toggle(id)}
-        >
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
+        {expandable && (
+          <button
+            className="ghost icon-button nodrag"
+            type="button"
+            aria-label={tr(expanded ? "收起设置" : "展开设置")}
+            onClick={() => context.toggle(id)}
+          >
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        )}
         <strong>{workflowNodeLabels[node.type]}</strong>
         {node.type !== "start" && (
           <>
@@ -214,8 +218,10 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
           </>
         )}
       </div>
-      <div className="flow-node-summary">{data.summary}</div>
-      {expanded && (
+      {!expanded && data.summary && (
+        <div className="flow-node-summary">{data.summary}</div>
+      )}
+      {expandable && expanded && (
         <fieldset
           disabled={context.disabled}
           className="flow-node-settings nodrag nowheel"
@@ -279,7 +285,7 @@ function summary(node: WorkflowNode, channel?: Upstream) {
         }[node.test],
       );
     default:
-      return tr("请求入口");
+      return "";
   }
 }
 function graphEdges(flow: ChannelWorkflow): Edge[] {
@@ -424,6 +430,7 @@ function Canvas(props: CanvasProps) {
   return (
     <NodeContext.Provider
       value={{
+        personal: props.personal,
         expanded,
         disabled: props.disabled,
         settings: props.renderSettings,

@@ -406,7 +406,6 @@ export const en: Record<string, string> = {
   输出预算: "Output budget",
   "输出 TPS": "Output TPS",
   转到其他模型: "Route to another model",
-  "流程已保存。": "Flow saved.",
   "渠道已被删除，请刷新。": "This channel was deleted. Please refresh.",
   "渠道流程已被其他操作修改，请关闭并重新打开。":
     "This flow was changed elsewhere. Close and reopen it.",
@@ -474,7 +473,6 @@ export const en: Record<string, string> = {
   预览任务: "Preview task",
   预览入口协议: "Preview entry protocol",
   预览路径: "Preview path",
-  "目标 {0} · {1} {2} {3}": "Target {0} · {1} {2} {3}",
   预览详情: "Preview details",
   "共 {0} 条": "{0} records",
   每页: "Per page",
@@ -2353,7 +2351,6 @@ export const en: Record<string, string> = {
   复制节点: "Duplicate node",
   自动排列: "Auto arrange",
   "路由 ID": "Route ID",
-  预览完成: "Preview complete",
   撤销编辑: "Undo edit",
   重做编辑: "Redo edit",
   "已选中密钥，请手动复制": "Key selected. Copy it manually.",

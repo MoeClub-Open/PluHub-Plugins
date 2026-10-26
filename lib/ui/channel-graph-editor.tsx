@@ -284,7 +284,6 @@ export function ChannelGraphEditor({
           }),
         });
         setBaseline(JSON.stringify(draft));
-        setMessage(tr("流程已保存。"));
         loaded.reload();
         saved();
         return true;
@@ -301,7 +300,6 @@ export function ChannelGraphEditor({
         body: JSON.stringify({ config: next, revision: loaded.data.revision }),
       });
       setBaseline(JSON.stringify(draft));
-      setMessage(tr("已保存"));
       loaded.reload();
       saved();
       return true;
@@ -342,7 +340,6 @@ export function ChannelGraphEditor({
           },
         ),
       );
-      setMessage(tr("预览完成"));
     } catch (e) {
       setPreview(undefined);
       showError(e);
@@ -353,7 +350,7 @@ export function ChannelGraphEditor({
   const guard = useUnsavedChanges(dirty, save, busy);
   return (
     <section ref={editor} aria-label={tr("渠道流程编辑器")}>
-      <style>{`.workflow-grid{margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}.workflow-panel{margin-top:14px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
+      <style>{`.workflow-grid{margin-bottom:14px}.workflow-grid>*{min-width:0}.workflow-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}.workflow-tools input{width:190px}.workflow-tools select{width:auto;min-width:170px}.workflow-tools input[type=checkbox]{width:auto}.workflow-preview{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.workflow-preview span{border:1px solid var(--border);background:var(--subtle);padding:5px 8px;border-radius:6px}.workflow-tools .grow{flex:1;min-width:180px}@media(max-width:850px){.workflow-grid{grid-template-columns:minmax(0,1fr)}.workflow-tools input,.workflow-tools select{max-width:100%}}`}</style>
       <div className="page-heading">
         <div>
           {personal ? (
@@ -382,9 +379,7 @@ export function ChannelGraphEditor({
             <button
               className="secondary"
               disabled={busy || !flow}
-              onClick={async () => {
-                guard.leave(manageModels);
-              }}
+              onClick={() => guard.leave(manageModels)}
             >
               {tr("模型与定价")}
             </button>
@@ -576,10 +571,7 @@ export function ChannelGraphEditor({
                 disabled={busy}
                 aria-label={tr("预览入口协议")}
                 value={ingressProtocol}
-                onChange={(e) => {
-                  setIngressProtocol(e.target.value as Protocol);
-                  setPreview(undefined);
-                }}
+                onChange={(e) => setIngressProtocol(e.target.value as Protocol)}
               >
                 {ingressOptions.map((p) => (
                   <option key={p.value} value={p.value}>
@@ -625,32 +617,28 @@ export function ChannelGraphEditor({
                   ))}
                 </div>
                 <p className="muted">
-                  {tr("目标 {0} · {1} {2} {3}", {
-                    "0": textValue(
-                      preview.provider
+                  {[
+                    tr("目标") +
+                      " " +
+                      (preview.provider
                         ? tr("上游调用节点 ") + preview.providerId
                         : preview.routingProfile
                           ? tr("自动路由 ") + preview.routingProfile
-                          : preview.target,
-                    ),
-                    "1": textValue(
-                      preview.provider || preview.routingProfile
-                        ? ""
-                        : preview.mode === "explicit"
-                          ? tr("显式重定向")
-                          : tr("隐式重定向"),
-                    ),
-                    "2": textValue(
-                      preview.request.reasoning?.effort
-                        ? tr(" · 思考 ") + preview.request.reasoning.effort
-                        : "",
-                    ),
-                    "3": textValue(
-                      preview.outputPolicy
-                        ? " · TPS " + preview.outputPolicy.tps
-                        : "",
-                    ),
-                  })}
+                          : preview.target),
+                    !preview.provider &&
+                      !preview.routingProfile &&
+                      tr(
+                        preview.mode === "explicit"
+                          ? "显式重定向"
+                          : "隐式重定向",
+                      ),
+                    preview.request.reasoning?.effort &&
+                      tr("思考强度") + " " + preview.request.reasoning.effort,
+                    preview.outputPolicy?.tps &&
+                      "TPS " + preview.outputPolicy.tps,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
                 <details>
                   <summary>{tr("预览详情")}</summary>
