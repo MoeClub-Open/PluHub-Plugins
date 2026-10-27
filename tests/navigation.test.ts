@@ -72,6 +72,7 @@ it("keeps channel execution settings under channels and preserves legacy links",
   expect(nav.section?.id).toBe("routing");
   expect(nav.section?.pages.map((p) => p.path)).toEqual([
     "/channels",
+    "/settings/service-groups",
     "/settings/user-channels",
   ]);
   expect(nav.searchEntries.map((p) => p.path)).not.toEqual(

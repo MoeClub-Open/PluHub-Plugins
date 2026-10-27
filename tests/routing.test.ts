@@ -92,9 +92,9 @@ function harness(
           },
           route: { upstream: i.target, model: i.target + "-vendor" },
         };
-      if (n === "http.transport@1") {
+      if (n === "ai.workflow-decision@1") {
         calls++;
-        return Response.json(answer());
+        return { difficulty: "hard", confidence: 0.82, source: "luna" };
       }
       throw Error(n);
     },
@@ -110,7 +110,7 @@ function harness(
     calls: () => calls,
     resolve: (r = request(), s = signal(), extra = {}) =>
       handlers.get("ai.auto-routing@1")(
-        { profile: "smart", request: r, ...extra },
+        { profile: "smart", request: r, decisionToken: "test-token", ...extra },
         s,
       ),
   };
@@ -190,52 +190,23 @@ it("uses three distinct native decision envelopes and validates confidence and d
   ])
     expect(() => parseDecision("luna", body)).toThrow();
 });
-it.each([
-  ["luna", "decisions"],
-  ["systemone", "systemone"],
-  ["jev", "decide"],
-] as const)(
-  "calls %s native endpoint with separate credentials",
-  async (kind, path) => {
+it.each(["luna", "systemone", "jev"] as const)(
+  "delegates %s decisions to the authenticated workflow call",
+  async (kind) => {
     let sent: any;
     const host: any = {
-      secret: () => "classifier",
-      call: async (_: string, i: any) => {
-        sent = i;
-        return Response.json(
-          kind === "luna"
-            ? answer()
-            : kind === "systemone"
-              ? {
-                  answers: {
-                    difficulty: { choice: "hard", probabilities: dist },
-                  },
-                }
-              : {
-                  choice: "hard",
-                  options: Object.keys(dist),
-                  probabilities: Object.values(dist),
-                },
-        );
+      call: async (name: string, input: any) => {
+        expect(name).toBe("ai.workflow-decision@1");
+        sent = input;
+        return { difficulty: "hard", confidence: 0.9, source: kind };
       },
     };
-    expect(
-      (
-        await decide(
-          host,
-          {
-            kind,
-            model: "m",
-            baseUrl: "https://decision.example/v1",
-            keyRef: "env:D",
-          },
-          request(),
-          signal(),
-        )
-      ).difficulty,
-    ).toBe("hard");
-    expect(sent.url).toBe("https://decision.example/v1/" + path);
-    expect(sent.headers.authorization).toBe("Bearer classifier");
+    const result = await decide(host, { kind, model: "decision-model" }, request(), signal(),
+      { profile: "smart", token: "test-token" });
+    expect(result.difficulty).toBe("hard");
+    expect(sent).toEqual({ profile: "smart", token: "test-token" });
+    await expect(decide(host, { kind, model: "decision-model" }, request(), signal()))
+      .rejects.toMatchObject({ code: "decision_preview_unsupported" });
   },
 );
 it("selects models by difficulty and applies strength updates without restart", async () => {
@@ -272,14 +243,14 @@ it("supports model-only, effort-only and manual modes and explicit client effort
 });
 it("falls back or rejects low confidence, truncation and service failures", async () => {
   const h = harness({
-    decision: { kind: "luna", baseUrl: "https://decision.example", model: "m" },
+    decision: { kind: "luna", model: "m" },
   });
-  h.host.call = async () => Response.json(answer(0.1));
+  h.host.call = async () => ({ difficulty: "hard", confidence: 0.1, source: "luna" });
   // Keep real target resolver and replace only transport.
   const transport = h.host.call;
   const original = harness().host.call;
   h.host.call = (n: string, i: any, s: AbortSignal) =>
-    n === "http.transport@1" ? transport() : original(n, i, s);
+    n === "ai.workflow-decision@1" ? transport() : original(n, i, s);
   expect(await h.resolve()).toMatchObject({
     model: "strong-vendor",
     reasoning: { effort: "high" },
@@ -292,14 +263,14 @@ it("falls back or rejects low confidence, truncation and service failures", asyn
   h.p.onFailure = "fallback";
   h.p.decision.maxInputChars = 128;
   h.host.call = (n: string, i: any, s: AbortSignal) =>
-    n === "http.transport@1"
-      ? Promise.resolve(Response.json(answer()))
+    n === "ai.workflow-decision@1"
+      ? Promise.resolve({ difficulty: "hard", confidence: 0.9, source: "luna", truncated: true })
       : original(n, i, s);
   expect((await h.resolve(request("a".repeat(300)))).decision.fallback).toBe(
     "decision_truncated",
   );
   h.host.call = (n: string, i: any, s: AbortSignal) =>
-    n === "http.transport@1"
+    n === "ai.workflow-decision@1"
       ? Promise.reject(Error("offline"))
       : original(n, i, s);
   expect((await h.resolve()).decision.source).toBe("fallback");
@@ -324,7 +295,7 @@ it("propagates cancellation and skips candidates that cannot represent the reque
 });
 it("rejects invalid fixed policies and rate limits the remote classifier independently", async () => {
   const h = harness({
-    decision: { kind: "luna", baseUrl: "https://decision.example", model: "m" },
+    decision: { kind: "luna", model: "m" },
   });
   expect(() =>
     h.validate({
@@ -428,26 +399,18 @@ it("never exposes private Anthropic or Gemini thought deltas", async () => {
     });
   }
 });
-it("times out a decision without suppressing the original request cancellation", async () => {
+it("propagates cancellation through a delegated decision", async () => {
   const host: any = {
     call: (_: string, _i: any, s: AbortSignal) =>
       new Promise((_, reject) => {
         s.addEventListener("abort", () => reject(s.reason), { once: true });
       }),
   };
-  const keepAlive = setTimeout(() => {}, 500);
-  try {
-    await expect(
-      decide(
-        host,
-        { kind: "jev", baseUrl: "http://localhost", timeoutMs: 50 },
-        request(),
-        signal(),
-      ),
-    ).rejects.toMatchObject({ name: "TimeoutError" });
-  } finally {
-    clearTimeout(keepAlive);
-  }
+  const controller = new AbortController();
+  const pending = decide(host, { kind: "jev", model: "m" }, request(), controller.signal,
+    { profile: "smart", token: "test-token" });
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
 });
 it("maps thinking settings across protocols and rejects lossy conversions", () => {
   for (const [p, b] of [

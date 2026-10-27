@@ -1,5 +1,17 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  待转换内容: "Value to format",
+  自动: "Automatic",
+  格式化文本: "Format as text",
+  已连接: "Connected",
+  更多操作: "More actions",
+  更多: "More",
+  可用渠道: "Available channels",
+  访问权限: "Access permissions",
+  启用模型: "Enable model",
+  代码: "Code",
+  "图片、视频、向量和音频接口。": "Image, video, embedding, and audio APIs.",
+  "管理用户自带密钥、订阅与个人渠道。": "Manage user-provided keys, subscriptions, and personal channels.",
   路由编辑方式: "Route editor mode",
   规则: "Rules",
   路由规则: "Routing rules",

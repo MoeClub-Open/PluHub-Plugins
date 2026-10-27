@@ -267,9 +267,13 @@ it("has complete English messages and preserves interpolation variables", async 
   await walk(join(root, "lib/ui"));
   await walk(join(root, "plugins"));
   for (const directory of await readdir(join(root, "plugins"))) {
-    const manifest = JSON.parse(
-      await readFile(join(root, "plugins", directory, "manifest.json"), "utf8"),
-    );
+    const source = await readFile(join(root, "plugins", directory, "manifest.json"), "utf8")
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return undefined;
+        throw error;
+      });
+    if (!source) continue;
+    const manifest = JSON.parse(source);
     for (const value of [
       manifest.name,
       manifest.description,
