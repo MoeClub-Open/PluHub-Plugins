@@ -12,6 +12,7 @@ import {
 } from "../../lib/ai/upstream-interfaces.js";
 import { parseSSE, cancelSSE } from "../../lib/ai/sse.js";
 import { completedVideo } from "../../lib/ai/video.js";
+import { responseModel } from "../../lib/ai/response-model.js";
 
 export default definePlugin({
   setup(host) {
@@ -19,7 +20,11 @@ export default definePlugin({
       host.provide(
         "ai.media." + protocol + "@1",
         async (
-          { request, upstream }: { request: AIRequest; upstream: Upstream },
+          { request, upstream, responseModel: publicModel }: {
+            request: AIRequest;
+            upstream: Upstream;
+            responseModel?: string;
+          },
           signal,
         ) => {
           const operation = request.operation;
@@ -149,6 +154,10 @@ export default definePlugin({
                       "Media stream failed",
                       502,
                     );
+                  const model = responseModel("openai-chat", data);
+                  if (model) yield { type: "upstream-model", model };
+                  if (Object.hasOwn(data, "model"))
+                    data.model = publicModel ?? request.model;
                   const usage = mediaUsage(operation.kind, data);
                   if (usage) yield { type: "usage", usage };
                   if (
@@ -250,6 +259,8 @@ export default definePlugin({
                     502,
                   );
                 const usage = mediaUsage(operation.kind, data);
+                const model = responseModel("openai-chat", data);
+                if (model) yield { type: "upstream-model", model };
                 if (usage) yield { type: "usage", usage };
                 yield { type: "media", contentType, body: data };
               } else {

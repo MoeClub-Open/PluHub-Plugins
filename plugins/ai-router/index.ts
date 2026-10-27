@@ -511,6 +511,7 @@ export default definePlugin({
           {
             request: actual,
             upstream: plan.upstream,
+            responseModel: plan.responseModel ?? request.model,
           },
           signal,
         );

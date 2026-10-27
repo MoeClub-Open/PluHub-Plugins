@@ -10,6 +10,7 @@ export interface AIObservation {
   startedAt: number;
   protocol: string;
   model?: string;
+  upstreamResponseModel?: string;
   upstream?: string;
   stream?: boolean;
   firstTokenMs?: number;

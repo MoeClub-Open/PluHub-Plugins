@@ -3,18 +3,20 @@ import { number } from "../../lib/ui/components.js";
 export function RoutingDetails({
   value,
   requestedModel,
+  responseModel,
 }: {
-  value: string;
+  value?: string | null;
   requestedModel?: string;
+  responseModel?: string | null;
 }) {
-  let data: Record<string, any>;
+  let data: Record<string, any> = {};
   try {
-    data = JSON.parse(value);
+    if (value) data = JSON.parse(value);
   } catch {
-    return null;
+    // The response model can still be displayed if routing data is invalid.
   }
-  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
-  const { outputBudget: budget, webSearchCalls, ...routing } = data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) data = {};
+  const { outputBudget: budget, webSearchCalls, targetModel, ...routing } = data;
   const bounded =
     budget?.mode === "bounded" && Number.isSafeInteger(budget.limit);
   const estimated =
@@ -35,13 +37,22 @@ export function RoutingDetails({
           </div>
         </dl>
       )}
-      {typeof routing.targetModel === "string" &&
-        routing.targetModel !== requestedModel && (
+      {((typeof targetModel === "string" && targetModel !== requestedModel) ||
+        responseModel) && (
           <dl className="detail-grid">
-            <div>
-              <dt>{tr("实际模型")}</dt>
-              <dd>{routing.targetModel}</dd>
-            </div>
+            {typeof targetModel === "string" &&
+              targetModel !== requestedModel && (
+                <div>
+                  <dt>{tr("上游请求模型")}</dt>
+                  <dd>{targetModel}</dd>
+                </div>
+              )}
+            {responseModel && (
+              <div>
+                <dt>{tr("上游返回模型")}</dt>
+                <dd>{responseModel}</dd>
+              </div>
+            )}
           </dl>
         )}
       {Number.isSafeInteger(webSearchCalls) && (

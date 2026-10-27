@@ -6,6 +6,7 @@ import { responseObject } from "./json-response.js";
 import { parseSSE, cancelSSE } from "./sse.js";
 import { decodeResult, resultEvents } from "./protocols.js";
 import { upstreamEvents } from "./streams.js";
+import { responseModel } from "./response-model.js";
 
 export class SubscriptionFailure extends HostError {
   get generationRejected() {
@@ -232,6 +233,9 @@ export async function* subscriptionEvents(
   const known = fields.every(
     (k) => Number.isSafeInteger(usage?.[k]) && usage[k] >= 0,
   );
-  for await (const event of resultEvents(decodeResult(protocol, data, model)))
+  const decoded = decodeResult(protocol, data, model);
+  const upstreamModel = responseModel(protocol, data);
+  if (upstreamModel) yield { type: "upstream-model", model: upstreamModel };
+  for await (const event of resultEvents(decoded))
     if (event.type !== "usage" || known) yield event;
 }

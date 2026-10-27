@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.47",
+  "version": "0.1.0-alpha.48",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -379,6 +379,9 @@
                           },
                           "type": {
                             "const": "provider"
+                          },
+                          "recordResponseModel": {
+                            "type": "boolean"
                           },
                           "upstream": {
                             "type": "object",

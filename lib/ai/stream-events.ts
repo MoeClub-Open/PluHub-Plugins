@@ -13,6 +13,7 @@ import type {
 import { parseSSE, reason } from "./protocols.js";
 import { readReasoning } from "./content.js";
 import { decodeUsage } from "./usage.js";
+import { responseModel } from "./response-model.js";
 const bad = (message: string): never => {
   throw new HostError("upstream_protocol", message, 502);
 };
@@ -47,6 +48,7 @@ export async function* decodeEvents(
     geminiReasonSerial = 0;
   let geminiReason: string | undefined;
   let geminiUsage: Usage | undefined;
+  let lastResponseModel: string | undefined;
   const initialInputs = new Map<any, any>();
   const searches = new Map<string, WebSearchCall>();
   const searchSnapshots = new Map<string, string>();
@@ -335,6 +337,11 @@ export async function* decodeEvents(
       bad("Invalid upstream event");
     if (d.error || d.type === "error" || d.type === "response.failed")
       throw new HostError("upstream_error", "Upstream stream failed", 502);
+    const upstreamModel = responseModel(protocol, d, true);
+    if (upstreamModel && upstreamModel !== lastResponseModel) {
+      lastResponseModel = upstreamModel;
+      yield { type: "upstream-model", model: upstreamModel };
+    }
     if (protocol === "openai-chat") {
       for (const choice of d.choices ?? []) {
         if (choice.index !== 0) bad("Multiple choices are unsupported");

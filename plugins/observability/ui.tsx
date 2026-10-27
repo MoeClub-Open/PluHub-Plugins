@@ -696,10 +696,11 @@ function Page({ host }: { host: UIHost }) {
               )
             }
           />
-          {selected.routing && (
+          {(selected.routing || selected.upstream_response_model) && (
             <RoutingDetails
               value={selected.routing}
               requestedModel={selected.model}
+              responseModel={selected.upstream_response_model}
             />
           )}
           {scope.data?.scope === "all" && (

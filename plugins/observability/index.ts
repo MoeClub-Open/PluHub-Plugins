@@ -35,6 +35,7 @@ export default definePlugin({
          WHEN billing_mode IN ('platform','disabled') THEN 'platform'
          WHEN billing_mode='personal' THEN 'personal' END;`,
       "ALTER TABLE requests ADD COLUMN user_name TEXT; ALTER TABLE requests ADD COLUMN key_name TEXT;",
+      "ALTER TABLE requests ADD COLUMN upstream_response_model TEXT;",
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -240,7 +241,7 @@ export default definePlugin({
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source,user_name,key_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source,user_name,key_name,upstream_response_model) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -272,6 +273,7 @@ export default definePlugin({
               typeof ctx.principal?.attributes?.keyName === "string"
                 ? ctx.principal.attributes.keyName
                 : null,
+              state.upstreamResponseModel ?? null,
             );
             recordRanking(db, {
               at: state.startedAt,
@@ -444,6 +446,7 @@ export default definePlugin({
           "key_name",
           "created_at",
           "model",
+          "upstream_response_model",
           "upstream",
           "protocol",
           "effort",

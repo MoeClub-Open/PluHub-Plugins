@@ -110,6 +110,7 @@ export function workflowParameters(
       ];
     case "provider":
       return [
+        param("recordResponseModel", "boolean", "记录上游响应模型"),
         ...(!personal
           ? [
               param("upstream.protocol", "string", "上游调用协议"),

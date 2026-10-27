@@ -198,6 +198,8 @@ export function compileWorkflow(
     )
       bad("请选择有效的路由策略", [node.id]);
     if (node.type === "provider") {
+      if (node.recordResponseModel !== undefined && typeof node.recordResponseModel !== "boolean")
+        bad("上游响应模型记录设置无效", [node.id]);
       if (
         node.model !== undefined &&
         (typeof node.model !== "string" ||

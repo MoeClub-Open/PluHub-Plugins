@@ -5,6 +5,7 @@ import type { Protocol, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { encodeRequest, decodeResult, resultEvents } from "./protocols.js";
 import { discoverApiModels } from "./model-directory.js";
 import { upstreamEvents } from "./streams.js";
+import { responseModel } from "./response-model.js";
 import {
   interfaceHeaders,
   requestPath,
@@ -125,6 +126,8 @@ export function createUpstream(protocol: Protocol) {
           const decoded = decodeResult(protocol, data, request.model);
           const events = resultEvents(decoded);
           return (async function* () {
+            const model = responseModel(protocol, data);
+            if (model) yield { type: "upstream-model" as const, model };
             for await (const event of events)
               if (event.type !== "usage" || known) yield event;
           })();

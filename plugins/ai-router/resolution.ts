@@ -101,6 +101,7 @@ export async function resolveRoute(
   let bindingChecked = false;
   let sessionChannel = input.channelId;
   let providerNodeId: string | undefined;
+  let recordResponseModel = false;
   let consumptionMultiplier: number | undefined;
   let protocolPolicy = options.protocolPolicy ?? input.protocolPolicy;
   while (path.length < 32) {
@@ -159,6 +160,7 @@ export async function resolveRoute(
     }
     let connection: Upstream = upstream;
     providerNodeId = undefined;
+    recordResponseModel = false;
     let providerModel = route.model;
     let profile = upstream.protocol === "auto-router" ? route.model : undefined;
     if (upstream.flow) {
@@ -266,6 +268,7 @@ export async function resolveRoute(
       if (result.provider) {
         providerNodeId = result.providerId;
         const node = result.providerNode;
+        recordResponseModel = node?.recordResponseModel === true;
         connection =
           node?.type === "provider" && node.upstream
             ? node.upstream
@@ -379,6 +382,7 @@ export async function resolveRoute(
         model: providerModel,
         upstreamId: route.upstream,
         targetModelId: model,
+        recordResponseModel,
         ...(knownPrice
           ? {
               pricing: routePricing(pricing, {

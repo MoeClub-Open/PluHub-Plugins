@@ -218,6 +218,7 @@ async function* execute(
           quota: subscriptionQuota(kind, response.headers),
         });
         try {
+          let responseModel: Extract<AIEvent, { type: "upstream-model" }> | undefined;
           for await (const event of subscriptionEvents(
             kind,
             prepared.protocol,
@@ -228,6 +229,14 @@ async function* execute(
             request.operation,
           )) {
             signal.throwIfAborted();
+            if (event.type === "upstream-model" && !delivered) {
+              responseModel = event;
+              continue;
+            }
+            if (responseModel) {
+              yield responseModel;
+              responseModel = undefined;
+            }
             delivered = true;
             yield event;
           }

@@ -277,6 +277,20 @@ export function ProviderNodeSettings({
               />
             </label>
           </FlowParameter>
+          <FlowParameter field="recordResponseModel">
+            <label className="checkbox-row">
+              <Checkbox
+                appearance="switch"
+                checked={node.recordResponseModel === true}
+                onCheckedChange={(value) =>
+                  change({
+                    recordResponseModel: value === true ? true : undefined,
+                  })
+                }
+              />
+              {tr("记录上游响应模型 ID")}
+            </label>
+          </FlowParameter>
           {(node.upstream?.protocol === "codex" ||
             context.boundInputs.has("upstream.protocol") ||
             context.boundInputs.has("upstream.authMode") ||

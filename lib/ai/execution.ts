@@ -1,7 +1,7 @@
 import type { Host, RequestContext } from "@pluhub/sdk";
 import type { AIEvent, AIPlan, AIRequest } from "@pluhub/contracts/ai";
 import { generationRejected } from "./rejection.js";
-import { planObservation } from "./telemetry.js";
+import { observation, planObservation } from "./telemetry.js";
 
 /** Only a definite refusal before the first normalized event may be replayed. */
 export async function executeRequest(
@@ -14,6 +14,7 @@ export async function executeRequest(
   async function* run(): AsyncGenerator<AIEvent> {
     for (;;) {
       let delivered = false;
+      let responseModel: string | undefined;
       try {
         ctx.state.set("ai.executionRejected", false);
         const events = await host.call<AsyncIterable<AIEvent>>(
@@ -22,7 +23,15 @@ export async function executeRequest(
           signal,
         );
         for await (const event of events) {
+          if (event.type === "upstream-model") {
+            responseModel = event.model;
+            if (delivered && plan.recordResponseModel && observation(ctx))
+              observation(ctx)!.upstreamResponseModel = responseModel;
+            continue;
+          }
           delivered = true;
+          if (responseModel && plan.recordResponseModel && observation(ctx))
+            observation(ctx)!.upstreamResponseModel = responseModel;
           yield event;
         }
         return;
