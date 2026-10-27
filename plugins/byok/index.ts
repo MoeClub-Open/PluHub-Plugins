@@ -11,6 +11,7 @@ import {
   requiredString,
 } from "@pluhub/sdk";
 import { openDatabase } from "../../lib/storage/sqlite.js";
+import { migratePersonalConditions } from "./condition-migration.js";
 import {
   channelMigration,
   moderationMigration,
@@ -49,6 +50,13 @@ export default definePlugin({
           OR json_type(settings_json,'$.consumptionMultiplier') IS NOT NULL;`,
       "ALTER TABLE credentials ADD COLUMN key_count INTEGER NOT NULL DEFAULT 1;",
     ]);
+    try {
+      migratePersonalConditions(db);
+    } catch (error) {
+      db.close();
+      master.fill(0);
+      throw error;
+    }
     host.cleanup(() => {
       db.close();
       master.fill(0);

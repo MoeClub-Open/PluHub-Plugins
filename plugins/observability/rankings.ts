@@ -36,12 +36,14 @@ export function recordRanking(
     userId?: string;
     model?: string;
     upstream?: string;
+    parentRequestId?: string;
     status: string;
     input?: number;
     output?: number;
   },
 ) {
   if (
+    record.parentRequestId ||
     record.status !== "success" ||
     !record.userId ||
     !record.model ||

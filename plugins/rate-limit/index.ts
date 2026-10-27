@@ -6,7 +6,7 @@ import {
   type Principal,
 } from "@pluhub/sdk";
 import type { AIRequest, AIPlan } from "@pluhub/contracts/ai";
-import type { RequestLimitRule } from "@pluhub/contracts/workflow";
+import type { ChannelRequestLimit, RequestLimitRule } from "@pluhub/contracts/workflow";
 import { observation } from "../../lib/ai/telemetry.js";
 import { throttle } from "./throttle.js";
 type Rule = RequestLimitRule;
@@ -50,6 +50,7 @@ export default definePlugin({
       tokens: number,
       checkOnly = false,
       skipRequests = new Set<string>(),
+      skipActive = new Set<string>(),
     ) {
       // A redirect may revisit one channel through a different public model.
       // Count one request per node rather than reserving that bucket twice.
@@ -70,7 +71,9 @@ export default definePlugin({
         if (
           (rule.rpm && !skipRequests.has(id) && bucket.requests >= rule.rpm) ||
           (rule.tpm && bucket.tokens + tokens > rule.tpm) ||
-          (rule.concurrency && bucket.active >= rule.concurrency)
+          (rule.concurrency &&
+            !skipActive.has(id) &&
+            bucket.active >= rule.concurrency)
         )
           throw new HostError(
             "rate_limit_exceeded",
@@ -83,14 +86,15 @@ export default definePlugin({
       for (const item of items) {
         if (!skipRequests.has(item.id)) item.bucket.requests++;
         item.bucket.tokens += tokens;
-        item.bucket.active++;
+        if (!skipActive.has(item.id)) item.bucket.active++;
       }
       let released = false;
       return (actual: number) => {
         if (released) return;
         released = true;
         for (const item of items) {
-          item.bucket.active = Math.max(0, item.bucket.active - 1);
+          if (!skipActive.has(item.id))
+            item.bucket.active = Math.max(0, item.bucket.active - 1);
           if (item.bucket.window === item.window)
             item.bucket.tokens = Math.max(
               0,
@@ -105,53 +109,112 @@ export default definePlugin({
       if (!request || !plan) return;
       const c = host.config();
       const rules = principalRules(ctx.principal);
+      const coordinator = !!plan.workflowDeferred;
+      // The external request owns the user/key request and concurrency slots.
+      // Every child still reserves its own tokens in those same buckets.
+      const inherited = new Set(ctx.parent || ctx.state.has("limits.earlyRelease") ? rules.map(([id]) => id) : []);
+      const earlyRules = (ctx.state.get("limits.workflowRules") as Set<string> | undefined) ?? new Set<string>();
       const channel = (c.channels as Record<string, Rule> | undefined)?.[
         plan.upstreamId!
       ];
-      if (channel) rules.push(["channel:" + plan.upstreamId, channel]);
-      for (const policy of plan.requestLimits ?? []) {
+      if (channel && !coordinator && !earlyRules.has("channel:" + plan.upstreamId) && !(ctx.parent && plan.workflowParentChannel === plan.upstreamId))
+        rules.push(["channel:" + plan.upstreamId, channel]);
+      for (const policy of coordinator ? [] : plan.requestLimits ?? []) {
         // The channel ID includes the personal owner/channel identity. A graph
         // redirect retains policies from every traversed channel.
-        rules.push([
-          JSON.stringify(["graph", policy.channel, policy.node]),
-          policy.rule,
-        ]);
+        const id = JSON.stringify(["graph", policy.channel, policy.node]);
+        if (!earlyRules.has(id)) rules.push([id, policy.rule]);
       }
       const prepared = plan.preparedRequest ?? request;
-      const tokens =
-        Buffer.byteLength(JSON.stringify(prepared.messages)) +
-        Buffer.byteLength(JSON.stringify(prepared.tools)) +
-        (prepared.maxTokens ?? 4096) +
-        1024;
+      const tokens = coordinator
+        ? 0
+        : Buffer.byteLength(JSON.stringify(prepared.messages)) +
+          Buffer.byteLength(JSON.stringify(prepared.tools)) +
+          (prepared.maxTokens ?? 4096) +
+          1024;
       const previous = retry
         ? new Set<string>(
             (ctx.state.get("limits.rules") as string[] | undefined) ?? [],
           )
         : new Set<string>();
+      for (const id of inherited) previous.add(id);
       if (retry)
         (
           ctx.state.get("limits.release") as
             ((actual: number) => void) | undefined
         )?.(0);
-      ctx.state.set("limits.release", reserve(rules, tokens, false, previous));
+      ctx.state.set(
+        "limits.release",
+        reserve(rules, tokens, false, previous, inherited),
+      );
       ctx.state.set(
         "limits.rules",
         rules.map(([id]) => id),
       );
       ctx.state.set("limits.tokens", tokens);
+      ctx.state.set("limits.coordinator", coordinator);
+    }
+    function reserveWorkflow(ctx: RequestContext, policies: ChannelRequestLimit[], channelId?: string) {
+      const request = ctx.state.get("ai.request") as AIRequest;
+      const tokens = Buffer.byteLength(JSON.stringify(request.messages)) +
+        Buffer.byteLength(JSON.stringify(request.tools)) +
+        (request.maxTokens ?? 4096) + 1024;
+      const previous = (ctx.state.get("limits.workflowRules") as Set<string> | undefined) ?? new Set<string>();
+      const allRules: [string, Rule][] = policies.map((policy) => [
+        JSON.stringify(["graph", policy.channel, policy.node]), policy.rule,
+      ]);
+      const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
+      const effectiveChannel = channelId ?? plan?.upstreamId;
+      const channel = (host.config().channels as Record<string, Rule> | undefined)?.[effectiveChannel ?? ""];
+      if (channel) allRules.push(["channel:" + effectiveChannel, channel]);
+      const rules = [...new Map(allRules).entries()].filter(([id]) => !previous.has(id));
+      if (!rules.length) return;
+      const release = reserve(rules, tokens)!;
+      for (const [id] of rules) previous.add(id);
+      const releases = (ctx.state.get("limits.workflowReleases") as Array<{ release: (actual: number) => void; tokens: number }> | undefined) ?? [];
+      releases.push({ release, tokens });
+      ctx.state.set("limits.workflowRules", previous);
+      ctx.state.set("limits.workflowReleases", releases);
+      const existing = (ctx.state.get("limits.workflowPolicies") as ChannelRequestLimit[] | undefined) ?? [];
+      ctx.state.set("limits.workflowPolicies", [...existing, ...policies]);
     }
     host.provide(
       "ai.request-limits@1",
       (
         input:
-          | { action: "preflight"; principal?: Principal }
+          | {
+              action: "preflight";
+              principal?: Principal;
+              context?: RequestContext;
+            }
           | { action: "admit"; context: RequestContext; retry?: boolean }
+          | { action: "early-admit"; context: RequestContext; policies?: ChannelRequestLimit[]; channelId?: string }
+          | {
+              action: "workflow";
+              context: RequestContext;
+              policies: ChannelRequestLimit[];
+            }
           | { rules: [string, Rule][]; tokens: number },
       ) => {
-        if ("action" in input)
+        if ("action" in input) {
+          if (input.action === "early-admit") {
+            const ctx = input.context;
+            if (!ctx.parent && !ctx.state.has("limits.earlyRelease"))
+              ctx.state.set("limits.earlyRelease", reserve(principalRules(ctx.principal), 0));
+            reserveWorkflow(ctx, input.policies ?? [], input.channelId);
+            ctx.state.set("limits.earlyDecision", true);
+            return;
+          }
+          if (input.action === "workflow") {
+            reserveWorkflow(input.context, input.policies);
+            return;
+          }
           return input.action === "preflight"
-            ? reserve(principalRules(input.principal), 0, true)
+            ? input.context?.parent
+              ? undefined
+              : reserve(principalRules(input.principal), 0, true)
             : admit(input.context, input.retry);
+        }
         return reserve(input.rules, input.tokens);
       },
     );
@@ -165,15 +228,24 @@ export default definePlugin({
         const state = observation(ctx);
         const usage = state?.finished ? state.usage : undefined;
         release?.(
-          usage
-            ? usage.input + usage.output
-            : ctx.state.get("ai.executionRejected")
-              ? 0
-              : ctx.state.get("ai.executionStarted")
-                ? Number(ctx.state.get("limits.tokens"))
-                : 0,
+          ctx.state.get("limits.coordinator")
+            ? 0
+            : usage
+              ? usage.input + usage.output
+              : ctx.state.get("ai.executionRejected")
+                ? 0
+                : ctx.state.get("ai.executionStarted")
+                  ? Number(ctx.state.get("limits.tokens"))
+                  : 0,
         );
         ctx.state.delete("limits.release");
+        const workflowReleases = ctx.state.get("limits.workflowReleases") as
+          Array<{ release: (actual: number) => void; tokens: number }> | undefined;
+        for (const item of workflowReleases ?? [])
+          item.release(usage ? usage.input + usage.output : ctx.state.get("ai.executionStarted") || ctx.state.get("limits.earlyDecision") ? item.tokens : 0);
+        ctx.state.delete("limits.workflowReleases");
+        (ctx.state.get("limits.earlyRelease") as ((actual: number) => void) | undefined)?.(0);
+        ctx.state.delete("limits.earlyRelease");
       },
     });
     host.hook({
@@ -184,6 +256,8 @@ export default definePlugin({
         const rates = [
           Number(host.config().bytesPerSecond ?? 0),
           ...(plan?.requestLimits ?? []).map((p) => p.rule.bytesPerSecond ?? 0),
+          ...((ctx.state.get("limits.workflowPolicies") as ChannelRequestLimit[] | undefined) ?? [])
+            .map((p) => p.rule.bytesPerSecond ?? 0),
         ].filter((n) => n > 0);
         const rate = rates.length ? Math.min(...rates) : 0;
         if (!rate || !ctx.state.has("ai.request") || !ctx.response?.body)

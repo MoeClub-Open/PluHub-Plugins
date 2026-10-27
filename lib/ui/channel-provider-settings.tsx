@@ -13,6 +13,9 @@ const protocols = [
   "openai-responses",
   "anthropic",
   "gemini",
+  "systemone",
+  "luna",
+  "jev",
   "codex",
   "claude-subscription",
   "antigravity",
@@ -89,7 +92,15 @@ export function ProviderNodeSettings({
                     onChange={(e) => changeProtocol(e.target.value)}
                   >
                     {protocols.map((p) => (
-                      <option key={p}>{p}</option>
+                      <option key={p} value={p}>
+                        {p === "systemone"
+                          ? "Jev / System One"
+                          : p === "luna"
+                            ? "Luna / Decisions"
+                            : p === "jev"
+                              ? "JEV / Decide"
+                              : p}
+                      </option>
                     ))}
                   </Select>
                 </label>
@@ -231,7 +242,13 @@ export function ProviderNodeSettings({
                         onChange={(e) =>
                           connection({ baseUrl: e.target.value })
                         }
-                        placeholder="https://api.openai.com/v1"
+                        placeholder={
+                          node.upstream?.protocol === "systemone"
+                            ? "https://api.typesafe.ai/v1"
+                            : node.upstream?.protocol === "jev"
+                              ? "https://api.example.com/v1"
+                              : "https://api.openai.com/v1"
+                        }
                       />
                     </label>
                   </FlowParameter>

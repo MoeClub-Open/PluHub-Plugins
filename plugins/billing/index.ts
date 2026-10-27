@@ -149,6 +149,11 @@ export default definePlugin({
       const request = ctx.state.get("ai.request") as AIRequest | undefined;
       const plan = ctx.state.get("ai.plan") as AIPlan | undefined;
       if (!request || !plan) return;
+      if (plan.workflowDeferred) {
+        // The coordinator does not call a provider; each child has its own reservation.
+        ctx.state.set("billing.mode", "workflow");
+        return;
+      }
       const personal = consumptionSource(plan) !== "platform";
       ctx.state.set(
         "billing.mode",

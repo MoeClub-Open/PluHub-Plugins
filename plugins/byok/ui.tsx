@@ -3,6 +3,7 @@ import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { UpstreamInterfaces } from "../../lib/ui/upstream-interfaces.js";
 import { remapWorkflowInterfaces } from "../../lib/ui/channel-interface-bindings.js";
 import { apiProtocols } from "../../lib/ai/upstream-interfaces.js";
+import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -511,31 +512,25 @@ function Page({ host }: { host: UIHost }) {
                           >
                             {tr("设置")}
                           </button>
-                          <button
-                            className="ghost"
-                            disabled={
-                              busy ||
-                              c.blocked ||
-                              !c.enabled ||
-                              !c.hasCredential
-                            }
-                            onClick={() => {
-                              setTesting(c);
-                              setTestModel(Object.keys(c.models)[0] ?? "");
-                              setTestResult(undefined);
-                              setMessage("");
-                            }}
-                          >
-                            {tr("测试调用")}
-                          </button>
-                          <a
-                            className="button ghost"
-                            href={
-                              "#/playground?channel=" + encodeURIComponent(c.id)
-                            }
-                          >
-                            {tr("在线对话")}
-                          </a>
+                          {!isDecisionProtocol(c.protocol) && (
+                            <>
+                              <button
+                                className="ghost"
+                                disabled={busy || c.blocked || !c.enabled || !c.hasCredential}
+                                onClick={() => {
+                                  setTesting(c);
+                                  setTestModel(Object.keys(c.models)[0] ?? "");
+                                  setTestResult(undefined);
+                                  setMessage("");
+                                }}
+                              >
+                                {tr("测试调用")}
+                              </button>
+                              <a className="button ghost" href={"#/playground?channel=" + encodeURIComponent(c.id)}>
+                                {tr("在线对话")}
+                              </a>
+                            </>
+                          )}
                           <ChannelActions
                             channel={c}
                             busy={busy}
@@ -812,10 +807,21 @@ function Page({ host }: { host: UIHost }) {
                     "openai-responses",
                     "anthropic",
                     "gemini",
+                    "systemone",
+                    "luna",
+                    "jev",
                     ...(presets.data ?? []).map((p) => p.protocol),
                   ]),
                 ].map((p) => (
-                  <option key={p}>{p}</option>
+                  <option key={p} value={p}>
+                    {p === "systemone"
+                      ? "Jev / System One"
+                      : p === "luna"
+                        ? "Luna / Decisions"
+                        : p === "jev"
+                          ? "JEV / Decide"
+                          : p}
+                  </option>
                 ))}
               </Select>
             </label>
@@ -878,7 +884,11 @@ function Page({ host }: { host: UIHost }) {
                     required
                     maxLength={2048}
                     disabled={busy}
-                    placeholder="https://api.example.com"
+                    placeholder={
+                      editing.protocol === "systemone"
+                        ? "https://api.typesafe.ai/v1"
+                        : "https://api.example.com"
+                    }
                     onChange={(e) =>
                       setEditing({ ...editing, baseUrl: e.target.value })
                     }
@@ -1062,7 +1072,7 @@ function Page({ host }: { host: UIHost }) {
                 ))}
               </datalist>
             )}
-            {!subscription && (
+            {!subscription && !isDecisionProtocol(editing.protocol) && (
               <>
                 <div className="actions">
                   <button

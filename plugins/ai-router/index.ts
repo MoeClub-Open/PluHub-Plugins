@@ -39,11 +39,20 @@ import {
 } from "../../lib/ai/channel-graph.js";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { keyReferences } from "../../lib/ai/upstream-key.js";
+import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
+import { installWorkflowProvider } from "./workflow-provider.js";
+import { installJevIngress } from "./jev-ingress.js";
+import { installDecisionIngress } from "./decision-ingress.js";
+import { installWorkflowExecution } from "./workflow-execution.js";
 export default definePlugin({
   setup(host) {
     installConfiguration(host);
+    installWorkflowProvider(host);
+    installJevIngress(host);
+    installDecisionIngress(host);
+    installWorkflowExecution(host);
     const groups = (input?: { userId?: string }) =>
       Object.entries(serviceGroups(host.config()))
         .filter(([, group]) => groupAccess(group, input?.userId))
@@ -314,7 +323,7 @@ export default definePlugin({
             "invalid_config",
             "Subscription account manager is required; use a single credential source",
           );
-      } else if (!keyReferences(upstream.keyRef).length)
+      } else if (!isDecisionProtocol(upstream.protocol) && !keyReferences(upstream.keyRef).length)
         throw new HostError("invalid_config", "请配置上游密钥");
       let url: URL;
       try {
@@ -466,6 +475,7 @@ export default definePlugin({
         for (const model of await getCatalog({
           principalId: ctx.principal?.id,
           includePersonal: !!ctx.principal?.session,
+          routeKind: "chat",
           ...scope,
         }))
           if (

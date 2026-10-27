@@ -9,6 +9,7 @@ import type {
 } from "@pluhub/contracts/ai";
 import { redirectModel } from "./redirects.js";
 import { routePricing } from "../../lib/commerce/pricing.js";
+import { routeKindForProtocol } from "../../lib/ai/decision-route-kind.js";
 
 export interface CatalogScope {
   principalId?: string;
@@ -17,10 +18,41 @@ export interface CatalogScope {
   includePersonal?: boolean;
   personalOnly?: boolean;
   groupId?: string;
+  /** Internal routing distinguishes Jev from conversational channels. */
+  routeKind?: "chat" | "systemone" | "luna" | "jev";
 }
+
+function supportsKind(channel: Upstream, kind: NonNullable<CatalogScope["routeKind"]>) {
+  if (!channel.flow)
+    return kind === routeKindForProtocol(channel.protocol);
+  const flow = channel.flow;
+  const nodes = new Map(flow.nodes.map((node) => [node.id, node]));
+  const seen = new Set<string>();
+  function visit(id: string): boolean {
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    const node = nodes.get(id);
+    if (!node) return false;
+    if (node.type === "provider") {
+      if (flow.bindings?.some((binding) => binding.target === id && binding.input === "upstream.protocol")) return true;
+      const protocol = node.upstream?.protocol ?? channel.protocol;
+      return (kind === routeKindForProtocol(protocol)) ||
+        (!!node.fallback && visit(node.fallback));
+    }
+    if (node.type === "response") return kind === "chat";
+    // Delegated targets are resolved and checked after selection.
+    if (node.type === "upstream" || node.type === "routing" || node.type === "platform") return true;
+    if (node.type === "branch" || node.type === "condition")
+      return visit(node.yes) || visit(node.no);
+    return "next" in node ? visit(node.next) : false;
+  }
+  return visit(flow.entry);
+}
+
 function catalog(
   config: Record<string, any>,
   channelId?: string,
+  routeKind?: CatalogScope["routeKind"],
 ): CatalogModel[] {
   const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
   const models = { ...(config.models ?? {}) } as Record<string, ModelRoute>;
@@ -36,7 +68,8 @@ function catalog(
         (!channelId || m.upstream === channelId) &&
         m.enabled !== false &&
         upstreams[m.upstream] &&
-        upstreams[m.upstream]!.enabled !== false,
+        upstreams[m.upstream]!.enabled !== false &&
+        (!routeKind || supportsKind(upstreams[m.upstream]!, routeKind)),
     )
     .map(([id, m]) => ({
       id: m.publicModel ?? id,
@@ -86,7 +119,7 @@ export async function readCatalog(
   if (group && input.channelId && !group.channelIds.includes(input.channelId))
     throw new HostError("channel_forbidden", "渠道不在使用分组内", 403);
   const models: CatalogModel[] = (
-    input.personalOnly ? [] : catalog(host.config(), input.channelId)
+    input.personalOnly ? [] : catalog(host.config(), input.channelId, input.routeKind)
   )
     .filter(
       (model) =>
@@ -157,6 +190,7 @@ export async function readCatalog(
           models: channel.models,
         },
         id,
+        input.routeKind,
       ),
     );
   }

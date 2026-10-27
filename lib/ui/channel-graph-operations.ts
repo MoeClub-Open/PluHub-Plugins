@@ -6,7 +6,7 @@ export const workflowOutputs = (
 ): { field: WorkflowPort; target: string }[] =>
   node.type === "provider"
     ? [{ field: "fallback", target: node.fallback ?? "" }]
-    : node.type === "condition"
+    : node.type === "condition" || node.type === "branch"
       ? [
           { field: "yes", target: node.yes },
           { field: "no", target: node.no },
@@ -21,7 +21,7 @@ export function workflowNodePositions(
 ) {
   const columns = new Map<string, number>();
   const visit = (id: string, depth: number, seen: Set<string>) => {
-    if (seen.has(id) || depth > 64 || (columns.get(id) ?? -1) >= depth) return;
+    if (seen.has(id) || depth > 128 || (columns.get(id) ?? -1) >= depth) return;
     columns.set(id, depth);
     const node = flow.nodes.find((item) => item.id === id);
     if (node)
@@ -108,7 +108,7 @@ export function pasteFlowSelection(
 ) {
   if (
     !selection.nodes.length ||
-    flow.nodes.length + selection.nodes.length > 64
+    flow.nodes.length + selection.nodes.length > 128
   )
     return undefined;
   const used = new Set(flow.nodes.map((node) => node.id));

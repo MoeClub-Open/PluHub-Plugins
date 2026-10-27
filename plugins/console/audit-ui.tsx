@@ -5,6 +5,7 @@ import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, ListPagination, Icon } from "../../lib/ui/components.js";
 import { SecurityHistory } from "../../lib/ui/security-history.js";
+import { auditAction } from "./audit-actions.js";
 const fields = [
   "q",
   "userId",
@@ -307,9 +308,9 @@ function ManagementAudit({
                   <small>{name(r.actor_id)}</small>
                 </td>
                 <td>
-                  <code>
-                    {r.method} {r.path}
-                  </code>
+                  <strong title={r.method + " " + r.path}>
+                    {auditAction(r.method, r.path)}
+                  </strong>
                   <small>
                     <a
                       href={"#/logs?requestId=" + encodeURIComponent(r.id)}

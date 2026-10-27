@@ -11,6 +11,8 @@ import {
 } from "../../lib/ui/components.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Notice } from "../../lib/ui/mount.js";
+import { channelConnections } from "../../lib/ai/channel-config.js";
+import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 
 export type ChannelModel = {
   id: string;
@@ -54,12 +56,20 @@ export function ChannelModels({
   const [revision, setRevision] = React.useState(0);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(20);
+  const channel = upstreams[channelId];
+  const canDiscover = !!channel && channelConnections(channel).some(
+    (connection) => !isDecisionProtocol(connection.protocol),
+  );
 
   React.useEffect(() => {
     const controller = new AbortController();
     setData(undefined);
     setMessage("");
     setSelected([]);
+    if (!canDiscover) {
+      setData({ models: [], errors: [] });
+      return () => controller.abort();
+    }
     void host
       .request<Response>("/api/plugins/official.ai-router/channel-models", {
         method: "POST",
@@ -74,7 +84,7 @@ export function ChannelModels({
           setMessage(tr((error as Error).message));
       });
     return () => controller.abort();
-  }, [channelId, host, revision]);
+  }, [channelId, host, revision, canDiscover]);
   React.useEffect(() => setPage(1), [channelId, query, pageSize]);
 
   const mappings = Object.entries(models).filter(
@@ -184,21 +194,23 @@ export function ChannelModels({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={tr("刷新模型")}
-          disabled={busy || (!data && !message)}
-          onClick={() => setRevision((value) => value + 1)}
-        >
-          <Icon name="refresh" size={15} />
-        </button>
+        {canDiscover && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={tr("刷新模型")}
+            disabled={busy || (!data && !message)}
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            <Icon name="refresh" size={15} />
+          </button>
+        )}
       </div>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th className="selection-cell">
+              {canDiscover && <th className="selection-cell">
                 <Checkbox
                   aria-label={tr("选择全部可用模型")}
                   checked={allSelected}
@@ -220,7 +232,7 @@ export function ChannelModels({
                     )
                   }
                 />
-              </th>
+              </th>}
               <th>{tr("模型")}</th>
               <th>{tr("原价 · USD")}</th>
               <th>{tr("状态")}</th>
@@ -232,7 +244,7 @@ export function ChannelModels({
               .slice((currentPage - 1) * pageSize, currentPage * pageSize)
               .map(({ model, id, route }) => (
                 <tr key={model.id + ":" + id}>
-                  <td className="selection-cell">
+                  {canDiscover && <td className="selection-cell">
                     <Checkbox
                       aria-label={tr("选择模型 {0}", { "0": model.id })}
                       checked={selected.includes(model.id) && !route}
@@ -245,7 +257,7 @@ export function ChannelModels({
                         )
                       }
                     />
-                  </td>
+                  </td>}
                   <td>
                     <strong>{route?.name || model.name || model.id}</strong>
                     {(route?.name || model.name || model.id) !==
@@ -312,9 +324,9 @@ export function ChannelModels({
         setSize={setPageSize}
       />
       <div className="form-actions">
-        <span className="muted">
+        {canDiscover && <span className="muted">
           {tr("已选择 {0}", { "0": textValue(picked.length) })}
-        </span>
+        </span>}
         <button
           type="button"
           className="secondary"
@@ -323,13 +335,13 @@ export function ChannelModels({
         >
           {tr("手动添加")}
         </button>
-        <button
+        {canDiscover && <button
           type="button"
           disabled={!picked.length || busy}
           onClick={() => void submit()}
         >
           {busy ? tr("正在添加…") : tr("添加选中模型")}
-        </button>
+        </button>}
       </div>
     </Dialog>
   );

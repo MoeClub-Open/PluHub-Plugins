@@ -25,6 +25,7 @@ export async function planRoute(
       channelId: input.channelId,
       channelIds: input.channelIds,
       groupId: input.groupId,
+      routeKind: input.routeKind ?? "chat",
     },
     signal,
   );
@@ -82,16 +83,23 @@ export async function planRoute(
               input.request?.sessionId,
             )!;
       candidates.splice(candidates.indexOf(match), 1);
-      const { plan } = await resolveRoute(
-        host,
-        {
-          ...input,
-          channelId: match.channelId,
-          model: match.routeId ?? match.id,
-        },
-        signal,
-        requestedModel,
-      );
+      let plan: AIPlan;
+      try {
+        ({ plan } = await resolveRoute(
+          host,
+          {
+            ...input,
+            channelId: match.channelId,
+            model: match.routeId ?? match.id,
+          },
+          signal,
+          requestedModel,
+        ));
+      } catch (error) {
+        if ((error as HostError).code !== "route_kind_mismatch") throw error;
+        unavailable = new HostError("operation_not_supported", "所选渠道不支持此请求类型", 400);
+        continue;
+      }
       if (
         input.purpose !== "quote" &&
         plan.upstream.subscriptionAccountIds?.length

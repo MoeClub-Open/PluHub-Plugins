@@ -24,7 +24,7 @@ export function readModelMetrics(
       SELECT r.*, json_extract(r.usage_json,'$.cacheRead') cached,
         output_tokens-COALESCE(json_extract(r.usage_json,'$.reasoning'),0) visible_output_tokens
       FROM requests r JOIN allowed a ON r.model=a.model AND r.upstream=a.upstream
-      WHERE r.created_at>=? AND r.created_at<=?
+      WHERE r.parent_request_id IS NULL AND r.created_at>=? AND r.created_at<=?
     )
     SELECT model, COUNT(*) requests, SUM(status='success') successes,
       AVG(CASE WHEN status='success' THEN latency_ms END) latency,

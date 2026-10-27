@@ -52,6 +52,27 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   get value() {
     return tr("参数值");
   },
+  get text() {
+    return tr("文本内容");
+  },
+  get template() {
+    return tr("文本模板");
+  },
+  get replace() {
+    return tr("文本替换");
+  },
+  get format() {
+    return tr("格式化文本");
+  },
+  get llm() {
+    return tr("LLM 请求");
+  },
+  get jev() {
+    return tr("Jev 请求");
+  },
+  get response() {
+    return tr("返回内容");
+  },
   get provider() {
     return tr("调用上游");
   },
@@ -63,6 +84,18 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   },
   get condition() {
     return tr("条件分支");
+  },
+  get predicate() {
+    return tr("请求条件");
+  },
+  get branch() {
+    return tr("分支");
+  },
+  get compare() {
+    return tr("比较");
+  },
+  get logic() {
+    return tr("逻辑运算");
   },
   get protocol() {
     return tr("协议准入");
@@ -135,6 +168,10 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
     context.personal,
   );
   const dataOutputs = workflowDataOutputs(node);
+  const executionOutputs = outputs(node).filter(
+    (port) => port.field !== "fallback" || context.personal,
+  );
+  const namedOutputs = executionOutputs.filter((port) => port.field !== "next");
   const visibleInputs = parameters.filter((p) =>
     context.bindings.some(
       (edge) => edge.target === id && edge.input === p.path,
@@ -144,8 +181,8 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
     (p) => !expanded || (visibleFields && !visibleFields.has(p.path)),
   );
   const signature = JSON.stringify([
-    parameters.map((p) => p.path),
-    dataOutputs.map((p) => p.path),
+    parameters.map((p) => [p.path, p.type]),
+    dataOutputs.map((p) => [p.path, p.type]),
     visibleInputs.map((p) => p.path),
   ]);
   React.useEffect(() => {
@@ -213,7 +250,10 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
             : undefined
         }
       >
-        {node.type !== "start" && node.type !== "value" && (
+        {![
+          "start", "value", "predicate", "compare", "logic", "text",
+          "template", "replace", "format", "llm", "jev",
+        ].includes(node.type) && (
           <Handle type="target" position={Position.Left} id="in" />
         )}
         <div
@@ -260,6 +300,22 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
             </>
           )}
         </div>
+        {namedOutputs.length > 0 && (
+          <div className="flow-execution-ports">
+            {namedOutputs.map((port) => (
+              <div className="flow-execution-port" key={port.field}>
+                <span>
+                  {tr(port.field === "fallback" ? "失败后" : port.field === "yes" ? "是" : "否")}
+                </span>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={port.field}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         {!expanded && data.summary && (
           <div className="flow-node-summary">{data.summary}</div>
         )}
@@ -322,36 +378,16 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
             ))}
           </div>
         )}
-        {outputs(node)
-          .filter((port) => port.field !== "fallback" || context.personal)
-          .map((port, index) => (
-            <React.Fragment key={port.field}>
-              {(node.type === "condition" || port.field === "fallback") && (
-                <span
-                  className="flow-port-label"
-                  style={{ top: 42 + index * 24 }}
-                >
-                  {tr(
-                    port.field === "fallback"
-                      ? "失败后"
-                      : port.field === "yes"
-                        ? "是"
-                        : "否",
-                  )}
-                </span>
-              )}
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={port.field}
-                style={{
-                  top:
-                    node.type === "condition" || port.field === "fallback"
-                      ? 48 + index * 24
-                      : 34,
-                }}
-              />
-            </React.Fragment>
+        {executionOutputs
+          .filter((port) => port.field === "next")
+          .map((port) => (
+            <Handle
+              key={port.field}
+              type="source"
+              position={Position.Right}
+              id={port.field}
+              style={{ top: 34 }}
+            />
           ))}
       </div>
     </FlowParameterContext.Provider>
@@ -393,6 +429,7 @@ function summary(node: WorkflowNode, channel?: Upstream) {
     case "prompt":
       return node.text.slice(0, 60) || tr("系统提示词");
     case "condition":
+    case "predicate":
       if (node.test === "model")
         return (
           tr(
@@ -409,6 +446,15 @@ function summary(node: WorkflowNode, channel?: Upstream) {
           protocol: "入口协议为",
         }[node.test],
       );
+    case "branch":
+      return tr("条件输入");
+    case "compare":
+      return tr({
+        eq: "等于", ne: "不等于", gt: "大于", gte: "大于或等于",
+        lt: "小于", lte: "小于或等于", matches: "匹配",
+      }[node.operator]);
+    case "logic":
+      return tr({ and: "且", or: "或", not: "非" }[node.operator]);
     default:
       return "";
   }
@@ -666,12 +712,14 @@ function Canvas(props: CanvasProps) {
         const node = flow.nodes.find((item) => item.id === id);
         return (
           node?.type === "start" ||
-          (node?.type === "value" &&
-            bindings.some(
-              (edge) =>
-                edge.target === id &&
-                requestDerived(edge.source, new Set(seen)),
-            ))
+          node?.type === "predicate" ||
+          node?.type === "llm" ||
+          node?.type === "jev" ||
+          bindings.some(
+            (edge) =>
+              edge.target === id &&
+              requestDerived(edge.source, new Set(seen)),
+          )
         );
       };
       return bindings.every((edge) => {

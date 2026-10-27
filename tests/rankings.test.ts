@@ -94,6 +94,16 @@ it("includes the seventh UTC day, excludes the eighth, and counts missing usage 
       upstream: "platform",
       status: "success",
     });
+    recordRanking(db, {
+      at: now,
+      userId: "user",
+      model: "model",
+      upstream: "platform",
+      parentRequestId: "parent",
+      status: "success",
+      input: 9999,
+      output: 9999,
+    });
     const query = {
       kind: "models",
       metric: "tokens",

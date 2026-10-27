@@ -51,7 +51,7 @@ type Model = ModelDefinition & {
   pricingSource?: string;
 };
 type Settings = {
-  protocol: Protocol | SubscriptionKind;
+  protocol: Protocol | SubscriptionKind | "systemone" | "luna" | "jev";
   baseUrl: string;
   priority: number;
   interfaces?: UpstreamInterface[];
@@ -78,6 +78,9 @@ export function installPersonalChannels(
     "claude-subscription",
     "antigravity",
     "grok",
+    "systemone",
+    "luna",
+    "jev",
   ];
   const session = (principal: any) => {
     if (!principal?.session)
@@ -117,10 +120,13 @@ export function installPersonalChannels(
   function personalInterfaces(value: unknown, protocol: string) {
     const interfaces = validateInterfaces(value);
     if (interfaces) {
-      if (Object.hasOwn(subscriptionDefaults, protocol))
+      if (
+        Object.hasOwn(subscriptionDefaults, protocol) ||
+        ["systemone", "luna", "jev"].includes(protocol)
+      )
         throw new HostError(
           "invalid_interfaces",
-          "订阅授权不支持自定义 API 接口",
+          "当前上游协议不支持自定义 API 接口",
         );
       for (const route of interfaces)
         if (!host.hasCapability("ai.upstream." + route.protocol + "@1"))
@@ -166,6 +172,15 @@ export function installPersonalChannels(
         case "start":
         case "protocol":
         case "value":
+        case "branch":
+        case "compare":
+        case "logic":
+        case "text":
+        case "template":
+        case "replace":
+        case "llm":
+        case "jev":
+        case "response":
           break;
         case "provider":
           if (
@@ -187,11 +202,17 @@ export function installPersonalChannels(
         case "upstream":
           if (
             !Object.hasOwn(models, node.target) ||
+            (node.allowedTargets !== undefined &&
+              (!Array.isArray(node.allowedTargets) ||
+                node.allowedTargets.some(
+                  (target) => !Object.hasOwn(models, target),
+                ))) ||
             !["implicit", "explicit"].includes(node.mode)
           )
             throw new HostError("invalid_workflow", "只能转到本渠道内的模型");
           break;
         case "condition":
+        case "predicate":
           if (
             ![
               "hasTools",
@@ -773,6 +794,11 @@ export function installPersonalChannels(
           "unsupported_operation",
           "订阅渠道请按提供商授权范围填写模型",
         );
+      if (["systemone", "luna", "jev"].includes(config.protocol))
+        throw new HostError(
+          "unsupported_operation",
+          "当前判断协议不支持模型目录同步，请手动填写模型",
+        );
       const { secret } = await host.call<{ secret: string }>(
         "credentials.resolve@1",
         { id: row.id, userId },
@@ -863,7 +889,12 @@ export function installPersonalChannels(
         body = await readObject(request);
       const id = requiredString(body.id, "id"),
         model = requiredString(body.model, "model", 256);
-      runtime(rowFor(id, userId));
+      const channel = runtime(rowFor(id, userId));
+      if (["systemone", "luna", "jev"].includes(channel.upstream.protocol ?? ""))
+        throw new HostError(
+          "unsupported_operation",
+          "判断渠道请通过自动路由或流程中的 Jev 节点调用",
+        );
       const signal = AbortSignal.any([ctx.signal, AbortSignal.timeout(30000)]),
         start = performance.now();
       const headers = new Headers(request.headers);

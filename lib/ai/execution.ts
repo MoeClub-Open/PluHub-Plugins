@@ -1,7 +1,42 @@
-import type { Host, RequestContext } from "@pluhub/sdk";
-import type { AIEvent, AIPlan, AIRequest } from "@pluhub/contracts/ai";
+import { HostError, type Host, type RequestContext } from "@pluhub/sdk";
+import type { AIEvent, AIPlan, AIRequest, Protocol } from "@pluhub/contracts/ai";
 import { generationRejected } from "./rejection.js";
 import { observation, planObservation } from "./telemetry.js";
+import { decodeResult, resultEvents } from "./protocols.js";
+import { upstreamEvents } from "./streams.js";
+import { decodeUsage } from "./usage.js";
+
+/** Convert a metered fallback workflow response back to normalized events. */
+async function* workflowResponseEvents(
+  response: Response,
+  protocol: Protocol,
+  model: string,
+  streaming: boolean,
+  ctx: RequestContext,
+): AsyncGenerator<AIEvent> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => undefined) as any;
+    throw new HostError(body?.error?.code ?? "workflow_child_failed", body?.error?.message ?? "备用流程执行失败", response.status);
+  }
+  if (streaming) {
+    if (!response.body) throw new HostError("upstream_protocol", "备用流程未返回响应流", 502);
+    for await (const event of upstreamEvents(protocol, response.body)) {
+      if (event.type === "upstream-model") continue;
+      if (event.type === "usage") ctx.state.set("workflow.forwardUsage", true);
+      yield event;
+    }
+  } else {
+    const body = await response.json();
+    const usagePresent = !!decodeUsage(protocol, protocol === "gemini" ? (body as any)?.usageMetadata : (body as any)?.usage);
+    for await (const event of resultEvents(decodeResult(protocol, body, model))) {
+      if (event.type === "usage") {
+        if (!usagePresent) continue;
+        ctx.state.set("workflow.forwardUsage", true);
+      }
+      yield event;
+    }
+  }
+}
 
 /** Only a definite refusal before the first normalized event may be replayed. */
 export async function executeRequest(
@@ -115,6 +150,18 @@ export async function executeRequest(
             { context: ctx, retry: true },
             signal,
           );
+        if (plan.workflowDeferred) {
+          if (!host.hasCapability("ai.workflow-execution@1"))
+            throw new HostError("workflow_unavailable", "备用流程执行能力不可用", 503);
+          const protocol = observation(ctx)?.protocol as Protocol | undefined;
+          if (!protocol || !["openai-chat", "openai-responses", "anthropic", "gemini"].includes(protocol))
+            throw new HostError("operation_not_supported", "备用流程仅支持对话请求", 400);
+          ctx.state.set("ai.executionRejected", false);
+          ctx.state.set("workflow.ready", true);
+          const response = await host.call<Response>("ai.workflow-execution@1", undefined, signal);
+          yield* workflowResponseEvents(response, protocol, responseModel ?? request.model, request.stream, ctx);
+          return;
+        }
       }
     }
   }

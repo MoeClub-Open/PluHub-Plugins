@@ -27,6 +27,7 @@ export const flowTypeColor: Record<WorkflowValueType, string> = {
   boolean: "#d17b98",
   "string[]": "#729ed0",
   object: "#a28dc5",
+  json: "#a28dc5",
   secret: "#d1a34a",
 };
 export function flowTypeLabel(type: WorkflowValueType) {
@@ -38,6 +39,7 @@ export function flowTypeLabel(type: WorkflowValueType) {
       boolean: "布尔",
       "string[]": "文本列表",
       object: "对象",
+      json: "JSON",
       secret: "密钥",
     }[type],
   );
@@ -45,9 +47,11 @@ export function flowTypeLabel(type: WorkflowValueType) {
 export function FlowParameter({
   field,
   children,
+  connectOnly = false,
 }: {
   field: string;
   children: React.ReactNode;
+  connectOnly?: boolean;
 }) {
   const nodeId = useNodeId()!;
   const item = useInternalNode(nodeId)?.data.node as WorkflowNode | undefined;
@@ -109,7 +113,7 @@ export function FlowParameter({
       )}
       <span
         className="flow-parameter-type"
-        title={connected ? tr("已连接，断开后可编辑") : label}
+        title={connected ? tr(connectOnly ? "已连接" : "已连接，断开后可编辑") : label}
       >
         {connected ? tr("已连接") + " · " : ""}
         {label}

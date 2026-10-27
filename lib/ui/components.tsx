@@ -283,6 +283,7 @@ export interface Summary {
   inputTokens: number;
   outputTokens: number;
   usageKnownRequests: number;
+  usageTotalRequests: number;
   pricedRequests: number;
   consumption: {
     source: string;

@@ -1,7 +1,10 @@
 import { HostError } from "@pluhub/sdk";
 import { modelPatternMatches } from "./model-pattern.js";
+import { isDecisionProtocol } from "./decision-route-kind.js";
 import { validateInterfaces } from "./upstream-interfaces.js";
 import { resolveWorkflowBindings } from "./workflow-bindings.js";
+import { migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
+import { validateWorkflowDataNode } from "./workflow-node-validation.js";
 export { resolveWorkflowStatic } from "./workflow-bindings.js";
 import type { AIRequest, Protocol } from "@pluhub/contracts/ai";
 import type {
@@ -68,9 +71,11 @@ export function compileWorkflow(
   if (
     !Array.isArray(flow.nodes) ||
     !flow.nodes.length ||
-    flow.nodes.length > 64
+    flow.nodes.length > 128
   )
-    bad("流程需要 1–64 个节点");
+    bad("流程需要 1–128 个节点");
+  flow = migrateWorkflowConditions(flow);
+  if (flow.nodes.length > 128) bad("流程需要 1–128 个节点");
   flow = resolveWorkflowBindings(
     flow,
     { personalInterfaces, personal },
@@ -80,6 +85,9 @@ export function compileWorkflow(
   const nodes = new Map<string, WorkflowNode>();
   for (const raw of flow.nodes) {
     const node = structuredClone(raw);
+    validateWorkflowDataNode(node, new Set((flow.bindings ?? [])
+      .filter((binding) => binding.target === node.id)
+      .map((binding) => binding.input)));
     if (
       node.type === "platform" &&
       (!node.groupId || (node.model !== undefined && !node.model.trim()))
@@ -129,20 +137,20 @@ export function compileWorkflow(
     )
       bad("协议准入需要有效且不重复的入口协议及转换策略", [node.id]);
     if (
-      node.type === "condition" &&
+      (node.type === "condition" || node.type === "predicate") &&
       node.test === "protocol" &&
       !ingressProtocols.includes(node.protocol as Protocol)
     )
       bad("协议分支需要指定有效的入口协议", [node.id]);
     if (
-      node.type === "condition" &&
+      (node.type === "condition" || node.type === "predicate") &&
       !["hasTools", "stream", "textLengthAbove", "protocol", "model"].includes(
         node.test,
       )
     )
       bad("无效的分支条件", [node.id]);
     if (
-      node.type === "condition" &&
+      (node.type === "condition" || node.type === "predicate") &&
       node.value !== undefined &&
       (!Number.isSafeInteger(node.value) ||
         node.value < 0 ||
@@ -150,13 +158,13 @@ export function compileWorkflow(
     )
       bad("字符数阈值无效", [node.id]);
     if (
-      node.type === "condition" &&
+      (node.type === "condition" || node.type === "predicate") &&
       node.modelSource !== undefined &&
       !["requested", "mapped"].includes(node.modelSource)
     )
       bad("无效的模型比较对象", [node.id]);
     if (
-      node.type === "condition" &&
+      (node.type === "condition" || node.type === "predicate") &&
       node.protocol !== undefined &&
       !ingressProtocols.includes(node.protocol)
     )
@@ -184,12 +192,17 @@ export function compileWorkflow(
       bad("无效的输出预算", [node.id]);
     if (
       node.type === "upstream" &&
-      (typeof node.target !== "string" ||
+      (((typeof node.target !== "string" ||
         !node.target.trim() ||
-        node.target.length > 256 ||
+        node.target.length > 256) &&
+        !(flow.bindings ?? []).some((binding) => binding.target === node.id && binding.input === "target")) ||
         !["implicit", "explicit"].includes(node.mode))
     )
       bad("请选择有效的目标模型和重定向方式", [node.id]);
+    if (node.type === "upstream" && node.allowedTargets !== undefined &&
+      (!Array.isArray(node.allowedTargets) || !node.allowedTargets.length ||
+        node.allowedTargets.some((target) => typeof target !== "string" || !target.trim())))
+      bad("允许的目标模型无效", [node.id]);
     if (
       node.type === "routing" &&
       (typeof node.profile !== "string" ||
@@ -219,6 +232,9 @@ export function compileWorkflow(
             "claude-subscription",
             "antigravity",
             "grok",
+            "systemone",
+            "luna",
+            "jev",
           ].includes(upstream.protocol)
         )
           bad("无效的上游协议", [node.id]);
@@ -246,6 +262,8 @@ export function compileWorkflow(
             ))
         )
           bad("无效的订阅账号", [node.id]);
+        if (isDecisionProtocol(upstream.protocol) && upstream.interfaces !== undefined)
+          bad("决策服务不支持接口组合", [node.id]);
         if (upstream.interfaces !== undefined)
           validateInterfaces(upstream.interfaces);
       }
@@ -254,7 +272,7 @@ export function compileWorkflow(
     if (!node.id || nodes.has(node.id))
       bad("节点标识不能为空或重复", [node.id]);
     if (
-      node.type === "condition" &&
+      (node.type === "condition" || node.type === "predicate") &&
       node.test === "model" &&
       (!Array.isArray(node.models) ||
         !node.models.length ||
@@ -265,6 +283,29 @@ export function compileWorkflow(
           !["requested", "mapped"].includes(node.modelSource)))
     )
       bad("模型条件需要填写模型 ID 或匹配规则", [node.id]);
+    if (node.type === "branch") {
+      if (typeof node.condition !== "boolean")
+        bad("分支需要布尔条件", [node.id]);
+      if (!flow.bindings?.some((binding) => binding.target === node.id && binding.input === "condition"))
+        bad("分支需要连接布尔条件", [node.id]);
+    }
+    if (node.type === "compare") {
+      const validType = ["string", "number", "boolean"].includes(node.valueType);
+      const validOperator = node.operator === "eq" || node.operator === "ne" ||
+        (node.valueType === "number" && ["gt", "gte", "lt", "lte"].includes(node.operator)) ||
+        (node.valueType === "string" && node.operator === "matches");
+      const validOperand = (value: unknown) => typeof value === node.valueType &&
+        (node.valueType !== "number" || Number.isFinite(value));
+      const validRight = node.operator === "matches"
+        ? Array.isArray(node.right) && node.right.every((item) => typeof item === "string")
+        : validOperand(node.right);
+      if (!validType || !validOperator || !validOperand(node.left) || !validRight)
+        bad("无效的比较条件", [node.id]);
+    }
+    if (node.type === "logic" &&
+      (!["and", "or", "not"].includes(node.operator) || typeof node.left !== "boolean" ||
+        (node.operator !== "not" && typeof node.right !== "boolean")))
+      bad("无效的逻辑条件", [node.id]);
     nodes.set(node.id, Object.freeze(node));
   }
   if (nodes.get(flow.entry)?.type !== "start")
@@ -277,7 +318,8 @@ export function compileWorkflow(
     if (!id) bad("节点出口尚未连接", source ? [source] : []);
     const node = nodes.get(id);
     if (!node) bad("连线指向不存在的节点", source ? [source] : [id]);
-    if (node!.type === "value") bad("数据节点不能连接到请求路径", [id]);
+    if (["value", "predicate", "compare", "logic", "text", "format", "template", "replace", "llm", "jev"].includes(node!.type))
+      bad("数据节点不能连接到请求路径", [id]);
     visiting.add(id);
     if (node!.type === "provider" && node!.fallback) {
       if (nodes.get(node!.fallback)?.type !== "platform")
@@ -288,9 +330,10 @@ export function compileWorkflow(
       node!.type !== "upstream" &&
       node!.type !== "provider" &&
       node!.type !== "routing" &&
-      node!.type !== "platform"
+      node!.type !== "platform" &&
+      node!.type !== "response"
     ) {
-      if (node!.type === "condition") {
+      if (node!.type === "condition" || node!.type === "branch") {
         visit(node!.yes, id);
         visit(node!.no, id);
       } else if ("next" in node!) visit(node.next, id);
@@ -302,13 +345,13 @@ export function compileWorkflow(
   visit(flow.entry);
   if (
     [...nodes.values()].some(
-      (node) => node.type !== "value" && !done.has(node.id),
+      (node) => !["value", "predicate", "compare", "logic", "text", "format", "template", "replace", "llm", "jev"].includes(node.type) && !done.has(node.id),
     )
   )
     bad(
       "以下节点未接入请求路径，请连接或删除",
       [...nodes.values()]
-        .filter((node) => node.type !== "value" && !done.has(node.id))
+        .filter((node) => !["value", "predicate", "compare", "logic", "text", "format", "template", "replace", "llm", "jev"].includes(node.type) && !done.has(node.id))
         .map((node) => node.id),
     );
   return { entry: flow.entry, nodes };
@@ -326,9 +369,9 @@ export function runWorkflow(
     personal?: boolean;
   } = {},
 ): WorkflowResult {
-  const effective = resolveWorkflowBindings(flow, context, input, bad);
+  flow = migrateWorkflowConditions(flow);
   const graph = compileWorkflow(
-      effective,
+      flow,
       context.personalInterfaces,
       context.personal,
     ),
@@ -339,10 +382,13 @@ export function runWorkflow(
   const outputPolicies: NonNullable<WorkflowResult["outputPolicies"]> = [];
   const requestLimits: NonNullable<WorkflowResult["requestLimits"]> = [];
   let protocolPolicy: WorkflowResult["protocolPolicy"];
-  for (let steps = 0; steps < 64; steps++) {
+  for (let steps = 0; steps < 128; steps++) {
     signal.throwIfAborted();
-    const node = graph.nodes.get(id)!;
-    if (node.type === "value") return bad("数据节点不能连接到请求路径", [id]);
+    const effective = resolveWorkflowBindings(flow, context, request, bad, id);
+    const node = compileWorkflow(effective, context.personalInterfaces, context.personal).nodes.get(id)!;
+    if (node.type === "value" || node.type === "predicate" || node.type === "compare" || node.type === "logic" ||
+        node.type === "text" || node.type === "format" || node.type === "template" || node.type === "replace" || node.type === "llm" || node.type === "jev")
+      return bad("数据节点不能连接到请求路径", [id]);
     trace.nodes.push(id);
     if (
       request.operation &&
@@ -435,6 +481,11 @@ export function runWorkflow(
       id = yes ? node.yes : node.no;
       continue;
     }
+    if (node.type === "branch") {
+      id = node.condition ? node.yes : node.no;
+      continue;
+    }
+    if (node.type === "response") return bad("此响应节点需要异步执行", [id]);
     if (node.type === "protocol") {
       if (!node.allow.includes(requireIngressProtocol(context.ingressProtocol)))
         throw new HostError(

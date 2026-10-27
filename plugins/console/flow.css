@@ -107,9 +107,16 @@
 .flow-node-settings .interface-route-grid {
   grid-template-columns: minmax(0, 1fr);
 }
-.flow-port-label {
-  position: absolute;
-  right: 12px;
+.flow-execution-ports {
+  padding: 4px 0;
+}
+.flow-execution-port {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 12px;
   font-size: 10px;
   color: var(--muted);
 }
@@ -148,10 +155,6 @@
 .flow-node .react-flow__handle-left {
   top: 34px;
 }
-.flow-node:has(.flow-port-label) {
-  min-height: 92px;
-}
-
 .flow-parameter {
   position: relative;
   min-width: 0;

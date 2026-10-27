@@ -1,5 +1,6 @@
 import { resolveGroup, groupPricing } from "./groups.js";
-import type { WorkflowResult } from "@pluhub/contracts/workflow";
+import { withDecisionScope } from "./decision-scope.js";
+import type { ChannelWorkflow, WorkflowResult } from "@pluhub/contracts/workflow";
 import { validateWebSearchTarget } from "../../lib/ai/web-search.js";
 import { HostError, type Host } from "@pluhub/sdk";
 import type {
@@ -16,6 +17,7 @@ import { providerSession } from "../../lib/ai/session.js";
 import { geminiEffort } from "../../lib/ai/reasoning.js";
 import { validateOperations } from "../../lib/ai/media.js";
 import { resolveInterface } from "../../lib/ai/upstream-interfaces.js";
+import { routeKindForProtocol } from "../../lib/ai/decision-route-kind.js";
 import {
   bindPricingContext,
   capturePricingContext,
@@ -24,7 +26,86 @@ import {
   runWorkflow,
   checkProtocolConversion,
 } from "../../lib/ai/channel-graph.js";
-import { resolveWorkflowBindings } from "../../lib/ai/workflow-bindings.js";
+
+/** Only nodes reachable from the request path can require asynchronous work. */
+export function workflowDependencies(flow: ChannelWorkflow) {
+  const nodes = new Map(flow.nodes.map((node) => [node.id, node]));
+  const execution = new Set<string>();
+  const data = new Set<string>();
+  function visit(id: string) {
+    if (!id || execution.has(id)) return;
+    const node = nodes.get(id);
+    if (!node) return;
+    execution.add(id);
+    if (node.type === "condition" || node.type === "branch") {
+      visit(node.yes);
+      visit(node.no);
+    } else if (node.type === "provider") {
+      if (node.fallback) visit(node.fallback);
+    } else if ("next" in node) visit(node.next);
+  }
+  function dependencies(id: string) {
+    for (const binding of flow.bindings ?? []) {
+      if (binding.target !== id || data.has(binding.source)) continue;
+      data.add(binding.source);
+      dependencies(binding.source);
+    }
+  }
+  visit(flow.entry);
+  for (const id of execution) dependencies(id);
+  return { nodes, execution, data };
+}
+
+export function needsDeferredWorkflow(flow: ChannelWorkflow): boolean {
+  const { nodes, execution, data } = workflowDependencies(flow);
+  const dynamic = new Map<string, boolean>();
+  const visiting = new Set<string>();
+  function dynamicSource(id: string): boolean {
+    if (dynamic.has(id)) return dynamic.get(id)!;
+    if (visiting.has(id)) return false;
+    visiting.add(id);
+    const result = ["start", "predicate", "llm", "jev"].includes(nodes.get(id)?.type ?? "") ||
+      (flow.bindings ?? []).some((binding) => binding.target === id && dynamicSource(binding.source));
+    visiting.delete(id);
+    dynamic.set(id, result);
+    return result;
+  }
+  return [...execution].some((id) => nodes.get(id)?.type === "response") ||
+    [...data].some((id) => ["llm", "jev", "text", "template", "replace"].includes(nodes.get(id)?.type ?? "")) ||
+    (flow.bindings ?? []).some((binding) =>
+      execution.has(binding.target) && nodes.get(binding.target)?.type === "upstream" &&
+      binding.input === "target" && dynamicSource(binding.source));
+}
+
+function quoteNeedsRequest(flow: ChannelWorkflow): boolean {
+  const { nodes, execution, data } = workflowDependencies(flow);
+  if ([...execution, ...data].some((id) => {
+    const node = nodes.get(id);
+    return (node?.type === "condition" || node?.type === "predicate") && node.test !== "model";
+  })) return true;
+  const relevant = new Set([...execution, ...data]);
+  return (flow.bindings ?? []).some((binding) =>
+    relevant.has(binding.target) &&
+    ((binding.source === flow.entry &&
+      !["requestedModel", "mappedModel"].includes(binding.output)) ||
+      (binding.input === "test" &&
+        ["condition", "predicate"].includes(nodes.get(binding.target)?.type ?? ""))));
+}
+
+function mergeOutputPolicy(
+  previous: AIPlan["outputPolicy"],
+  rule: NonNullable<AIPlan["outputPolicy"]>,
+): NonNullable<AIPlan["outputPolicy"]> {
+  return {
+    tokenizer: !previous || (rule.tps ?? Infinity) <= (previous.tps ?? Infinity)
+      ? rule.tokenizer : previous.tokenizer,
+    ...(previous?.tps || rule.tps
+      ? { tps: Math.min(previous?.tps ?? Infinity, rule.tps ?? Infinity) } : {}),
+    ...(previous?.aggregateTps || rule.aggregateTps
+      ? { aggregateTps: Math.min(previous?.aggregateTps ?? Infinity, rule.aggregateTps ?? Infinity) } : {}),
+    inheritDefault: previous?.inheritDefault === false || rule.inheritDefault === false ? false : true,
+  };
+}
 
 export async function resolveRoute(
   host: Host,
@@ -36,8 +117,26 @@ export async function resolveRoute(
     allowedChannelIds?: readonly string[];
     consumptionMultiplier?: number;
     protocolPolicy?: WorkflowResult["protocolPolicy"];
+    /** Supplied only by the trusted workflow execution capability after admission. */
+    runWorkflow?: (
+      profile: string,
+      flow: ChannelWorkflow,
+      request: NonNullable<RoutingRequest["request"]>,
+      signal: AbortSignal,
+      context: {
+        requestedModel: string;
+        mappedModel: string;
+        ingressProtocol?: RoutingRequest["ingressProtocol"];
+        personal: boolean;
+        personalInterfaces?: Upstream["interfaces"];
+      },
+    ) => Promise<WorkflowResult & { responseText?: string }>;
   } = {},
 ): Promise<{ plan: AIPlan; route: ModelRoute }> {
+  // Deferred routing re-enters here without re-reading the catalog; apply the
+  // same group/personal-channel boundary as the ordinary selection path.
+  if (input.groupId && input.channelId?.startsWith("personal:"))
+    throw new HostError("channel_forbidden", "分组密钥不能调用个人渠道", 403);
   let config = host.config();
   let credentialId: string | undefined;
   if (input.channelId?.startsWith("personal:")) {
@@ -171,22 +270,10 @@ export async function resolveRoute(
         personal: !!input.channelId?.startsWith("personal:"),
         personalInterfaces: upstream.interfaces,
       };
-      if (
-        input.purpose === "quote" &&
-        !input.request &&
-        (upstream.flow.bindings?.some(
-          (binding) =>
-            binding.source === upstream.flow!.entry &&
-            ["stream", "hasTools", "textLength"].includes(binding.output),
-        ) ||
-          resolveWorkflowBindings(
-            upstream.flow,
-            workflowContext,
-            prepared,
-          ).nodes.some(
-            (node) => node.type === "condition" && node.test !== "model",
-          ))
-      )
+      const deferred = needsDeferredWorkflow(upstream.flow);
+      if (input.purpose === "quote" && deferred)
+        throw new HostError("quote_route_required", "此流程包含内部调用或文本响应，无法提供固定费用试算", 409);
+      if (input.purpose === "quote" && !input.request && quoteNeedsRequest(upstream.flow))
         throw new HostError(
           "quote_request_required",
           "此渠道按请求内容选择计费模型，请提供请求内容后试算",
@@ -197,13 +284,27 @@ export async function resolveRoute(
           "task_required",
           "Channel workflows require a decoded task",
         );
-      const result = runWorkflow(
-        route.upstream,
-        upstream.flow,
-        prepared,
-        signal,
-        workflowContext,
-      );
+      if (deferred && prepared.operation)
+        throw new HostError("operation_not_supported", "异步工作流仅支持对话请求", 400);
+      if (deferred && input.routeKind)
+        throw new HostError("operation_not_supported", "决策服务渠道不能使用异步对话流程", 400);
+      if (deferred && !options.runWorkflow) {
+        if (options.physicalOnly)
+          throw new HostError("workflow_unavailable", "自动路由候选不能预先执行异步流程", 409);
+        return {
+          route,
+          plan: {
+            capability: "",
+            upstream: {},
+            upstreamId: route.upstream,
+            model: requestedModel,
+            workflowDeferred: { input, requestedModel },
+          },
+        };
+      }
+      const result: WorkflowResult & { responseText?: string } = deferred
+        ? await options.runWorkflow!(route.upstream, upstream.flow, prepared, signal, workflowContext)
+        : runWorkflow(route.upstream, upstream.flow, prepared, signal, workflowContext);
       workflows.push(result.trace);
       requestLimits.push(...(result.requestLimits ?? []));
       outputPolicies.push(
@@ -224,6 +325,27 @@ export async function resolveRoute(
             result.outputPolicy.tps ?? Infinity,
           ),
         };
+      if (result.responseText !== undefined) {
+        for (const rule of outputPolicies) {
+          if (rule.model) continue;
+          outputPolicy = mergeOutputPolicy(outputPolicy, rule);
+        }
+        if (outputPolicy && !host.hasCapability("ai.output-pace@2"))
+          throw new HostError("limiter_unavailable", "TPS 插件未安装或已停用", 503);
+        if (requestLimits.length && !host.hasCapability("ai.request-limits@1"))
+          throw new HostError("limiter_unavailable", "请求限流插件未安装或已停用", 503);
+        return {
+          route,
+          plan: {
+            capability: "", upstream: {}, model: requestedModel,
+            upstreamId: route.upstream,
+            workflowResponse: { text: result.responseText },
+            responseModel: explicit ? (models[responsePath.at(-1)!]?.publicModel ?? responsePath.at(-1)!) : requestedModel,
+            preparedRequest: prepared,
+            workflows, outputPolicy, requestLimits,
+          },
+        };
+      }
       if (result.platformGroup || result.fallback) {
         if (!input.channelId?.startsWith("personal:") || !input.principalId)
           throw new HostError(
@@ -236,6 +358,7 @@ export async function resolveRoute(
           resolveGroup(host.config(), target.groupId, input.principalId);
         const delegated: RoutingRequest = {
           purpose: input.purpose,
+          routeKind: input.routeKind,
           operation: input.operation,
           model: target.model ?? route.model,
           groupId: target.groupId,
@@ -248,13 +371,47 @@ export async function resolveRoute(
         };
         if (result.platformGroup) {
           resolved = await host.call<AIPlan>("ai.routing@2", delegated, signal);
+          if (resolved.workflowDeferred) {
+            if (!options.runWorkflow)
+              return {
+                route,
+                plan: {
+                  capability: "", upstream: {}, upstreamId: route.upstream,
+                  model: requestedModel,
+                  workflowDeferred: { input, requestedModel },
+                },
+              };
+            const inner = await resolveRoute(
+              host, resolved.workflowDeferred.input, signal,
+              resolved.workflowDeferred.requestedModel,
+              { runWorkflow: options.runWorkflow },
+            );
+            resolved = inner.plan;
+            finalRoute = inner.route;
+          }
           finalRoute = (host.config().models as Record<string, ModelRoute>)[
             resolved.targetModelId!
-          ];
+          ] ?? finalRoute;
           workflows.push(...(resolved.workflows ?? []));
           requestLimits.push(...(resolved.requestLimits ?? []));
           outputPolicy = resolved.outputPolicy;
           credentialId = undefined;
+          if (resolved.workflowResponse) {
+            for (const rule of outputPolicies)
+              if (!rule.model) outputPolicy = mergeOutputPolicy(outputPolicy, rule);
+            if (outputPolicy && !host.hasCapability("ai.output-pace@2"))
+              throw new HostError("limiter_unavailable", "TPS 插件未安装或已停用", 503);
+            if (requestLimits.length && !host.hasCapability("ai.request-limits@1"))
+              throw new HostError("limiter_unavailable", "请求限流插件未安装或已停用", 503);
+            return {
+              route: finalRoute ?? route,
+              plan: {
+                ...resolved, model: requestedModel,
+                responseModel: explicit ? (models[responsePath.at(-1)!]?.publicModel ?? responsePath.at(-1)!) : requestedModel,
+                workflows, outputPolicy, requestLimits,
+              },
+            };
+          }
           break;
         }
         if (input.purpose === "quote")
@@ -299,6 +456,8 @@ export async function resolveRoute(
         input.ingressProtocol,
         providerModel,
       );
+    if (!profile && routeKindForProtocol(connection.protocol) !== (input.routeKind ?? "chat"))
+      throw new HostError("route_kind_mismatch", "所选渠道不支持此请求类型", 400);
     if (
       ["gemini", "antigravity"].includes(connection.protocol ?? "") &&
       prepared?.reasoning?.effort
@@ -312,6 +471,8 @@ export async function resolveRoute(
       };
     }
     if (profile) {
+      if (input.routeKind)
+        throw new HostError("operation_not_supported", "自动对话路由不支持决策请求", 400);
       if (options.physicalOnly)
         throw new HostError(
           "routing_cycle",
@@ -329,11 +490,21 @@ export async function resolveRoute(
           "task_required",
           "Automatic routing requires a decoded task",
         );
-      const selected = await host.call<AIPlan>(
+      const selected = await withDecisionScope(host, {
+        profile,
+        request: prepared,
+        entryModel: requestedModel,
+        principalId: input.principalId,
+        groupId: group?.id,
+        channelId: route.upstream,
+        allowedChannelIds: group?.channelIds,
+        requestLimits,
+      }, (decisionToken) => host.call<AIPlan>(
         "ai.auto-routing@1",
         {
           profile,
           request: prepared,
+          decisionToken,
           principalId: input.principalId,
           groupId: group?.id,
           allowedChannelIds: group?.channelIds,
@@ -343,7 +514,7 @@ export async function resolveRoute(
           pricingContext: input.pricingContext,
         },
         signal,
-      );
+      ));
       logicalUpstreamId = route.upstream;
       decision = selected.decision;
       if (!selected.targetModelId)

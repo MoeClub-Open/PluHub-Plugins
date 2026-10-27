@@ -53,6 +53,7 @@ const billingStatus = (status: string) =>
         unavailable: "计费记录不可用",
         unknown: "无结算记录",
         not_started: "未进入计费",
+        workflow: "由流程内部调用计费",
       } as Record<string, string>
     )[status] ?? "无结算记录",
   );
@@ -85,6 +86,80 @@ function estimateReceipt(row: any) {
   } catch {
     return null;
   }
+}
+function WorkflowCalls({ host, parentId }: { host: UIHost; parentId: string }) {
+  const calls = useLoad<{ data: any[] }>(
+    () =>
+      host.request(
+        "/api/plugins/official.observability/requests/children?parentId=" +
+          encodeURIComponent(parentId),
+      ),
+    [parentId],
+  );
+  if (calls.error) return <Notice message={calls.error} />;
+  if (!calls.data) return <p className="field-note">{tr("正在加载流程内部调用…")}</p>;
+  if (!calls.data.data.length) return null;
+  return (
+    <section>
+      <h3>{tr("流程内部调用")}</h3>
+      {calls.data.data.map((row) => (
+        <WorkflowCall key={row.id} host={host} row={row} />
+      ))}
+    </section>
+  );
+}
+function WorkflowCall({ host, row }: { host: UIHost; row: any }) {
+  const [expanded, setExpanded] = React.useState(false);
+  return (
+    <details onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary>
+        {row.workflow_node_id || "—"} · {row.model || "—"} · {names[row.status] ?? row.status}
+      </summary>
+      {expanded && (
+        <>
+          <dl className="detail-grid">
+            {Object.entries({
+              "请求 ID": row.id,
+              状态: names[row.status] ?? row.status,
+              错误代码: row.error_code || "—",
+              消耗来源: consumptionLabel(row.consumption_source),
+              服务端完成耗时: latency(row.latency_ms),
+              "输入 Token": number(row.input_tokens),
+              "输出 Token": number(row.output_tokens),
+              "估算消耗 (USD)": money(
+                row.cost_micro_usd == null ? null : row.cost_micro_usd / 1000000,
+              ),
+              "实际扣费 (USD)": money(
+                row.charged_micro_usd == null ? null : row.charged_micro_usd / 1000000,
+              ),
+              "预留金额 (USD)": money(
+                row.held_micro_usd == null ? null : row.held_micro_usd / 1000000,
+              ),
+              计费状态: billingStatus(row.billing_status),
+              ...(row.billing_note ? { 计费说明: billingNote(row.billing_note) } : {}),
+            }).map(([label, value]) => (
+              <div key={label}>
+                <dt>{tr(label)}</dt>
+                <dd>{value as React.ReactNode}</dd>
+              </div>
+            ))}
+          </dl>
+          {row.billing_receipt && (
+            <PriceReceiptView value={row.billing_receipt} title={tr("实际扣费明细")} />
+          )}
+          <PriceReceiptView
+            value={estimateReceipt(row)}
+            title={tr("费用估算明细")}
+            showMultiplier={!["byoapi", "byosub", "personal"].includes(row.consumption_source)}
+          />
+          {(row.routing || row.upstream_response_model) && (
+            <RoutingDetails value={row.routing} requestedModel={row.model} responseModel={row.upstream_response_model} />
+          )}
+          <WorkflowCalls host={host} parentId={row.id} />
+        </>
+      )}
+    </details>
+  );
 }
 function Page({ host }: { host: UIHost }) {
   const [initial] = React.useState(
@@ -156,6 +231,9 @@ function Page({ host }: { host: UIHost }) {
     ...(queryModel ? { model: queryModel } : {}),
     ...(queryRequestId ? { requestId: queryRequestId } : {}),
   });
+  const matchingCalls =
+    !queryRequestId &&
+    !!(queryModel || status || filters.protocol || filters.source || filters.upstream || filters.errorCode);
   React.useEffect(() => {
     const next = new URL(location.href);
     next.hash = "/activity?" + query.toString();
@@ -260,7 +338,13 @@ function Page({ host }: { host: UIHost }) {
         <Stat
           title={tr("请求数")}
           value={number(stats.data?.requests)}
-          note={tr("当前筛选范围")}
+          note={tr(
+            queryRequestId
+              ? "所选请求；用量和扣费包含其内部调用"
+              : matchingCalls
+                ? "按匹配调用统计，包含流程内部调用"
+                : "外部请求及父记录缺失的内部调用",
+          )}
           icon="activity"
         />
         <Stat
@@ -279,6 +363,7 @@ function Page({ host }: { host: UIHost }) {
         <TokenStat
           input={stats.data?.inputTokens}
           output={stats.data?.outputTokens}
+          note={tr("含流程内部调用")}
         />
         <Stat
           title={tr("余额扣费")}
@@ -288,6 +373,9 @@ function Page({ host }: { host: UIHost }) {
         />
       </div>
       <ConsumptionBreakdown value={stats.data?.consumption} />
+      {stats.data?.consumption && (
+        <p className="field-note">{tr("消耗分类按实际调用统计，包含流程内部调用。")}</p>
+      )}
       <form
         className="list-toolbar runtime-log-filters"
         onSubmit={(e) => {
@@ -635,6 +723,13 @@ function Page({ host }: { host: UIHost }) {
           <dl className="detail-grid">
             {Object.entries({
               "请求 ID": selected.id,
+              ...(selected.parent_request_id
+                ? {
+                    调用类型: tr("流程内部调用"),
+                    "父请求 ID": selected.parent_request_id,
+                    流程节点: selected.workflow_node_id || "—",
+                  }
+                : {}),
               用户: selected.user_name || displayUser(selected.user_id),
               "API Key": displayKey(selected),
               "密钥 ID": selected.key_id || "—",
@@ -703,6 +798,7 @@ function Page({ host }: { host: UIHost }) {
               responseModel={selected.upstream_response_model}
             />
           )}
+          <WorkflowCalls key={selected.id} host={host} parentId={selected.id} />
           {scope.data?.scope === "all" && (
             <a
               className="button secondary"

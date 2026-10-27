@@ -1,6 +1,7 @@
 import type { AIPlan, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { HostError } from "@pluhub/sdk";
 import { fixedPricing } from "../commerce/expression.js";
+import { isDecisionProtocol } from "./decision-route-kind.js";
 
 export type OutputBudgetMode = "automatic" | "bounded" | "estimate";
 export interface OutputBudget {
@@ -13,9 +14,10 @@ export interface OutputBudget {
 const maxOutputTokens = 1_000_000;
 export const supportsOutputLimit = (upstream: Upstream) =>
   !(
-    upstream.protocol === "codex" &&
-    (upstream.authMode === "cli" ||
-      (!upstream.authMode && !!upstream.subscriptionAccountIds))
+    isDecisionProtocol(upstream.protocol) ||
+    (upstream.protocol === "codex" &&
+      (upstream.authMode === "cli" ||
+        (!upstream.authMode && !!upstream.subscriptionAccountIds)))
   );
 export function normalizeOutputOptions(
   request: AIRequest,

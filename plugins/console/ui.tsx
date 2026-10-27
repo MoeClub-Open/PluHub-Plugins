@@ -220,6 +220,8 @@ function App() {
   const [pluginCategoryFilter, setPluginCategoryFilter] = React.useState("");
   const [pluginStateFilter, setPluginStateFilter] = React.useState("");
   const [updatePlugin, setUpdatePlugin] = React.useState<any>();
+  const [availableUpdates, setAvailableUpdates] = React.useState<Record<string, string>>({});
+  const [updateCheck, setUpdateCheck] = React.useState("");
   const theme = useTheme();
   const { dark } = theme;
   const page = React.useRef<HTMLDivElement>(null);
@@ -414,6 +416,42 @@ function App() {
         .request<any[]>("/api/host/plugins")
         .then(setPlugins)
         .catch((e) => setMessage(e.message));
+  }, [admin, path, version, client]);
+  React.useEffect(() => {
+    if (!admin || path !== "/plugins") return;
+    let active = true;
+    setAvailableUpdates({});
+    setUpdateCheck(tr("正在检查插件更新…"));
+    void Promise.all([
+      client.request<any>("/api/host/registry/catalog"),
+      client.request<any[]>("/api/host/registry/sources"),
+    ]).then(([catalog, sources]) => {
+      if (!active) return;
+      const updates: Record<string, string> = {};
+      for (const item of catalog.plugins ?? [])
+        if (item.compatible && item.updateAvailable && !updates[item.manifest.id])
+          updates[item.manifest.id] = item.manifest.version;
+      setAvailableUpdates(updates);
+      const errors = (catalog.errors ?? []).map((item: any) => item.registryId).join(", ");
+      setUpdateCheck(errors
+        ? tr("部分注册源检查失败：{0}", { "0": errors })
+        : !sources.some((source) => {
+            if (source.enabled === false || source.builtin) return false;
+            try {
+              const url = new URL(source.url, window.location.href);
+              return url.origin !== window.location.origin || url.pathname !== "/registry/v1/index.json";
+            } catch {
+              return false;
+            }
+          })
+          ? tr("当前仅有内置插件目录，配置在线注册源后可检查新版本。")
+          : Object.keys(updates).length
+            ? tr("{0} 个插件有可用更新", { "0": String(Object.keys(updates).length) })
+            : tr("已检查插件更新"));
+    }, (error) => {
+      if (active) setUpdateCheck(tr("插件更新检查失败：{0}", { "0": (error as Error).message }));
+    });
+    return () => { active = false; };
   }, [admin, path, version, client]);
   usePageTransition(
     path + ":" + (new URLSearchParams(hash.split("?")[1]).get("tab") ?? ""),
@@ -804,9 +842,10 @@ function App() {
                   onClick={() => setVersion((v) => v + 1)}
                 >
                   <Icon name="refresh" size={16} />
-                  {tr("刷新")}
+                  {tr("检查更新")}
                 </button>
               </PageHeading>
+              {updateCheck && <p className="muted" role="status">{updateCheck}</p>}
               <div className="list-toolbar plugin-filters">
                 <input
                   type="search"
@@ -905,6 +944,7 @@ function App() {
                         </td>
                         <td>
                           <code>{p.version}</code>
+                          {availableUpdates[p.id] && <small>{tr("可更新至 {0}", { "0": availableUpdates[p.id] })}</small>}
                         </td>
                         <td>
                           <span
@@ -934,7 +974,7 @@ function App() {
                           </span>
                         </td>
                         <td>
-                          {
+                          {availableUpdates[p.id] &&
                             <button
                               className="ghost"
                               onClick={() => setUpdatePlugin(p)}

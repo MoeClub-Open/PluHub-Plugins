@@ -1,4 +1,3 @@
-import { SecretInput } from "../../lib/ui/secret-input.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
@@ -52,6 +51,28 @@ function Page({ host }: { host: UIHost }) {
   const profiles = config.data
     ? (find(config.data, "auto-router")?.config.profiles ?? {})
     : {};
+  const router = config.data ? find(config.data, "ai-router")?.config : undefined;
+  const decisionTargetRows = Object.entries(router?.models ?? {}).flatMap(([id, value]) => {
+    const model = value as any;
+    const channel = router?.upstreams?.[model.upstream];
+    if (!channel || model.enabled === false || channel.enabled === false) return [];
+    const protocols = [channel.protocol, ...(channel.flow?.nodes ?? [])
+      .filter((node: any) => node.type === "provider")
+      .map((node: any) => node.upstream?.protocol ?? channel.protocol)];
+    if (!protocols.includes(draft.decision.kind)) return [];
+    const priced = ["request", "expression"].includes(model.pricing?.mode) ||
+      (typeof model.inputPrice === "number" && typeof model.outputPrice === "number");
+    return [{ id, model: model.publicModel ?? id, name: model.name ?? id,
+      channelId: model.upstream, channelName: channel.name ?? model.upstream, priced }];
+  });
+  const uniqueTargets = new Map<string, (typeof decisionTargetRows)[number]>();
+  for (const target of decisionTargetRows) {
+    const key = JSON.stringify([target.model, target.channelId]);
+    const previous = uniqueTargets.get(key);
+    uniqueTargets.set(key, previous ? { ...previous, priced: previous.priced && target.priced } : target);
+  }
+  const decisionTargets = [...uniqueTargets.values()];
+  const legacyDecision = !!draft.decision.baseUrl || !!draft.decision.keyRef;
   React.useEffect(() => {
     if (config.data) {
       const p = find(config.data, "auto-router")?.config.profiles ?? {};
@@ -94,6 +115,16 @@ function Page({ host }: { host: UIHost }) {
       if (!plugin) throw new Error(tr("自动路由插件尚未安装"));
       const saved = structuredClone(draft);
       if (!saved.name?.trim()) delete saved.name;
+      if (saved.mode !== "manual" && saved.decision.kind !== "rules" &&
+        (!saved.decision.model || saved.decision.baseUrl || saved.decision.keyRef))
+        throw new Error(tr("请选择已配置价格的决策模型"));
+      if (saved.mode !== "manual" && saved.decision.kind !== "rules") {
+        const matched = decisionTargets.filter((item) =>
+          item.model === saved.decision.model &&
+          (!saved.decision.channelId || item.channelId === saved.decision.channelId));
+        if (!matched.length || matched.some((item) => !item.priced))
+          throw new Error(tr("请选择已配置价格的决策模型"));
+      }
       plugin.config = {
         ...plugin.config,
         profiles: { ...plugin.config.profiles, [selected]: saved },
@@ -264,14 +295,6 @@ function Page({ host }: { host: UIHost }) {
                     update({
                       decision: {
                         kind,
-                        ...(kind === "luna"
-                          ? {
-                              baseUrl: "https://api.openai.com/v1",
-                              model: "gpt-6-luna",
-                            }
-                          : kind === "systemone"
-                            ? { model: "Cloudflare/clef" }
-                            : {}),
                       },
                     });
                   }}
@@ -283,52 +306,26 @@ function Page({ host }: { host: UIHost }) {
                 </Select>
               </label>
               {draft.decision.kind !== "rules" && (
-                <>
-                  <label>
-                    {tr("决策服务地址")}
-                    <input
-                      type="url"
-                      value={draft.decision.baseUrl ?? ""}
-                      onChange={(e) =>
-                        update({
-                          decision: {
-                            ...draft.decision,
-                            baseUrl: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="http://127.0.0.1:30000"
-                    />
-                  </label>
-                  <label>
-                    {tr("决策模型 ID")}
-                    <input
-                      value={draft.decision.model ?? ""}
-                      onChange={(e) =>
-                        update({
-                          decision: {
-                            ...draft.decision,
-                            model: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="Cloudflare/clef"
-                    />
-                  </label>
-                  <label>
-                    {tr("API Key（可选）")}
-                    <SecretInput
-                      key={selected}
-                      value={draft.decision.keyRef}
-                      onChange={(value) => {
-                        const next = { ...draft.decision };
-                        if (value) next.keyRef = String(value);
-                        else delete next.keyRef;
-                        update({ decision: next });
-                      }}
-                    />
-                  </label>
-                </>
+                <label>
+                  {tr("决策模型")}
+                  <Select
+                    value={legacyDecision || !draft.decision.model ? "" : JSON.stringify([draft.decision.model, draft.decision.channelId ?? ""])}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      const [model, channelId] = JSON.parse(e.target.value) as [string, string];
+                      const { baseUrl: _baseUrl, keyRef: _keyRef, ...decision } = draft.decision;
+                      update({ decision: { ...decision, model, channelId } });
+                    }}
+                  >
+                    <option value="">{tr("请选择已配置价格的决策模型")}</option>
+                    {decisionTargets.map((target) => (
+                      <option key={target.id} value={JSON.stringify([target.model, target.channelId])} disabled={!target.priced}>
+                        {target.name} · {target.channelName} / {target.model}{target.priced ? "" : ` · ${tr("未配置价格")}`}
+                      </option>
+                    ))}
+                  </Select>
+                  {legacyDecision && <small>{tr("旧决策服务需要迁移到渠道并配置价格")}</small>}
+                </label>
               )}
               <label>
                 {tr("失败或低置信度")}
@@ -666,12 +663,14 @@ function Page({ host }: { host: UIHost }) {
             </label>
             <button
               className="secondary"
-              disabled={busy || !task.trim() || !profiles[selected]}
-              title={tr("仅测试决策；远程决策器可能计费")}
+              disabled={busy || !task.trim() || !profiles[selected] || (profiles[selected]?.decision?.kind !== "rules" && profiles[selected]?.mode !== "manual")}
               onClick={() => void preview()}
             >
               {tr("测试已保存策略")}
             </button>
+            {profiles[selected]?.decision?.kind !== "rules" && profiles[selected]?.mode !== "manual" && (
+              <small>{tr("远程决策请通过渠道测试请求")}</small>
+            )}
 
             {result && (
               <>

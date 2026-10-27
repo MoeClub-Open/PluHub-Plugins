@@ -12,7 +12,7 @@ it("scopes public metrics to exact platform pairs and computes weighted streamin
   try {
     db.exec(`CREATE TABLE requests(model TEXT,upstream TEXT,created_at INTEGER,status TEXT,
       latency_ms INTEGER,first_token_ms INTEGER,stream INTEGER,generation_ms INTEGER,
-      output_tokens INTEGER,usage_json TEXT)`);
+      output_tokens INTEGER,usage_json TEXT,parent_request_id TEXT)`);
     const now = 100000000;
     const add = (
       channel: string,
@@ -22,9 +22,10 @@ it("scopes public metrics to exact platform pairs and computes weighted streamin
       ms: number | null,
       out: number,
       usage: any,
+      parent: string | null = null,
     ) =>
       db
-        .prepare("INSERT INTO requests VALUES(?,?,?,?,?,?,?,?,?,?)")
+        .prepare("INSERT INTO requests VALUES(?,?,?,?,?,?,?,?,?,?,?)")
         .run(
           "model",
           channel,
@@ -36,6 +37,7 @@ it("scopes public metrics to exact platform pairs and computes weighted streamin
           ms,
           out,
           JSON.stringify(usage),
+          parent,
         );
     add("2", now, "success", 1, 1000, 100, { cacheRead: 20, reasoning: 40 });
     add("2", now, "success", 1, 3000, 200, { cacheRead: 0 });
@@ -45,6 +47,7 @@ it("scopes public metrics to exact platform pairs and computes weighted streamin
     add("3", now, "success", 1, 1, 999999, {});
     add("2", now - 86400001, "success", 1, 1, 999999, {});
     add("2", now + 1, "success", 1, 1, 999999, {});
+    add("2", now, "success", 1, 1, 999999, { cacheRead: 999 }, "parent");
     const result = readModelMetrics(
       db,
       {
@@ -85,8 +88,8 @@ it("keeps missing cache accounting unknown", () => {
   try {
     db.exec(`CREATE TABLE requests(model TEXT,upstream TEXT,created_at INTEGER,status TEXT,
       latency_ms INTEGER,first_token_ms INTEGER,stream INTEGER,generation_ms INTEGER,
-      output_tokens INTEGER,usage_json TEXT);
-      INSERT INTO requests VALUES('m','2',100000000,'success',2000,2000,0,NULL,10,'{"input":100,"output":10}');`);
+      output_tokens INTEGER,usage_json TEXT,parent_request_id TEXT);
+      INSERT INTO requests VALUES('m','2',100000000,'success',2000,2000,0,NULL,10,'{"input":100,"output":10}',NULL);`);
     const result = readModelMetrics(
       db,
       { models: [{ id: "m", channelId: "2" }] },

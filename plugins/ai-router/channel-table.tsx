@@ -5,7 +5,28 @@ import React from "react";
 import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
 import { Empty, Icon, Dialog } from "../../lib/ui/components.js";
 import { channelConnections } from "../../lib/ai/channel-config.js";
+import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 import { filterChannels } from "../../lib/ai/channel-list.js";
+
+function decisionOnly(channel: Upstream) {
+  const flow = channel.flow;
+  if (!flow) return isDecisionProtocol(channel.protocol);
+  const ends = flow.nodes.filter((node) =>
+    ["provider", "platform", "routing", "upstream", "response"].includes(node.type),
+  );
+  return (
+    ends.length > 0 &&
+    ends.every(
+      (node) =>
+        node.type === "provider" &&
+        isDecisionProtocol(node.upstream?.protocol ?? channel.protocol) &&
+        !node.fallback &&
+        !flow.bindings?.some(
+          (binding) => binding.target === node.id && binding.input === "upstream.protocol",
+        ),
+    )
+  );
+}
 
 export function ChannelTable({
   upstreams,
@@ -305,14 +326,16 @@ export function ChannelTable({
                       >
                         {channel.enabled === false ? tr("启用") : tr("停用")}
                       </button>
-                      <button
-                        className="ghost"
-                        disabled={busy || !!testing}
-                        title={tr("真实调用，最多 256 Token，按上游计费")}
-                        onClick={() => test(id)}
-                      >
-                        {testing === id ? tr("测试中…") : tr("发送测试请求")}
-                      </button>
+                      {!decisionOnly(channel) && (
+                        <button
+                          className="ghost"
+                          disabled={busy || !!testing}
+                          title={tr("真实调用，最多 256 Token，按上游计费")}
+                          onClick={() => test(id)}
+                        >
+                          {testing === id ? tr("测试中…") : tr("发送测试请求")}
+                        </button>
+                      )}
                       <button
                         className="ghost danger"
                         disabled={

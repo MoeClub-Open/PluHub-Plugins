@@ -101,6 +101,7 @@ export async function* observeEvents(
       }
       if (
         event.type === "usage" &&
+        !ctx.state.get("workflow.forwardUsage") &&
         [event.usage.input, event.usage.output].every(
           (n) => Number.isSafeInteger(n) && n >= 0,
         )

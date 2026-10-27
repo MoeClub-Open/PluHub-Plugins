@@ -5,15 +5,16 @@
   "name": "智能路由",
   "description": "根据任务选择模型和思考强度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.24",
+  "version": "0.1.0-alpha.25",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
-  "provides": ["ai.auto-routing@1"],
+  "provides": ["ai.auto-routing@1", "ai.decision-profile@1"],
   "requires": ["ai.targets@1", "http.transport@1"],
   "optionalRequires": [
+    "ai.workflow-decision@1",
     "ai.upstream.openai-chat@1",
     "ai.upstream.openai-responses@1",
     "ai.upstream.anthropic@1",
@@ -135,6 +136,11 @@
                 "baseUrl": {
                   "type": "string",
                   "maxLength": 2048
+                },
+                "channelId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
                 },
                 "keyRef": {
                   "type": "string",

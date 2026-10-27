@@ -28,6 +28,11 @@ export default definePlugin({
   setup(host) {
     const profiles = () =>
       (host.config().profiles ?? {}) as Record<string, RoutingProfile>;
+    host.provide("ai.decision-profile@1", ({ profile }: { profile: string }) => {
+      const decision = profiles()[requiredString(profile, "profile")]?.decision;
+      if (!decision) throw new HostError("profile_not_found", "Router profile not found", 404);
+      return structuredClone(decision);
+    });
     let active = 0;
     const windows = new Map<string, { minute: number; count: number }>();
     const sweep = setInterval(() => {
@@ -89,7 +94,7 @@ export default definePlugin({
             "invalid_config",
             "Effort-only mode cannot switch models on failure",
           );
-        if (p.decision.kind !== "rules") {
+        if (p.decision.kind !== "rules" && p.decision.baseUrl) {
           if (
             !p.decision.baseUrl ||
             (!p.decision.model && p.decision.kind !== "jev")
@@ -136,6 +141,9 @@ export default definePlugin({
           "Router profile not found",
           404,
         );
+      if (p.mode !== "manual" && p.decision.kind !== "rules" &&
+          (p.decision.baseUrl || p.decision.keyRef || !p.decision.model))
+        throw new HostError("decision_migration_required", "请先将决策服务配置为有价格的渠道模型", 409);
       if (
         !input.request ||
         !Array.isArray(input.request.messages) ||
@@ -193,6 +201,7 @@ export default definePlugin({
               "web_search_unsupported",
               "interface_not_supported",
               "operation_not_supported",
+              "route_kind_mismatch",
               "search_usage_unavailable",
             ].includes((e as HostError).code)
           )
@@ -207,6 +216,8 @@ export default definePlugin({
         const declared =
           candidate.reasoningEfforts ?? target.route.reasoningEfforts ?? [];
         const protocol = target.plan.upstream.protocol;
+        // Decision backends do not produce conversational responses.
+        if (protocol === "systemone" || protocol === "luna" || protocol === "jev") continue;
         const wireProtocol =
           protocol === "codex" || protocol === "grok"
             ? "openai-responses"
@@ -294,7 +305,8 @@ export default definePlugin({
           }
           active++;
           try {
-            result = await decide(host, p.decision, input.request, signal);
+            result = await decide(host, p.decision, input.request, signal,
+              { profile: input.profile, token: input.decisionToken });
           } finally {
             active--;
           }
@@ -312,6 +324,7 @@ export default definePlugin({
           signal.throwIfAborted();
           if (
             p.onFailure === "reject" ||
+            ["decision_migration_required", "decision_price_required", "insufficient_balance", "model_forbidden", "channel_forbidden", "group_forbidden", "model_not_found", "decision_preview_unsupported", "forbidden"].includes((e as HostError).code) ||
             (e as HostError).code === "decision_rate_limited"
           )
             throw new HostError(
@@ -461,9 +474,13 @@ export default definePlugin({
       handle: async (r, ctx) => {
         const b = await readObject(r, 65536);
         const text = requiredString(b.text, "text", 32000);
+        const profile = requiredString(b.profile, "profile");
+        const selected = profiles()[profile];
+        if (selected && selected.mode !== "manual" && selected.decision.kind !== "rules")
+          throw new HostError("decision_preview_unsupported", "远程决策请通过渠道测试请求验证", 400);
         const plan = await resolve(
           {
-            profile: requiredString(b.profile, "profile"),
+            profile,
             principalId: ctx.principal!.id,
             request: {
               model: "preview",

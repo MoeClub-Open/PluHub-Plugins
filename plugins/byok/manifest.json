@@ -5,7 +5,7 @@
   "name": "个人渠道",
   "description": "管理用户自带密钥、订阅与个人渠道。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.44",
+  "version": "0.1.0-alpha.45",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -24,6 +24,9 @@
     "ai.upstream.openai-responses@1",
     "ai.upstream.anthropic@1",
     "ai.upstream.gemini@1",
+    "ai.upstream.systemone@1",
+    "ai.upstream.luna@1",
+    "ai.upstream.jev@1",
     "ai.upstream.codex@1",
     "ai.upstream.claude-subscription@1",
     "ai.upstream.antigravity@1",

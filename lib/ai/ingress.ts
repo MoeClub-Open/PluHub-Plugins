@@ -1,16 +1,14 @@
-import { definePlugin, readObject, json, HostError } from "@pluhub/sdk";
+import { definePlugin, readObject, HostError } from "@pluhub/sdk";
 import type { Protocol, AIRequest, AIPlan } from "@pluhub/contracts/ai";
-import { decode, collect, encodeResult, protocolError } from "./protocols.js";
-import { encodeStream } from "./streams.js";
+import { decode, protocolError } from "./protocols.js";
 import { clientSession } from "./session.js";
 import { channelScope } from "./channel-scope.js";
 import { capturePricingContext } from "../commerce/expression.js";
-import { executeRequest } from "./execution.js";
+import { executeIngress } from "./ingress-response.js";
 import {
   beginObservation,
   planObservation,
   observation,
-  observeEvents,
 } from "./telemetry.js";
 export function createIngress(protocol: Protocol) {
   return definePlugin({
@@ -58,7 +56,8 @@ export function createIngress(protocol: Protocol) {
           );
           const allowed = ctx.principal?.attributes?.models as
             string[] | undefined;
-          if (allowed?.length && !allowed.includes(decoded.model))
+          const delegated = !!ctx.parent && ctx.state.get("internal.delegatedModel") === decoded.model;
+          if (!delegated && allowed?.length && !allowed.includes(decoded.model))
             throw new HostError(
               "model_forbidden",
               "API key cannot access this model",
@@ -74,7 +73,7 @@ export function createIngress(protocol: Protocol) {
             channelHeader,
             request.headers.get("x-pluhub-group") ?? undefined,
           );
-          if (host.hasCapability("auth.admit@1")) {
+          if (!delegated && host.hasCapability("auth.admit@1")) {
             await host.call(
               "auth.admit@1",
               { model: decoded.model, principal: ctx.principal },
@@ -82,11 +81,12 @@ export function createIngress(protocol: Protocol) {
             );
             ctx.state.set("auth.preflight", decoded.model);
           }
+          if (delegated) ctx.state.set("auth.preflight", decoded.model);
           observation(ctx)!.model = decoded.model;
           observation(ctx)!.stream = decoded.stream;
           await host.call(
             "ai.request-limits@1",
-            { action: "preflight", principal: ctx.principal },
+            { action: "preflight", principal: ctx.principal, context: ctx },
             ctx.signal,
           );
           ctx.state.set(
@@ -127,62 +127,17 @@ export function createIngress(protocol: Protocol) {
         handle: async (_request, ctx) => {
           const decoded = ctx.state.get("ai.request") as AIRequest;
           const plan = ctx.state.get("ai.plan") as AIPlan;
-          const responseModel = plan.responseModel ?? decoded.model;
-          ctx.state.set("ai.executionStarted", true);
-          const execution = new AbortController();
-          const executionSignal = AbortSignal.any([
-            ctx.signal,
-            execution.signal,
-          ]);
-          const events = await executeRequest(
-            host,
-            ctx,
-            decoded,
-            plan,
-            executionSignal,
-          );
-          if (!decoded.stream) {
-            const collected = await collect(
-              observeEvents(events, ctx),
-              responseModel,
+          if (plan.workflowDeferred) {
+            if (!host.hasCapability("ai.workflow-execution@1"))
+              throw new HostError("workflow_unavailable", "流程执行能力不可用", 503);
+            ctx.state.set("workflow.ready", true);
+            return host.call<Response>(
+              "ai.workflow-execution@1",
+              undefined,
+              ctx.signal,
             );
-            const result = encodeResult(protocol, collected);
-            if (!observation(ctx)?.usage) {
-              delete result.usage;
-              delete result.usageMetadata;
-            }
-            const response = json(result);
-            if (plan.redirection?.mode === "explicit")
-              response.headers.set("x-pluhub-model", responseModel);
-            return response;
           }
-          const observed = observeEvents(events, ctx);
-          const streamOptions = {
-            onError: (error: unknown) => {
-              observation(ctx)!.errorCode =
-                typeof (error as any)?.code === "string"
-                  ? (error as any).code
-                  : "stream_error";
-            },
-            onCancel: (reason: unknown) => execution.abort(reason),
-          };
-          const body = encodeStream(
-            protocol,
-            observed,
-            responseModel,
-            ctx.signal,
-            streamOptions,
-          );
-          return new Response(body, {
-            headers: {
-              "content-type": "text/event-stream; charset=utf-8",
-              "cache-control": "no-cache",
-              "x-accel-buffering": "no",
-              ...(plan.redirection?.mode === "explicit"
-                ? { "x-pluhub-model": responseModel }
-                : {}),
-            },
-          });
+          return executeIngress(host, ctx, decoded, plan, protocol);
         },
       });
     },

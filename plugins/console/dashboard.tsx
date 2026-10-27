@@ -137,7 +137,7 @@ export function Dashboard({
                   "0": textValue(d.successes),
                   "1": textValue(d.errors),
                   "2": textValue(d.cancelled),
-                })
+                }) + " · " + tr("外部请求及父记录缺失的内部调用")
               : tr("等待调用数据")
           }
           icon="activity"
@@ -147,10 +147,10 @@ export function Dashboard({
           output={d?.outputTokens}
           note={
             d
-              ? tr("{0}/{1} 次请求返回用量", {
+              ? tr("{0}/{1} 次模型调用返回用量", {
                   "0": textValue(d.usageKnownRequests),
-                  "1": textValue(d.requests),
-                })
+                  "1": textValue(d.usageTotalRequests),
+                }) + " · " + tr("含流程内部调用")
               : ""
           }
         />
@@ -174,6 +174,9 @@ export function Dashboard({
         />
       </div>
       <ConsumptionBreakdown value={d?.consumption} />
+      {d?.consumption && (
+        <p className="field-note">{tr("消耗分类按实际调用统计，包含流程内部调用。")}</p>
+      )}
       <div className="dashboard-grid">
         <section className="panel chart-panel">
           <div className="panel-heading">

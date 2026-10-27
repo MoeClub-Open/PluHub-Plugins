@@ -5,6 +5,7 @@ import { t as tr } from "./i18n.js";
 import { ProviderNodeSettings } from "./channel-provider-settings.js";
 import { FlowParameter } from "./flow-parameter-port.js";
 import { SecretInput } from "./secret-input.js";
+import { LinesField, WorkflowDataNodeSettings } from "./workflow-data-node-settings.js";
 import type { WorkflowNode } from "@pluhub/contracts/workflow";
 import type { UpstreamInterface, Protocol } from "@pluhub/contracts/ai";
 import type { ChannelPanel } from "./channel-location.js";
@@ -31,7 +32,8 @@ export interface ChannelNodeContext {
   hasInterfaceBindings: boolean;
   sourceHasBindings: boolean;
   subscriptionAccounts: { data?: any[]; error?: string };
-  targets: string[];
+  modelTargets: string[];
+  personalChannels?: { id: string; name?: string }[];
   onPanel: (panel: ChannelPanel) => void;
 }
 export function ChannelNodeSettings({
@@ -43,9 +45,10 @@ export function ChannelNodeSettings({
   change: (patch: any, interfaceRemap?: readonly number[]) => void;
   context: ChannelNodeContext;
 }) {
-  const { personal, references, targets, onPanel } = context;
+  const { personal, references, onPanel } = context;
   return (
     <>
+      <WorkflowDataNodeSettings node={node} change={change} context={context} />
       {node.type === "value" && (
         <ValueNodeFields
           node={node}
@@ -59,7 +62,7 @@ export function ChannelNodeSettings({
           {tr("全局限制")}
         </button>
       )}
-      {node.type === "condition" && (
+      {(node.type === "condition" || node.type === "predicate") && (
         <>
           <FlowParameter field="test">
             <label>
@@ -126,6 +129,25 @@ export function ChannelNodeSettings({
             </FlowParameter>
           )}
         </>
+      )}
+      {node.type === "branch" && (
+        <FlowParameter field="condition" connectOnly>
+          <label>{tr("条件输入")}</label>
+        </FlowParameter>
+      )}
+      {node.type === "compare" && (
+        <CompareNodeFields
+          node={node}
+          change={change}
+          boundInputs={context.boundInputs}
+        />
+      )}
+      {node.type === "logic" && (
+        <LogicNodeFields
+          node={node}
+          change={change}
+          boundInputs={context.boundInputs}
+        />
       )}
       {node.type === "protocol" && (
         <fieldset>
@@ -414,10 +436,19 @@ export function ChannelNodeSettings({
             </label>
           </FlowParameter>
           <datalist id={"workflow-models-" + node.id}>
-            {targets.map((t) => (
+            {context.modelTargets.map((t) => (
               <option key={t} value={t} />
             ))}
           </datalist>
+          <FlowParameter field="allowedTargets">
+            <label>
+              {tr("允许选择的模型")}
+              <LinesField
+                value={node.allowedTargets ?? []}
+                onChange={(allowedTargets) => change({ allowedTargets })}
+              />
+            </label>
+          </FlowParameter>
           <FlowParameter field="mode">
             <label>
               {tr("模型重定向")}
@@ -597,11 +628,234 @@ function ValueNodeFields({
   );
 }
 
+function CompareNodeFields({
+  node,
+  change,
+  boundInputs,
+}: {
+  node: Extract<WorkflowNode, { type: "compare" }>;
+  change: (patch: any) => void;
+  boundInputs: ReadonlySet<string>;
+}) {
+  const inputBound = boundInputs.has("left") || boundInputs.has("right");
+  const rightBound = boundInputs.has("right");
+  const initial = (type: string) =>
+    type === "number" ? 0 : type === "boolean" ? false : "";
+  const operators = [
+    ["eq", "等于"],
+    ["ne", "不等于"],
+    ...(node.valueType === "number"
+      ? [
+          ["gt", "大于"],
+          ["gte", "大于或等于"],
+          ["lt", "小于"],
+          ["lte", "小于或等于"],
+        ]
+      : []),
+    ...(node.valueType === "string" ? [["matches", "匹配规则"]] : []),
+  ];
+  return (
+    <>
+      <label>
+        {tr("数据类型")}
+        <Select
+          value={node.valueType}
+          disabled={inputBound}
+          title={inputBound ? tr("请先断开此节点的数据连接") : undefined}
+          onChange={(event) => {
+            const valueType = event.target.value;
+            const value = initial(valueType);
+            change({ valueType, operator: "eq", left: value, right: value });
+          }}
+        >
+          <option value="string">{tr("文本")}</option>
+          <option value="number">{tr("数值")}</option>
+          <option value="boolean">{tr("布尔值")}</option>
+        </Select>
+      </label>
+      <label>
+        {tr("比较方式")}
+        <Select
+          value={node.operator}
+          disabled={rightBound}
+          title={rightBound ? tr("请先断开此节点的数据连接") : undefined}
+          onChange={(event) => {
+            const operator = event.target.value;
+            const changingType =
+              (operator === "matches") !== (node.operator === "matches");
+            change({
+              operator,
+              ...(changingType
+                ? {
+                    right:
+                      operator === "matches" ? [] : initial(node.valueType),
+                  }
+                : {}),
+            });
+          }}
+        >
+          {operators.map(([value, label]) => (
+            <option key={value} value={value}>
+              {tr(label!)}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <CompareInput
+        field="left"
+        label="左值"
+        type={node.valueType}
+        value={node.left}
+        change={change}
+      />
+      <CompareInput
+        field="right"
+        label={
+          node.operator === "matches" ? "匹配规则（每行一个，可用 *）" : "右值"
+        }
+        type={node.operator === "matches" ? "string[]" : node.valueType}
+        value={node.right}
+        change={change}
+      />
+    </>
+  );
+}
+
+function CompareInput({
+  field,
+  label,
+  type,
+  value,
+  change,
+}: {
+  field: "left" | "right";
+  label: string;
+  type: "string" | "number" | "boolean" | "string[]";
+  value: string | number | boolean | string[];
+  change: (patch: any) => void;
+}) {
+  const [text, setText] = React.useState(() =>
+    Array.isArray(value) ? value.join("\n") : "",
+  );
+  const signature = JSON.stringify(value);
+  const parse = (input: string) =>
+    input
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  React.useEffect(() => {
+    if (Array.isArray(value) && JSON.stringify(parse(text)) !== signature)
+      setText(value.join("\n"));
+  }, [signature, type]);
+  return (
+    <FlowParameter field={field}>
+      <label>
+        {type === "boolean" ? (
+          <>
+            <Checkbox
+              checked={value === true}
+              onCheckedChange={(next) => change({ [field]: next === true })}
+            />{" "}
+            {tr(label)}
+          </>
+        ) : type === "string[]" ? (
+          <>
+            {tr(label)}
+            <textarea
+              rows={3}
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value);
+                change({ [field]: parse(event.target.value) });
+              }}
+            />
+          </>
+        ) : (
+          <>
+            {tr(label)}
+            <input
+              type={type === "number" ? "number" : "text"}
+              step={type === "number" ? "any" : undefined}
+              value={
+                typeof value === "string" || typeof value === "number"
+                  ? value
+                  : ""
+              }
+              onChange={(event) =>
+                change({
+                  [field]:
+                    type === "number"
+                      ? Number(event.target.value)
+                      : event.target.value,
+                })
+              }
+            />
+          </>
+        )}
+      </label>
+    </FlowParameter>
+  );
+}
+
+function LogicNodeFields({
+  node,
+  change,
+  boundInputs,
+}: {
+  node: Extract<WorkflowNode, { type: "logic" }>;
+  change: (patch: any) => void;
+  boundInputs: ReadonlySet<string>;
+}) {
+  return (
+    <>
+      <label>
+        {tr("逻辑运算")}
+        <Select
+          value={node.operator}
+          onChange={(event) => {
+            const operator = event.target.value;
+            change({
+              operator,
+              right: operator === "not" ? undefined : (node.right ?? false),
+            });
+          }}
+        >
+          <option value="and">{tr("且")}</option>
+          <option value="or">{tr("或")}</option>
+          <option value="not" disabled={boundInputs.has("right")}>
+            {tr("非")}
+          </option>
+        </Select>
+      </label>
+      <FlowParameter field="left">
+        <label>
+          <Checkbox
+            checked={node.left}
+            onCheckedChange={(value) => change({ left: value === true })}
+          />{" "}
+          {tr("左值")}
+        </label>
+      </FlowParameter>
+      {node.operator !== "not" && (
+        <FlowParameter field="right">
+          <label>
+            <Checkbox
+              checked={node.right === true}
+              onCheckedChange={(value) => change({ right: value === true })}
+            />{" "}
+            {tr("右值")}
+          </label>
+        </FlowParameter>
+      )}
+    </>
+  );
+}
+
 function ModelConditionFields({
   node,
   change,
 }: {
-  node: Extract<WorkflowNode, { type: "condition" }>;
+  node: Extract<WorkflowNode, { type: "condition" | "predicate" }>;
   change: (patch: any) => void;
 }) {
   const [text, setText] = React.useState(() => node.models?.join("\n") ?? "");

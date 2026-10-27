@@ -24,9 +24,11 @@ import {
   workflowNodeLabels as labels,
 } from "./channel-flow-canvas.js";
 import { workflowNodePositions } from "./channel-graph-operations.js";
+import { WorkflowTemplateDialog } from "./workflow-template-dialog.js";
 import { remapWorkflowInterfaces } from "./channel-interface-bindings.js";
 import { isFlowTextInput } from "./use-flow-clipboard.js";
 import { defaultChannelFlow } from "../ai/channel-config.js";
+import { migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
 import { useUnsavedChanges } from "./unsaved-changes.js";
 type GraphDraft = {
   channelName: string;
@@ -68,6 +70,13 @@ export function ChannelGraphEditor({
         : Promise.resolve([]),
     [personal],
   );
+  const modelCatalog = useLoad<{ id: string; channel?: { id: string; name?: string; scope?: string } }[]>(() =>
+    host.request("/api/plugins/official.model-catalog/models"),
+  );
+  const ownChannels = useLoad<{ id: string; name?: string; enabled?: boolean; blocked?: boolean; hasCredential?: boolean }[]>(
+    () => personal ? Promise.resolve([]) : host.request("/api/plugins/official.byok/personal-channels").catch(() => []),
+    [personal],
+  );
   const [draft, setDraft] = React.useState<GraphDraft>();
   const currentDraft = React.useRef<GraphDraft | undefined>(undefined);
   const editing = React.useRef<{ element: Element; at: number } | undefined>(
@@ -93,6 +102,7 @@ export function ChannelGraphEditor({
     personal ? undefined : initialPanel,
   );
   const [busy, setBusy] = React.useState(false);
+  const [templateOpen, setTemplateOpen] = React.useState(false);
   const editor = React.useRef<HTMLElement>(null);
   const subscriptionAccounts = useLoad<any[]>(
     () => (personal ? Promise.resolve([]) : listSubscriptionAccounts(host)),
@@ -109,10 +119,22 @@ export function ChannelGraphEditor({
     return { upstreams: { [channelId]: own }, models: own?.models ?? {} };
   }, [loaded.data, personal, channelId]);
   const channel = router?.upstreams?.[channelId];
-  const targets = [
-    ...Object.keys(router?.models ?? {}),
-    ...Object.keys(router?.redirects ?? {}),
-  ];
+  const modelTargets = [...new Set([
+    ...(modelCatalog.data ?? []).map((model) => model.id),
+    ...Object.entries(router?.models ?? {}).map(([id, model]: [string, any]) => model.publicModel ?? id),
+  ])].sort();
+  const templateTargets = [...new Set(
+    modelCatalog.data
+      ? modelCatalog.data.filter((model) => model.channel?.id !== channelId).map((model) => model.id)
+      : Object.entries(router?.models ?? {})
+          .filter(([, model]: [string, any]) => !personal && model.upstream !== channelId && model.enabled !== false)
+          .map(([id, model]: [string, any]) => model.publicModel ?? id),
+  )].sort();
+  // This endpoint only returns channels owned by the current session. The model
+  // catalog can omit channels without an active or visible model mapping.
+  const personalChannels = ((personal ? loaded.data : ownChannels.data) ?? [])
+    .filter((item: any) => item.enabled !== false && !item.blocked && item.hasCredential)
+    .map((item: any) => ({ id: item.id as string, name: item.name as string | undefined }));
   React.useEffect(() => {
     if (!channel) return;
     const next: GraphDraft = {
@@ -120,7 +142,7 @@ export function ChannelGraphEditor({
       enabled: channel.enabled !== false,
       priority: channel.priority ?? 0,
       personalInterfaces: channel.interfaces,
-      flow: structuredClone(channel.flow ?? defaultChannelFlow()),
+      flow: migrateWorkflowConditions(structuredClone(channel.flow ?? defaultChannelFlow())),
     };
     if (JSON.stringify(currentDraft.current) === JSON.stringify(next)) {
       setBaseline(JSON.stringify(next));
@@ -194,44 +216,48 @@ export function ChannelGraphEditor({
     type: WorkflowNode["type"],
     position?: { x: number; y: number },
   ) {
-    if (!flow || flow.nodes.length >= 64) return;
+    if (!flow || type === "condition" || flow.nodes.length >= 128) return;
     let key = type;
     let n = 1;
     while (flow.nodes.some((item) => item.id === key))
       key = (type + n++) as typeof key;
-    const next = "";
-    const extra =
-      type === "value"
-        ? { valueType: "integer", value: 1 }
-        : type === "platform"
-          ? { groupId: platformGroups.data?.[0]?.id ?? "" }
-          : type === "provider"
-            ? {}
-            : type === "routing"
-              ? {
-                  profile:
-                    (loaded.data?.references?.routingProfiles ?? [])[0] ??
-                    "$model",
-                }
-              : type === "protocol"
-                ? {
-                    next,
-                    allow: ingressOptions.map((p) => p.value),
-                    conversion: "auto",
-                  }
-                : type === "condition"
-                  ? { test: "hasTools", yes: next, no: next }
-                  : type === "prompt"
-                    ? { next, text: "请准确、简洁地回答。" }
-                    : type === "reasoning"
-                      ? { next, effort: "medium" }
-                      : type === "maxTokens"
-                        ? { next, limit: 1024 }
-                        : type === "rateLimit"
-                          ? { next, rule: { rpm: 60 } }
-                          : type === "tps"
-                            ? { next, rate: 30, tokenizer: "o200k_base" }
-                            : { target: targets[0] ?? "", mode: "implicit" };
+    const defaults: Record<string, object> = {
+      value: { valueType: "integer", value: 1 },
+      text: { text: "" },
+      format: { value: null },
+      template: { template: "", values: {} },
+      replace: { text: "", find: "", replacement: "", all: true },
+      llm: { model: "", prompt: "", promptMode: "append" },
+      jev: {
+        model: "",
+        state: "",
+        questions: {
+          route: {
+            type: "choice",
+            instructions: "选择最适合的选项",
+            criteria: { fast: "简单问题", quality: "复杂问题" },
+          },
+        },
+        answerKey: "route",
+      },
+      response: { text: "" },
+      platform: { groupId: platformGroups.data?.[0]?.id ?? "" },
+      provider: {},
+      routing: { profile: (loaded.data?.references?.routingProfiles ?? [])[0] ?? "$model" },
+      protocol: { next: "", allow: ingressOptions.map((p) => p.value), conversion: "auto" },
+      condition: { test: "hasTools", yes: "", no: "" },
+      predicate: { test: "hasTools" },
+      branch: { condition: false, yes: "", no: "" },
+      compare: { valueType: "string", operator: "eq", left: "", right: "" },
+      logic: { operator: "and", left: false, right: false },
+      prompt: { next: "", text: "请准确、简洁地回答。" },
+      reasoning: { next: "", effort: "medium" },
+      maxTokens: { next: "", limit: 1024 },
+      rateLimit: { next: "", rule: { rpm: 60 } },
+      tps: { next: "", rate: 30, tokenizer: "o200k_base" },
+      upstream: { target: "", mode: "implicit" },
+    };
+    const extra = defaults[type] ?? {};
     const positions = workflowNodePositions(flow);
     const anchorPoint = positions.get(selected);
     const point = position ?? {
@@ -521,6 +547,7 @@ export function ChannelGraphEditor({
                     .filter(
                       (type) =>
                         type !== "start" &&
+                        type !== "condition" &&
                         (personal ? type !== "routing" : type !== "platform"),
                     )
                     .map((type) => (
@@ -544,7 +571,18 @@ export function ChannelGraphEditor({
                 </Popover.Content>
               </Popover.Portal>
             </Popover.Root>
+            <button className="secondary" disabled={busy} onClick={() => setTemplateOpen(true)}>
+              {tr("流程模板")}
+            </button>
           </div>
+          {templateOpen && (
+            <WorkflowTemplateDialog
+              targets={templateTargets}
+              disabled={busy}
+              close={() => setTemplateOpen(false)}
+              onApply={(next) => { update(next); select(next.entry); }}
+            />
+          )}
           <div className="workflow-grid">
             <ChannelFlowCanvas
               disabled={busy}
@@ -599,7 +637,8 @@ export function ChannelGraphEditor({
                             binding.source === id || binding.target === id,
                         ),
                         subscriptionAccounts,
-                        targets,
+                        modelTargets,
+                        personalChannels,
                         references: loaded.data?.references,
                         onPanel: setPanel,
                       }}

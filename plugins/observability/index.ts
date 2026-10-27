@@ -36,6 +36,9 @@ export default definePlugin({
          WHEN billing_mode='personal' THEN 'personal' END;`,
       "ALTER TABLE requests ADD COLUMN user_name TEXT; ALTER TABLE requests ADD COLUMN key_name TEXT;",
       "ALTER TABLE requests ADD COLUMN upstream_response_model TEXT;",
+      `ALTER TABLE requests ADD COLUMN parent_request_id TEXT;
+       ALTER TABLE requests ADD COLUMN workflow_node_id TEXT;
+       CREATE INDEX requests_parent ON requests(parent_request_id,created_at);`,
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -139,6 +142,10 @@ export default definePlugin({
       handle(ctx) {
         const state = observation(ctx);
         if (!state) return;
+        const workflow =
+          ctx.state.get("billing.mode") === "workflow" ||
+          !!(ctx.state.get("ai.plan") as { workflowDeferred?: unknown } | undefined)
+            ?.workflowDeferred;
         const cancelled =
           ctx.signal.aborted || ctx.state.get("http.cancelled") === true;
         const code =
@@ -176,7 +183,7 @@ export default definePlugin({
           }
         }
         let prices: string | null = null;
-        if (state.pricing) {
+        if (state.pricing && !workflow) {
           try {
             validatePricing(state.pricing);
             const copy = Object.fromEntries(
@@ -222,6 +229,7 @@ export default definePlugin({
         try {
           if (
             state.pricing &&
+            !workflow &&
             (state.usage || (state.finished && fixedPricing(state.pricing)))
           )
             cost = priceUsage(
@@ -241,7 +249,7 @@ export default definePlugin({
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source,user_name,key_name,upstream_response_model) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source,user_name,key_name,upstream_response_model,parent_request_id,workflow_node_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -265,7 +273,8 @@ export default definePlugin({
               usageDetails,
               prices,
               state.generationMs ?? null,
-              (ctx.state.get("billing.mode") as string | undefined) ?? null,
+              (ctx.state.get("billing.mode") as string | undefined) ??
+                (workflow ? "workflow" : null),
               state.consumptionSource ?? null,
               typeof ctx.principal?.attributes?.username === "string"
                 ? ctx.principal.attributes.username
@@ -274,12 +283,15 @@ export default definePlugin({
                 ? ctx.principal.attributes.keyName
                 : null,
               state.upstreamResponseModel ?? null,
+              ctx.parent?.requestId ?? null,
+              ctx.parent?.nodeId ?? null,
             );
             recordRanking(db, {
               at: state.startedAt,
               userId: ctx.principal?.id,
               model: state.model,
               upstream: state.upstream,
+              parentRequestId: ctx.parent?.requestId,
               status,
               input: state.usage?.input,
               output: state.usage?.output,
@@ -317,6 +329,33 @@ export default definePlugin({
             : "self",
         users: [{ id: principal.id, name: "" }],
       };
+    }
+    // Call-specific filters match individual calls, including internal calls.
+    function matchesCalls(f: { query: URLSearchParams }) {
+      return !f.query.get("requestId") &&
+        ["model", "upstream", "errorCode", "status", "protocol", "source"].some(
+          (key) => !!f.query.get(key),
+        );
+    }
+    // An orphan remains visible if its parent could not be logged or was pruned.
+    function rootFilter(f: { sql: string; query: URLSearchParams }) {
+      return (
+        f.sql +
+        (f.query.get("requestId") || matchesCalls(f)
+          ? ""
+          : " AND (parent_request_id IS NULL OR NOT EXISTS (SELECT 1 FROM requests parent WHERE parent.id=requests.parent_request_id AND parent.user_id=requests.user_id))")
+      );
+    }
+    function callFilter(f: { sql: string; query: URLSearchParams }) {
+      if (matchesCalls(f)) return f.sql;
+      return `id IN (WITH RECURSIVE selected(id,user_id) AS (
+        SELECT id,user_id FROM requests WHERE ${rootFilter(f)}
+        UNION SELECT child.id,child.user_id FROM requests child JOIN selected
+          ON child.parent_request_id=selected.id AND child.user_id=selected.user_id
+      ) SELECT id FROM selected)`;
+    }
+    function providerCallFilter(f: { sql: string; query: URLSearchParams }) {
+      return callFilter(f) + " AND COALESCE(billing_mode,'')<>'workflow'";
     }
     host.api({
       method: "GET",
@@ -434,12 +473,14 @@ export default definePlugin({
         const rows = db
           .prepare(
             "SELECT * FROM requests WHERE " +
-              f.sql +
+              callFilter(f) +
               " ORDER BY created_at DESC,id DESC LIMIT 10001",
           )
           .all(...f.params) as Record<string, any>[];
         const columns = [
           "id",
+          "parent_request_id",
+          "workflow_node_id",
           "user_id",
           "user_name",
           "key_id",
@@ -486,6 +527,39 @@ export default definePlugin({
     });
     host.api({
       method: "GET",
+      path: "/requests/children",
+      access: "authenticated",
+      async handle(request, ctx) {
+        checkStorage();
+        const parentId = new URL(request.url).searchParams.get("parentId");
+        if (!parentId || parentId.length > 256)
+          throw new HostError("invalid_request", "Invalid parent request ID");
+        const allowed = await logScope(ctx.principal!);
+        const parent = db
+          .prepare("SELECT user_id FROM requests WHERE id=?")
+          .get(parentId) as { user_id: string | null } | undefined;
+        if (
+          !parent?.user_id ||
+          (allowed.scope !== "all" &&
+            !allowed.users.some((user) => user.id === parent.user_id))
+        )
+          throw new HostError("not_found", "Request log not found", 404);
+        const rows = db
+          .prepare(
+            "SELECT * FROM requests WHERE parent_request_id=? AND user_id=? ORDER BY created_at,id",
+          )
+          .all(parentId, parent.user_id) as Record<string, any>[];
+        return json({
+          data: await attachCharges(
+            host,
+            await attachRequestLabels(host, rows, allowed.users, ctx.signal),
+            ctx.signal,
+          ),
+        });
+      },
+    });
+    host.api({
+      method: "GET",
       path: "/requests",
       access: "authenticated",
       async handle(request, ctx) {
@@ -503,13 +577,13 @@ export default definePlugin({
           throw new HostError("invalid_request", "Invalid pagination");
         const total = (
           db
-            .prepare("SELECT COUNT(*) n FROM requests WHERE " + f.sql)
+            .prepare("SELECT COUNT(*) n FROM requests WHERE " + rootFilter(f))
             .get(...f.params) as any
         ).n;
         const rows = db
           .prepare(
             "SELECT * FROM requests WHERE " +
-              f.sql +
+              rootFilter(f) +
               " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
           )
           .all(...f.params, limit, offset);
@@ -544,13 +618,19 @@ export default definePlugin({
         COALESCE(SUM(input_tokens),0) inputTokens, COALESCE(SUM(output_tokens),0) outputTokens,
         COUNT(input_tokens) usageKnownRequests, COUNT(cost_micro_usd) pricedRequests,
         AVG(CASE WHEN status='success' AND stream=1 AND first_token_ms IS NOT NULL THEN latency_ms END) avgLatencyMs, AVG(CASE WHEN status='success' AND stream=1 THEN first_token_ms END) avgFirstTokenMs
-        FROM requests WHERE ${f.sql}`,
+        FROM requests WHERE ${rootFilter(f)}`,
           )
+          .get(...f.params);
+        const usage = db
+          .prepare(`SELECT COALESCE(SUM(input_tokens),0) inputTokens,
+          COALESCE(SUM(output_tokens),0) outputTokens,
+          COUNT(input_tokens) usageKnownRequests, COUNT(*) usageTotalRequests
+          FROM requests WHERE ${providerCallFilter(f)}`)
           .get(...f.params);
         const bucketMs = f.hours <= 48 ? 3600000 : 86400000;
         const buckets = db
           .prepare(
-            `SELECT CAST(created_at/? AS INTEGER) bucket, COUNT(*) requests, SUM(status='error') errors FROM requests WHERE ${f.sql} GROUP BY bucket`,
+            `SELECT CAST(created_at/? AS INTEGER) bucket, COUNT(*) requests, SUM(status='error') errors FROM requests WHERE ${rootFilter(f)} GROUP BY bucket`,
           )
           .all(bucketMs, ...f.params) as any[];
         const end = Math.floor(f.to / bucketMs);
@@ -566,12 +646,18 @@ export default definePlugin({
         });
         const models = db
           .prepare(
-            `SELECT model,COUNT(*) requests,SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)) tokens FROM requests WHERE ${f.sql} GROUP BY model ORDER BY requests DESC LIMIT 6`,
+            `SELECT model,COUNT(*) requests,SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)) tokens FROM requests WHERE ${rootFilter(f)} GROUP BY model ORDER BY requests DESC LIMIT 6`,
           )
           .all(...f.params);
         return json({
           ...summary,
-          ...(await consumptionSummary(host, db, f, ctx.signal)),
+          ...usage,
+          ...(await consumptionSummary(
+            host,
+            db,
+            { sql: providerCallFilter(f), params: f.params },
+            ctx.signal,
+          )),
           series,
           models,
           retentionDays,

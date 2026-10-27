@@ -52,7 +52,7 @@ export default definePlugin({
           }
           await host.call(
             "ai.request-limits@1",
-            { action: "preflight", principal: ctx.principal },
+            { action: "preflight", principal: ctx.principal, context: ctx },
             ctx.signal,
           );
           const plan = await host.call<AIPlan>(

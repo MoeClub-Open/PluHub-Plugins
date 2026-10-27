@@ -15,6 +15,8 @@ import {
   workflowParameters,
   compatibleWorkflowTypes,
 } from "./workflow-parameters.js";
+import { evaluateCompare, evaluateLogic, evaluatePredicate } from "./workflow-condition.js";
+import { validateWorkflowDataNode } from "./workflow-node-validation.js";
 
 type Context = {
   requestedModel?: string;
@@ -32,7 +34,7 @@ const defaultFail: Fail = (message, nodes = []) => {
   );
 };
 
-function validValue(type: WorkflowValueType, value: unknown): boolean {
+export function validValue(type: WorkflowValueType, value: unknown): boolean {
   switch (type) {
     case "string":
       return typeof value === "string";
@@ -48,6 +50,10 @@ function validValue(type: WorkflowValueType, value: unknown): boolean {
       );
     case "object":
       return !!value && typeof value === "object";
+    case "json":
+      return value === null || typeof value === "string" || typeof value === "boolean" ||
+        (typeof value === "number" && Number.isFinite(value)) ||
+        (typeof value === "object" && value !== null);
     case "secret":
       return (
         typeof value === "string" ||
@@ -57,13 +63,15 @@ function validValue(type: WorkflowValueType, value: unknown): boolean {
   }
 }
 
-function setPath(node: WorkflowNode, path: string, value: unknown) {
+function setPath(node: WorkflowNode, path: string, value: unknown, fail: Fail) {
   const parts = path.split(".");
   let target: any = node;
   for (const [index, key] of parts.slice(0, -1).entries()) {
-    if (target[key] === undefined)
+    if (!Object.hasOwn(target, key))
       target[key] = /^\d+$/.test(parts[index + 1]!) ? [] : {};
     target = target[key];
+    if (target === null || typeof target !== "object")
+      fail("无效的参数路径", [node.id]);
   }
   target[parts.at(-1)!] = structuredClone(value);
 }
@@ -74,6 +82,7 @@ export function resolveWorkflowBindings(
   context: Context = {},
   request?: AIRequest,
   fail: Fail = defaultFail,
+  onlyTargetId?: string,
 ): ChannelWorkflow {
   if (flow.bindings !== undefined && !Array.isArray(flow.bindings))
     fail("无效的参数连线");
@@ -103,6 +112,12 @@ export function resolveWorkflowBindings(
       outputFields.set(id, workflowDataOutputs(nodes.get(id)!));
     return outputFields.get(id)!;
   };
+  // Validate template variable names before deriving input paths or writing values.
+  for (const node of flow.nodes)
+    if (node.type === "template")
+      validateWorkflowDataNode(node, new Set((flow.bindings ?? [])
+        .filter((binding) => binding.target === node.id)
+        .map((binding) => binding.input)));
   for (const node of flow.nodes) {
     if (node.type !== "value") continue;
     if (
@@ -114,6 +129,7 @@ export function resolveWorkflowBindings(
         "boolean",
         "string[]",
         "object",
+        "json",
         "secret",
       ].includes(node.valueType)
     )
@@ -124,6 +140,9 @@ export function resolveWorkflowBindings(
       fail("普通数据节点不能保存密钥", [node.id]);
   }
   for (const binding of flow.bindings ?? []) {
+    if (typeof binding.input !== "string" || binding.input.split(".").some(
+      (part) => !part || ["__proto__", "prototype", "constructor"].includes(part),
+    )) fail("无效的参数路径", [binding.target]);
     const source = nodes.get(binding.source),
       target = nodes.get(binding.target);
     if (!source || !target)
@@ -159,7 +178,7 @@ export function resolveWorkflowBindings(
     if (tainted.has(id)) return tainted.get(id)!;
     visiting.add(id);
     const node = nodes.get(id)!;
-    let dynamic = node.type === "start";
+    let dynamic = ["start", "predicate", "llm", "jev"].includes(node.type);
     for (const binding of incoming.get(id) ?? [])
       if (dependsOnRequest(binding.source)) dynamic = true;
     visiting.delete(id);
@@ -167,11 +186,31 @@ export function resolveWorkflowBindings(
     return dynamic;
   }
   for (const node of flow.nodes) dependsOnRequest(node.id);
+  const deferred = new Map<string, boolean>();
+  function needsDataGraph(id: string): boolean {
+    if (deferred.has(id)) return deferred.get(id)!;
+    const node = nodes.get(id)!;
+    const result = ["text", "format", "template", "replace", "llm", "jev"].includes(node.type) ||
+      (incoming.get(id) ?? []).some((binding) => needsDataGraph(binding.source));
+    deferred.set(id, result);
+    return result;
+  }
   for (const binding of flow.bindings ?? []) {
     const field = inputsFor(binding.target).find(
       (item) => item.path === binding.input,
     )!;
-    if (field.sensitive && dependsOnRequest(binding.source))
+    const target = nodes.get(binding.target)!;
+    const dynamicTarget = dependsOnRequest(binding.source) &&
+      ((target.type === "upstream" && binding.input === "target") ||
+        (target.type === "llm" && binding.input === "model"));
+    if (dynamicTarget) {
+      const allowedField = target.type === "llm" ? "allowedModels" : "allowedTargets";
+      const allowed = target.type === "llm" ? target.allowedModels : target.type === "upstream" ? target.allowedTargets : undefined;
+      if ((!Array.isArray(allowed) || !allowed.length) &&
+          !targets.has(binding.target + "\0" + allowedField))
+        fail("动态模型目标需要配置允许列表", [binding.target]);
+    }
+    if (field.sensitive && dependsOnRequest(binding.source) && !dynamicTarget)
       fail("此参数只允许受控的静态输入", [binding.source, binding.target]);
   }
   const result = structuredClone(flow);
@@ -207,6 +246,10 @@ export function resolveWorkflowBindings(
             (sum, message) => sum + message.text.length,
             0,
           );
+        case "text":
+          return [...request.messages].reverse().find((message) => message.role === "user")?.text ?? "";
+        case "messages":
+          return structuredClone(request.messages);
       }
     }
     if (node.type === "value") {
@@ -216,10 +259,24 @@ export function resolveWorkflowBindings(
       if (incoming) return getOutput(incoming.source, incoming.output);
       return node.valueType === "secret" ? node.secretRef : node.value;
     }
+    if (node.type === "predicate" || node.type === "compare" || node.type === "logic") {
+      const effective = structuredClone(node);
+      for (const binding of incoming.get(id) ?? []) {
+        const field = inputsFor(id).find((item) => item.path === binding.input)!;
+        const value = getOutput(binding.source, binding.output);
+        if (!validValue(field.type, value))
+          fail("参数来源没有有效值", [binding.source, binding.target]);
+        setPath(effective, binding.input, value, fail);
+      }
+      if (effective.type === "compare") return evaluateCompare(effective);
+      if (effective.type === "logic") return evaluateLogic(effective);
+      return request ? evaluatePredicate(effective, request, context) : undefined;
+    }
     return undefined;
   }
   for (const binding of flow.bindings ?? []) {
-    if (!request && dependsOnRequest(binding.source)) continue;
+    if (onlyTargetId && binding.target !== onlyTargetId) continue;
+    if (!request && (dependsOnRequest(binding.source) || needsDataGraph(binding.source))) continue;
     const target = resultNodes.get(binding.target)!;
     const field = inputsFor(binding.target).find(
       (item) => item.path === binding.input,
@@ -227,8 +284,20 @@ export function resolveWorkflowBindings(
     const value = getOutput(binding.source, binding.output);
     if (!validValue(field.type, value))
       fail("参数来源没有有效值", [binding.source, binding.target]);
-    setPath(target, binding.input, value);
+    setPath(target, binding.input, value, fail);
   }
+  if (request)
+    for (const binding of flow.bindings ?? []) {
+      if (onlyTargetId && binding.target !== onlyTargetId) continue;
+      if (!dependsOnRequest(binding.source)) continue;
+      const target = resultNodes.get(binding.target)!;
+      if (target.type === "upstream" && binding.input === "target" &&
+          !target.allowedTargets?.includes(target.target))
+        fail("动态目标不在允许列表中", [target.id]);
+      if (target.type === "llm" && binding.input === "model" &&
+          !target.allowedModels?.includes(target.model))
+        fail("动态模型不在允许列表中", [target.id]);
+    }
   return result;
 }
 
