@@ -167,7 +167,12 @@ export async function readCatalog(
   }
   const channels = await host.call<PersonalChannel[]>(
     "ai.user-channels@1",
-    { userId: input.principalId },
+    {
+      userId: input.principalId,
+      ...(input.channelId || (personal?.length === 1 && allowed?.length === 1)
+        ? { id: input.channelId ?? personal![0] }
+        : {}),
+    },
     signal,
   );
   for (const id of personal ?? channels.map((channel) => channel.id)) {

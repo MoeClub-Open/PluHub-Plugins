@@ -317,7 +317,7 @@ export function compileWorkflow(
     if (done.has(id)) return;
     if (!id) bad("节点出口尚未连接", source ? [source] : []);
     const node = nodes.get(id);
-    if (!node) bad("连线指向不存在的节点", source ? [source] : [id]);
+    if (!node) bad("连线指向不存在的节点", source ? [source, id] : [id]);
     if (["value", "predicate", "compare", "logic", "text", "format", "template", "replace", "llm", "jev"].includes(node!.type))
       bad("数据节点不能连接到请求路径", [id]);
     visiting.add(id);

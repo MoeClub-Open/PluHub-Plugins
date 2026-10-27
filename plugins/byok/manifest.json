@@ -5,7 +5,7 @@
   "name": "个人渠道",
   "description": "管理用户自带密钥、订阅与个人渠道。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.45",
+  "version": "0.1.0-alpha.46",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",

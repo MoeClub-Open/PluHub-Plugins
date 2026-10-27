@@ -42,6 +42,8 @@ export default definePlugin({
       "ALTER TABLE orders ADD COLUMN payment_method TEXT; ALTER TABLE orders ADD COLUMN payment_method_name TEXT;",
       "ALTER TABLE subscriptions ADD COLUMN observed_at INTEGER NOT NULL DEFAULT 0;",
       "ALTER TABLE orders ADD COLUMN renewal TEXT NOT NULL DEFAULT 'manual'; UPDATE orders SET renewal='automatic' WHERE provider='stripe';",
+      `CREATE TABLE subscription_periods(subscription_id TEXT NOT NULL,period_end INTEGER NOT NULL,PRIMARY KEY(subscription_id,period_end));
+       INSERT INTO subscription_periods SELECT id,period_end FROM subscriptions WHERE period_end>0;`,
     ]);
     host.cleanup(() => db.close());
     const products = () => (host.config().products ?? []) as Product[];
@@ -270,6 +272,10 @@ export default definePlugin({
             e.periodEnd!,
             e.observedAt ?? Date.now(),
           );
+          const period = db
+            .prepare("INSERT OR IGNORE INTO subscription_periods VALUES(?,?)")
+            .run(e.subscriptionId, e.periodEnd!);
+          if (!period.changes) return;
         }
         db.prepare("UPDATE orders SET status='paid' WHERE id=?").run(order.id);
         db.prepare(
