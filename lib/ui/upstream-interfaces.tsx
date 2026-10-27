@@ -6,6 +6,7 @@ import { t as tr } from "./i18n.js";
 import { Icon } from "./components.js";
 import { Select } from "./select.js";
 import { InterfaceJsonEditor } from "./upstream-interface-json.js";
+import { FlowParameter } from "./flow-parameter-port.js";
 import {
   IncomingInterfaces,
   ModelPatterns,
@@ -17,10 +18,19 @@ export function UpstreamInterfaces({
   value,
   protocol,
   onChange,
+  parameterPrefix,
+  hasParameterBindings = false,
+  boundInputs,
 }: {
   value?: UpstreamInterface[];
   protocol: string;
-  onChange: (value: UpstreamInterface[] | undefined) => void;
+  onChange: (
+    value: UpstreamInterface[] | undefined,
+    oldToNew?: readonly number[],
+  ) => void;
+  parameterPrefix?: string;
+  hasParameterBindings?: boolean;
+  boundInputs?: ReadonlySet<string>;
 }) {
   const group = React.useId();
   const identities = React.useRef(new WeakMap<UpstreamInterface, string>());
@@ -46,7 +56,12 @@ export function UpstreamInterfaces({
     const next = [...routes];
     const destination = index + direction;
     [next[index], next[destination]] = [next[destination]!, next[index]!];
-    onChange(next);
+    onChange(
+      next,
+      routes.map((_, i) =>
+        i === index ? destination : i === destination ? index : i,
+      ),
+    );
   }
   return (
     <Tabs.Root
@@ -84,7 +99,10 @@ export function UpstreamInterfaces({
                   ? [target]
                   : interfaceProtocols.map((option) => option.id),
               };
-              onChange([route, ...routes]);
+              onChange(
+                [route, ...routes],
+                routes.map((_, index) => index + 1),
+              );
             }}
           >
             <Icon name="plus" size={14} />
@@ -118,56 +136,79 @@ export function UpstreamInterfaces({
             </div>
             {routes.map((route, index) => {
               const id = identity(route);
+              const prefix = parameterPrefix
+                ? `${parameterPrefix}.${index}`
+                : undefined;
+              const parameter = (field: string, content: React.ReactNode) =>
+                prefix ? (
+                  <FlowParameter field={`${prefix}.${field}`}>
+                    {content}
+                  </FlowParameter>
+                ) : (
+                  content
+                );
               return (
                 <div className="interface-route" key={id}>
                   <div className="interface-route-grid" role="row">
-                    <label role="cell">
-                      <span>{tr("入口接口")}</span>
-                      <IncomingInterfaces
-                        value={route.incoming}
-                        onChange={(incoming) => update(index, { incoming })}
-                      />
-                    </label>
-                    <label role="cell">
-                      <span>{tr("上游接口")}</span>
-                      <Select
-                        value={route.protocol}
-                        onChange={(event) =>
-                          update(index, {
-                            protocol: event.target.value as Protocol,
-                          })
-                        }
-                      >
-                        {interfaceProtocols.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </label>
-                    <label role="cell">
-                      <span>{tr("匹配模型")}</span>
-                      <ModelPatterns
-                        value={route.models}
-                        onChange={(models) => update(index, { models })}
-                      />
-                    </label>
-                    <label role="cell">
-                      <span>{tr("接口路径")}</span>
-                      <input
-                        value={route.path ?? ""}
-                        placeholder={
-                          interfaceProtocols.find(
-                            (option) => option.id === route.protocol,
-                          )!.path
-                        }
-                        onChange={(event) =>
-                          update(index, {
-                            path: event.target.value || undefined,
-                          })
-                        }
-                      />
-                    </label>
+                    {parameter(
+                      "incoming",
+                      <label role="cell">
+                        <span>{tr("入口接口")}</span>
+                        <IncomingInterfaces
+                          value={route.incoming}
+                          onChange={(incoming) => update(index, { incoming })}
+                        />
+                      </label>,
+                    )}
+                    {parameter(
+                      "protocol",
+                      <label role="cell">
+                        <span>{tr("上游接口")}</span>
+                        <Select
+                          value={route.protocol}
+                          onChange={(event) =>
+                            update(index, {
+                              protocol: event.target.value as Protocol,
+                            })
+                          }
+                        >
+                          {interfaceProtocols.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </label>,
+                    )}
+                    {parameter(
+                      "models",
+                      <label role="cell">
+                        <span>{tr("匹配模型")}</span>
+                        <ModelPatterns
+                          value={route.models}
+                          onChange={(models) => update(index, { models })}
+                        />
+                      </label>,
+                    )}
+                    {parameter(
+                      "path",
+                      <label role="cell">
+                        <span>{tr("接口路径")}</span>
+                        <input
+                          value={route.path ?? ""}
+                          placeholder={
+                            interfaceProtocols.find(
+                              (option) => option.id === route.protocol,
+                            )!.path
+                          }
+                          onChange={(event) =>
+                            update(index, {
+                              path: event.target.value || undefined,
+                            })
+                          }
+                        />
+                      </label>,
+                    )}
                     <div className="interface-route-actions" role="cell">
                       <button
                         type="button"
@@ -208,7 +249,12 @@ export function UpstreamInterfaces({
                         title={tr("删除路由")}
                         onClick={() => {
                           const next = routes.filter((_, i) => i !== index);
-                          onChange(next.length ? next : undefined);
+                          onChange(
+                            next.length ? next : undefined,
+                            routes.map((_, i) =>
+                              i === index ? -1 : i > index ? i - 1 : i,
+                            ),
+                          );
                           if (selected === id) setSelected(undefined);
                         }}
                       >
@@ -228,6 +274,8 @@ export function UpstreamInterfaces({
                     <UpstreamInterfaceEditor
                       route={route}
                       update={(patch) => update(index, patch)}
+                      parameterPrefix={prefix}
+                      boundInputs={boundInputs}
                     />
                   </div>
                 </div>
@@ -248,6 +296,7 @@ export function UpstreamInterfaces({
           value={value}
           onChange={onChange}
           reveal={() => setView("json")}
+          disabled={hasParameterBindings}
         />
       </Tabs.Content>
     </Tabs.Root>

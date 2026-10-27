@@ -1,6 +1,7 @@
 import { copySecret, SecretCopy } from "../../lib/ui/copy-secret.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { UpstreamInterfaces } from "../../lib/ui/upstream-interfaces.js";
+import { remapWorkflowInterfaces } from "../../lib/ui/channel-interface-bindings.js";
 import { apiProtocols } from "../../lib/ai/upstream-interfaces.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -13,11 +14,24 @@ import { SubscriptionAccounts } from "../../lib/ui/subscription-accounts.js";
 import { parseApiConnection } from "../../lib/ai/personal-api.js";
 import { listSubscriptionAccounts } from "../../lib/ui/subscription-providers.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
-import type { Protocol } from "@pluhub/contracts/ai";
+import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
 import { PersonalModels, emptyModel, type Model } from "./models-ui.js";
 import { ChannelActions } from "./channel-actions.js";
 import type { SubscriptionModel } from "../../lib/ai/subscription-models.js";
 const api = "/api/plugins/official.byok";
+function withInterfaces(
+  editing: any,
+  interfaces: UpstreamInterface[] | undefined,
+  oldToNew?: readonly number[],
+) {
+  return {
+    ...editing,
+    interfaces,
+    ...(editing.flow && oldToNew
+      ? { flow: remapWorkflowInterfaces(editing.flow, "", true, oldToNew) }
+      : {}),
+  };
+}
 function Page({ host }: { host: UIHost }) {
   const channels = useLoad<any[]>(() =>
     host.request(api + "/personal-channels"),
@@ -71,6 +85,13 @@ function Page({ host }: { host: UIHost }) {
     "antigravity",
     "grok",
   ].includes(editing?.protocol);
+  const hasInterfaceBindings = !!editing?.flow?.bindings?.some(
+    (binding: any) =>
+      /^interfaces\.\d+\./.test(binding.input) &&
+      editing.flow.nodes.some(
+        (node: any) => node.id === binding.target && node.type === "provider",
+      ),
+  );
   React.useEffect(() => {
     let cancelled = false;
     setModelCatalog([]);
@@ -718,19 +739,24 @@ function Page({ host }: { host: UIHost }) {
                 onChange={(e) => {
                   const p = presets.data?.find((p) => p.id === e.target.value);
                   if (p)
-                    setEditing({
-                      ...editing,
+                    setEditing((current: any) => ({
+                      ...withInterfaces(
+                        current,
+                        apiProtocols.includes(p.protocol)
+                          ? current.interfaces
+                          : undefined,
+                        apiProtocols.includes(p.protocol)
+                          ? undefined
+                          : current.interfaces?.map(() => -1),
+                      ),
                       preset: p.id,
                       protocol: p.protocol,
-                      interfaces: apiProtocols.includes(p.protocol)
-                        ? editing.interfaces
-                        : undefined,
                       baseUrl: p.baseUrl,
-                      name: editing.name || (p.id === "custom" ? "" : p.name),
+                      name: current.name || (p.id === "custom" ? "" : p.name),
                       key: "",
                       subscriptionAccountId: undefined,
                       authMode: p.protocol === "codex" ? "cli" : undefined,
-                    });
+                    }));
                 }}
               >
                 {presets.data?.map((p) => (
@@ -757,23 +783,28 @@ function Page({ host }: { host: UIHost }) {
               <Select
                 disabled={busy}
                 value={editing.protocol}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    protocol: e.target.value,
-                    interfaces: apiProtocols.includes(
-                      e.target.value as Protocol,
-                    )
-                      ? editing.interfaces
-                      : undefined,
+                onChange={(e) => {
+                  const protocol = e.target.value;
+                  const hasApiInterfaces = apiProtocols.includes(
+                    protocol as Protocol,
+                  );
+                  setEditing((current: any) => ({
+                    ...withInterfaces(
+                      current,
+                      hasApiInterfaces ? current.interfaces : undefined,
+                      hasApiInterfaces
+                        ? undefined
+                        : current.interfaces?.map(() => -1),
+                    ),
+                    protocol,
                     key: "",
                     subscriptionAccountId: undefined,
-                    authMode: e.target.value === "codex" ? "cli" : undefined,
+                    authMode: protocol === "codex" ? "cli" : undefined,
                     baseUrl:
-                      presets.data?.find((p) => p.protocol === e.target.value)
-                        ?.baseUrl ?? editing.baseUrl,
-                  })
-                }
+                      presets.data?.find((p) => p.protocol === protocol)
+                        ?.baseUrl ?? current.baseUrl,
+                  }));
+                }}
               >
                 {[
                   ...new Set([
@@ -897,8 +928,11 @@ function Page({ host }: { host: UIHost }) {
                 <UpstreamInterfaces
                   protocol={editing.protocol}
                   value={editing.interfaces}
-                  onChange={(interfaces) =>
-                    setEditing({ ...editing, interfaces })
+                  hasParameterBindings={hasInterfaceBindings}
+                  onChange={(interfaces, oldToNew) =>
+                    setEditing((current: any) =>
+                      withInterfaces(current, interfaces, oldToNew),
+                    )
                   }
                 />
               )}

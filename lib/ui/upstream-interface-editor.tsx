@@ -5,6 +5,7 @@ import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
 import { t as tr } from "./i18n.js";
 import { Select } from "./select.js";
 import { Checkbox } from "./checkbox.js";
+import { FlowParameter } from "./flow-parameter-port.js";
 
 export const interfaceProtocols: {
   id: Protocol;
@@ -180,92 +181,134 @@ export function IncomingInterfaces({
 export function UpstreamInterfaceEditor({
   route,
   update,
+  parameterPrefix,
+  boundInputs,
 }: {
   route: UpstreamInterface;
   update: (patch: Partial<UpstreamInterface>) => void;
+  parameterPrefix?: string;
+  boundInputs?: ReadonlySet<string>;
 }) {
   const target = interfaceProtocols.find(
     (option) => option.id === route.protocol,
   )!;
+  const parameter = (field: string, content: React.ReactNode) =>
+    parameterPrefix ? (
+      <FlowParameter field={`${parameterPrefix}.${field}`}>
+        {content}
+      </FlowParameter>
+    ) : (
+      content
+    );
   return (
     <div className="form-grid interface-route-options">
-      <label>
-        {tr("流式接口路径")}
-        <input
-          value={route.streamPath ?? ""}
-          placeholder={
-            route.protocol === "gemini"
-              ? "/v1beta/models/{model}:streamGenerateContent"
-              : route.path || target.path
-          }
-          onChange={(event) =>
-            update({ streamPath: event.target.value || undefined })
-          }
-        />
-      </label>
-      <label>
-        {tr("模型目录路径")}
-        <input
-          value={route.modelsPath ?? ""}
-          placeholder={
-            route.protocol === "gemini" ? "/v1beta/models" : "/v1/models"
-          }
-          onChange={(event) =>
-            update({ modelsPath: event.target.value || undefined })
-          }
-        />
-      </label>
-      <label>
-        {tr("认证方式")}
-        <Select
-          value={route.auth?.type ?? "default"}
-          onChange={(event) =>
-            update({
-              auth: {
-                type: event.target.value as NonNullable<
-                  UpstreamInterface["auth"]
-                >["type"],
-                name: route.auth?.name,
-              },
-            })
-          }
-        >
-          <option value="default">{tr("接口默认")}</option>
-          <option value="bearer">Bearer</option>
-          <option value="header">{tr("自定义请求头")}</option>
-          <option value="query">{tr("查询参数")}</option>
-          <option value="none">{tr("无认证")}</option>
-        </Select>
-      </label>
-      {["header", "query"].includes(route.auth?.type ?? "") && (
+      {parameter(
+        "streamPath",
         <label>
-          {tr("认证字段名")}
+          {tr("流式接口路径")}
           <input
-            required
-            value={route.auth?.name ?? ""}
+            value={route.streamPath ?? ""}
+            placeholder={
+              route.protocol === "gemini"
+                ? "/v1beta/models/{model}:streamGenerateContent"
+                : route.path || target.path
+            }
             onChange={(event) =>
-              update({ auth: { ...route.auth!, name: event.target.value } })
+              update({ streamPath: event.target.value || undefined })
             }
           />
-        </label>
+        </label>,
       )}
-      <JsonField
-        label={tr("请求头")}
-        value={route.headers}
-        onChange={(headers) => update({ headers })}
-      />
-      <JsonField
-        label={tr("请求参数")}
-        value={route.params}
-        onChange={(params) => update({ params })}
-      />
-      {["openai-chat", "openai-responses"].includes(route.protocol) && (
+      {parameter(
+        "modelsPath",
+        <label>
+          {tr("模型目录路径")}
+          <input
+            value={route.modelsPath ?? ""}
+            placeholder={
+              route.protocol === "gemini" ? "/v1beta/models" : "/v1/models"
+            }
+            onChange={(event) =>
+              update({ modelsPath: event.target.value || undefined })
+            }
+          />
+        </label>,
+      )}
+      {parameter(
+        "auth.type",
+        <label>
+          {tr("认证方式")}
+          <Select
+            value={route.auth?.type ?? "default"}
+            onChange={(event) =>
+              update({
+                auth: {
+                  type: event.target.value as NonNullable<
+                    UpstreamInterface["auth"]
+                  >["type"],
+                  name: route.auth?.name,
+                },
+              })
+            }
+          >
+            <option value="default">{tr("接口默认")}</option>
+            <option value="bearer">Bearer</option>
+            <option value="header">{tr("自定义请求头")}</option>
+            <option value="query">{tr("查询参数")}</option>
+            <option value="none">{tr("无认证")}</option>
+          </Select>
+        </label>,
+      )}
+      {(["header", "query"].includes(route.auth?.type ?? "") ||
+        (!!parameterPrefix &&
+          (boundInputs?.has(`${parameterPrefix}.auth.type`) ||
+            boundInputs?.has(`${parameterPrefix}.auth.name`)))) &&
+        parameter(
+          "auth.name",
+          <label>
+            {tr("认证字段名")}
+            <input
+              required={["header", "query"].includes(route.auth?.type ?? "")}
+              value={route.auth?.name ?? ""}
+              onChange={(event) =>
+                update({
+                  auth: {
+                    type: route.auth?.type ?? "default",
+                    name: event.target.value,
+                  },
+                })
+              }
+            />
+          </label>,
+        )}
+      {parameter(
+        "headers",
         <JsonField
-          label={tr("媒体接口路径")}
-          value={route.mediaPaths}
-          onChange={(mediaPaths) => update({ mediaPaths })}
-        />
+          label={tr("请求头")}
+          value={route.headers}
+          onChange={(headers) => update({ headers })}
+        />,
       )}
+      {parameter(
+        "params",
+        <JsonField
+          label={tr("请求参数")}
+          value={route.params}
+          onChange={(params) => update({ params })}
+        />,
+      )}
+      {(["openai-chat", "openai-responses"].includes(route.protocol) ||
+        (!!parameterPrefix &&
+          (boundInputs?.has(`${parameterPrefix}.protocol`) ||
+            boundInputs?.has(`${parameterPrefix}.mediaPaths`)))) &&
+        parameter(
+          "mediaPaths",
+          <JsonField
+            label={tr("媒体接口路径")}
+            value={route.mediaPaths}
+            onChange={(mediaPaths) => update({ mediaPaths })}
+          />,
+        )}
     </div>
   );
 }

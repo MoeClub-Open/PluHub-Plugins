@@ -78,6 +78,7 @@ export function installPriceQuote(host: Host) {
           purpose: "quote",
           operation,
           model: selected.routeId ?? selected.id,
+          requestedModel: model,
           ...channels,
           channelId: selected.channelId,
           principalId: ctx.principal!.id,

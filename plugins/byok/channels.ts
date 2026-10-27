@@ -23,6 +23,7 @@ import { tokenPrice, newApiPrices } from "../../lib/ai/channel-pricing.js";
 import { defaultChannelFlow } from "../../lib/ai/channel-config.js";
 import {
   compileWorkflow,
+  resolveWorkflowStatic,
   runWorkflow,
   checkProtocolConversion,
   requireIngressProtocol,
@@ -113,9 +114,29 @@ export function installPersonalChannels(
     if (publicOnly) assertPublicUrl(url);
     return { baseUrl: url.href.replace(/\/$/, ""), publicOnly };
   }
+  function personalInterfaces(value: unknown, protocol: string) {
+    const interfaces = validateInterfaces(value);
+    if (interfaces) {
+      if (Object.hasOwn(subscriptionDefaults, protocol))
+        throw new HostError(
+          "invalid_interfaces",
+          "订阅授权不支持自定义 API 接口",
+        );
+      for (const route of interfaces)
+        if (!host.hasCapability("ai.upstream." + route.protocol + "@1"))
+          throw new HostError(
+            "adapter_unavailable",
+            "接口对应的上游适配器未安装",
+            503,
+          );
+    }
+    return interfaces;
+  }
   function validateFlow(
     value: unknown,
     models: Record<string, Model>,
+    interfaces: UpstreamInterface[] | undefined,
+    protocol: string,
   ): ChannelWorkflow {
     const flow = structuredClone(
       value ?? defaultChannelFlow(),
@@ -123,11 +144,28 @@ export function installPersonalChannels(
     if (!flow || typeof flow !== "object" || !Array.isArray(flow.nodes))
       throw new HostError("invalid_workflow", "无效的渠道流程");
     for (const node of flow.nodes) {
+      if (node.type === "provider" && (node.upstream || node.interfaces))
+        throw new HostError(
+          "invalid_workflow",
+          "个人流程的上游和接口由渠道配置提供",
+        );
+      if (
+        node.type === "value" &&
+        (node.valueType === "secret" || node.secretRef !== undefined)
+      )
+        throw new HostError(
+          "invalid_workflow",
+          "个人渠道使用渠道中加密保存的凭据",
+        );
+    }
+    const resolved = resolveWorkflowStatic(flow, interfaces, true);
+    for (const node of resolved.nodes) {
       if (typeof node?.id !== "string" || node.id.length > 128)
         throw new HostError("invalid_workflow", "无效节点 ID");
       switch (node.type) {
         case "start":
         case "protocol":
+        case "value":
           break;
         case "provider":
           if (
@@ -139,6 +177,7 @@ export function installPersonalChannels(
               "invalid_workflow",
               "个人流程的上游由渠道配置提供，节点模型必须在渠道模型列表中",
             );
+          personalInterfaces(node.interfaces, protocol);
           break;
         case "platform":
           requiredString(node.groupId, "groupId", 128);
@@ -154,9 +193,13 @@ export function installPersonalChannels(
           break;
         case "condition":
           if (
-            !["hasTools", "stream", "textLengthAbove", "protocol"].includes(
-              node.test,
-            ) ||
+            ![
+              "hasTools",
+              "stream",
+              "textLengthAbove",
+              "protocol",
+              "model",
+            ].includes(node.test) ||
             (node.test === "textLengthAbove" &&
               (!Number.isSafeInteger(node.value) || node.value! < 0))
           )
@@ -214,7 +257,7 @@ export function installPersonalChannels(
           throw new HostError("invalid_workflow", "个人渠道暂不支持此节点");
       }
     }
-    compileWorkflow(flow);
+    compileWorkflow(flow, interfaces, true);
     return flow;
   }
   function settings(body: any): Settings {
@@ -229,21 +272,7 @@ export function installPersonalChannels(
       !host.hasCapability(`ai.subscription.${body.protocol}@1`)
     )
       throw new HostError("adapter_unavailable", "请先安装订阅账号插件", 503);
-    const interfaces = validateInterfaces(body.interfaces);
-    if (interfaces) {
-      if (subscription)
-        throw new HostError(
-          "invalid_interfaces",
-          "订阅授权不支持自定义 API 接口",
-        );
-      for (const route of interfaces)
-        if (!host.hasCapability("ai.upstream." + route.protocol + "@1"))
-          throw new HostError(
-            "adapter_unavailable",
-            "接口对应的上游适配器未安装",
-            503,
-          );
-    }
+    const interfaces = personalInterfaces(body.interfaces, body.protocol);
     const defaultUrl = subscription
       ? subscriptionDefaults[body.protocol as SubscriptionKind].baseUrl
       : undefined;
@@ -306,7 +335,7 @@ export function installPersonalChannels(
       baseUrl: base.baseUrl,
       interfaces,
       models,
-      flow: validateFlow(body.flow, models),
+      flow: validateFlow(body.flow, models, interfaces, body.protocol),
       ...(subscription
         ? {
             subscriptionAccountId: requiredString(
@@ -531,11 +560,16 @@ export function installPersonalChannels(
         if (!channelPresets.some((p) => p.id === preset))
           throw new HostError("invalid_preset", "未知渠道预设");
         const id = previous?.id ?? "personal:" + randomUUID();
-        if (config.flow.nodes.some((node) => node.type === "platform")) {
+        const resolved = resolveWorkflowStatic(
+          config.flow,
+          config.interfaces,
+          true,
+        );
+        if (resolved.nodes.some((node) => node.type === "platform")) {
           const groups = await host.call<{ id: string }[]>("ai.groups@1", {
             userId,
           });
-          for (const node of config.flow.nodes)
+          for (const node of resolved.nodes)
             if (
               node.type === "platform" &&
               !groups.some((group) => group.id === node.groupId)
@@ -775,13 +809,16 @@ export function installPersonalChannels(
         body.ingressProtocol ?? "openai-chat",
       );
       const interfaces = Object.hasOwn(body, "interfaces")
-        ? validateInterfaces(
+        ? personalInterfaces(
             body.interfaces === null ? undefined : body.interfaces,
+            config.protocol,
           )
         : config.interfaces;
       const result = runWorkflow(
         row.id,
-        body.flow ? validateFlow(body.flow, config.models) : config.flow,
+        body.flow
+          ? validateFlow(body.flow, config.models, interfaces, config.protocol)
+          : config.flow,
         body.request,
         ctx.signal,
         {
@@ -789,12 +826,12 @@ export function installPersonalChannels(
           requestedModel: body.request.model,
           mappedModel:
             config.models[body.request.model]?.model ?? body.request.model,
+          personalInterfaces: interfaces,
+          personal: true,
         },
       );
       if (result.provider) {
-        const node = (body.flow ?? config.flow).nodes.find(
-          (node: any) => node.id === result.providerId,
-        );
+        const node = result.providerNode;
         const model =
           (node?.type === "provider" ? node.model : undefined) ||
           config.models[body.request?.model]?.model ||
@@ -803,13 +840,17 @@ export function installPersonalChannels(
         checkProtocolConversion(
           ingressProtocol,
           resolveInterface(
-            { protocol: config.protocol, interfaces },
+            {
+              protocol: config.protocol,
+              interfaces: node?.interfaces ?? interfaces,
+            },
             ingressProtocol,
             model,
           ).protocol,
           result.protocolPolicy,
         );
       }
+      delete result.providerNode;
       return json(result);
     },
   });

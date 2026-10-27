@@ -47,6 +47,9 @@ export function removeFlowNodes(
   const removed = new Set(ids.filter((id) => id !== flow.entry));
   return {
     ...flow,
+    bindings: flow.bindings?.filter(
+      (edge) => !removed.has(edge.source) && !removed.has(edge.target),
+    ),
     layout: Object.fromEntries(
       Object.entries(flow.layout ?? {}).filter(([id]) => !removed.has(id)),
     ),
@@ -73,6 +76,9 @@ export function copyFlowSelection(
   const selected = new Set(ids.filter((id) => id !== flow.entry));
   const positions = workflowNodePositions(flow);
   return {
+    bindings: flow.bindings?.filter(
+      (edge) => selected.has(edge.source) && selected.has(edge.target),
+    ),
     nodes: structuredClone(
       flow.nodes.filter((node) => selected.has(node.id)),
     ).map(
@@ -125,6 +131,14 @@ export function pasteFlowSelection(
     ids: [...ids.values()],
     flow: {
       ...flow,
+      bindings: [
+        ...(flow.bindings ?? []),
+        ...(selection.bindings ?? []).map((edge) => ({
+          ...edge,
+          source: ids.get(edge.source)!,
+          target: ids.get(edge.target)!,
+        })),
+      ],
       nodes: [
         ...flow.nodes,
         ...structuredClone(selection.nodes).map(

@@ -24,6 +24,7 @@ import {
   workflowNodeLabels as labels,
 } from "./channel-flow-canvas.js";
 import { workflowNodePositions } from "./channel-graph-operations.js";
+import { remapWorkflowInterfaces } from "./channel-interface-bindings.js";
 import { isFlowTextInput } from "./use-flow-clipboard.js";
 import { defaultChannelFlow } from "../ai/channel-config.js";
 import { useUnsavedChanges } from "./unsaved-changes.js";
@@ -161,7 +162,21 @@ export function ChannelGraphEditor({
   const setPriority = (priority: number) => change({ priority });
   const setPersonalInterfaces = (
     personalInterfaces: UpstreamInterface[] | undefined,
-  ) => change({ personalInterfaces });
+    remap?: readonly number[],
+  ) =>
+    change({
+      personalInterfaces,
+      ...(remap && currentDraft.current
+        ? {
+            flow: remapWorkflowInterfaces(
+              currentDraft.current.flow,
+              "",
+              true,
+              remap,
+            ),
+          }
+        : {}),
+    });
   const update = (flow: ChannelWorkflow) => change({ flow });
   React.useEffect(() => {
     setPreview(undefined);
@@ -186,35 +201,37 @@ export function ChannelGraphEditor({
       key = (type + n++) as typeof key;
     const next = "";
     const extra =
-      type === "platform"
-        ? { groupId: platformGroups.data?.[0]?.id ?? "" }
-        : type === "provider"
-          ? {}
-          : type === "routing"
-            ? {
-                profile:
-                  (loaded.data?.references?.routingProfiles ?? [])[0] ??
-                  "$model",
-              }
-            : type === "protocol"
+      type === "value"
+        ? { valueType: "integer", value: 1 }
+        : type === "platform"
+          ? { groupId: platformGroups.data?.[0]?.id ?? "" }
+          : type === "provider"
+            ? {}
+            : type === "routing"
               ? {
-                  next,
-                  allow: ingressOptions.map((p) => p.value),
-                  conversion: "auto",
+                  profile:
+                    (loaded.data?.references?.routingProfiles ?? [])[0] ??
+                    "$model",
                 }
-              : type === "condition"
-                ? { test: "hasTools", yes: next, no: next }
-                : type === "prompt"
-                  ? { next, text: "请准确、简洁地回答。" }
-                  : type === "reasoning"
-                    ? { next, effort: "medium" }
-                    : type === "maxTokens"
-                      ? { next, limit: 1024 }
-                      : type === "rateLimit"
-                        ? { next, rule: { rpm: 60 } }
-                        : type === "tps"
-                          ? { next, rate: 30, tokenizer: "o200k_base" }
-                          : { target: targets[0] ?? "", mode: "implicit" };
+              : type === "protocol"
+                ? {
+                    next,
+                    allow: ingressOptions.map((p) => p.value),
+                    conversion: "auto",
+                  }
+                : type === "condition"
+                  ? { test: "hasTools", yes: next, no: next }
+                  : type === "prompt"
+                    ? { next, text: "请准确、简洁地回答。" }
+                    : type === "reasoning"
+                      ? { next, effort: "medium" }
+                      : type === "maxTokens"
+                        ? { next, limit: 1024 }
+                        : type === "rateLimit"
+                          ? { next, rule: { rpm: 60 } }
+                          : type === "tps"
+                            ? { next, rate: 30, tokenizer: "o200k_base" }
+                            : { target: targets[0] ?? "", mode: "implicit" };
     const positions = workflowNodePositions(flow);
     const anchorPoint = positions.get(selected);
     const point = position ?? {
@@ -275,7 +292,7 @@ export function ChannelGraphEditor({
     setBusy(true);
     setMessage("");
     try {
-      compileWorkflow(flow);
+      compileWorkflow(flow, personalInterfaces, personal);
       if (personal) {
         await host.request("/api/plugins/official.byok/personal-channels", {
           method: "PUT",
@@ -320,7 +337,7 @@ export function ChannelGraphEditor({
     setBusy(true);
     setMessage("");
     try {
-      compileWorkflow(flow);
+      compileWorkflow(flow, personalInterfaces, personal);
       setPreview(
         await host.request(
           personal
@@ -534,6 +551,7 @@ export function ChannelGraphEditor({
               invalidNodes={invalidNodes}
               flow={flow}
               channel={channel}
+              personalInterfaces={personalInterfaces}
               selected={selected}
               personal={personal}
               select={select}
@@ -558,19 +576,54 @@ export function ChannelGraphEditor({
                         channel,
                         personalInterfaces,
                         setPersonalInterfaces,
+                        boundInputs: new Set(
+                          (flow.bindings ?? [])
+                            .filter((binding) => binding.target === id)
+                            .map((binding) => binding.input),
+                        ),
+                        hasInterfaceBindings: (flow.bindings ?? []).some(
+                          (binding) =>
+                            binding.input.startsWith(
+                              personal ? "interfaces." : "upstream.interfaces.",
+                            ) &&
+                            (personal
+                              ? flow.nodes.some(
+                                  (node) =>
+                                    node.id === binding.target &&
+                                    node.type === "provider",
+                                )
+                              : binding.target === id),
+                        ),
+                        sourceHasBindings: (flow.bindings ?? []).some(
+                          (binding) =>
+                            binding.source === id || binding.target === id,
+                        ),
                         subscriptionAccounts,
                         targets,
                         references: loaded.data?.references,
                         onPanel: setPanel,
                       }}
-                      change={(patch) =>
-                        update({
-                          ...flow,
-                          nodes: flow.nodes.map((n) =>
-                            n.id === id ? { ...n, ...patch } : n,
+                      change={(patch, interfaceRemap) => {
+                        const latest = currentDraft.current?.flow ?? flow;
+                        const updatedNode = {
+                          ...latest.nodes.find((n) => n.id === id)!,
+                          ...patch,
+                        } as WorkflowNode;
+                        let next = {
+                          ...latest,
+                          nodes: latest.nodes.map((n) =>
+                            n.id === id ? updatedNode : n,
                           ),
-                        })
-                      }
+                        };
+                        if (interfaceRemap)
+                          next = remapWorkflowInterfaces(
+                            next,
+                            id,
+                            false,
+                            interfaceRemap,
+                          );
+                        update(next);
+                      }}
                     />
                   )
                 );

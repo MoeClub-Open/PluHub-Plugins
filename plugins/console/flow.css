@@ -72,8 +72,7 @@
 }
 .flow-node-settings {
   padding: 0 12px 10px;
-  max-height: 520px;
-  overflow: auto;
+  overflow: visible;
   font-size: 12px;
 }
 .flow-node-settings label {
@@ -104,6 +103,9 @@
 }
 .flow-node-settings .upstream-interfaces {
   margin: 8px 0;
+}
+.flow-node-settings .interface-route-grid {
+  grid-template-columns: minmax(0, 1fr);
 }
 .flow-port-label {
   position: absolute;
@@ -148,4 +150,68 @@
 }
 .flow-node:has(.flow-port-label) {
   min-height: 92px;
+}
+
+.flow-parameter {
+  position: relative;
+  min-width: 0;
+  --flow-param-color: var(--muted);
+}
+.flow-node-settings .flow-parameter > fieldset.flow-parameter-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.flow-parameter-fields:disabled {
+  opacity: 0.65;
+}
+.flow-parameter-type {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  font-size: 10px;
+  color: var(--flow-param-color);
+  pointer-events: none;
+}
+.flow-node .react-flow__handle.flow-parameter-handle {
+  top: 15px;
+  left: -19px;
+  border-color: var(--flow-param-color);
+  background: var(--surface);
+}
+.flow-data-ports {
+  display: grid;
+  gap: 3px;
+  padding: 5px 12px 8px;
+  font-size: 11px;
+}
+.flow-data-port {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  color: var(--muted);
+}
+.flow-data-port span:last-child {
+  color: var(--flow-param-color);
+  font-size: 10px;
+}
+.flow-node .react-flow__handle.flow-data-handle {
+  top: 50%;
+  border-color: var(--flow-param-color);
+  background: var(--surface);
+}
+.flow-node .flow-data-handle.react-flow__handle-left {
+  left: -12px;
+}
+.flow-node .flow-data-handle.react-flow__handle-right {
+  right: -12px;
+}
+.channel-flow-canvas
+  .react-flow__edge.flow-value-edge.selected
+  .react-flow__edge-path {
+  stroke-width: 4px !important;
 }

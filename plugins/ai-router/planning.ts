@@ -17,7 +17,7 @@ export async function planRoute(
     !input.channelIds.includes(input.channelId)
   )
     throw new HostError("channel_forbidden", "渠道不在密钥授权范围内", 403);
-  const requestedModel = input.model;
+  const requestedModel = input.requestedModel ?? input.model;
   const catalog = await readCatalog(
     host,
     {
@@ -28,16 +28,33 @@ export async function planRoute(
     },
     signal,
   );
-  const matches = catalog.filter(
-    (model) =>
-      (model.id === input.model || model.routeId === input.model) &&
-      (model.operations ?? ["chat"]).includes(
-        input.request?.operation?.kind ??
-          (input.purpose === "quote" ? input.operation : undefined) ??
-          "chat",
-      ),
+  const publicMatches = catalog.filter((model) => model.id === input.model);
+  const named =
+    input.requestedModel !== undefined
+      ? catalog.filter(
+          (model) =>
+            model.id === input.requestedModel &&
+            (model.routeId ?? model.id) === input.model,
+        )
+      : publicMatches.length
+        ? publicMatches
+        : catalog.filter((model) => model.routeId === input.model);
+  const matches = named.filter((model) =>
+    (model.operations ?? ["chat"]).includes(
+      input.request?.operation?.kind ??
+        (input.purpose === "quote" ? input.operation : undefined) ??
+        "chat",
+    ),
   );
   if (!matches.length) {
+    if (named.length)
+      throw new HostError(
+        "operation_not_supported",
+        "Model does not support this endpoint",
+        400,
+      );
+    if (input.requestedModel !== undefined)
+      throw new HostError("model_not_found", "当前使用范围内没有此模型", 404);
     if (input.channelIds?.length || input.groupId)
       throw new HostError("model_not_found", "绑定渠道中没有此模型", 404);
     return (await resolveRoute(host, input, signal, requestedModel)).plan;

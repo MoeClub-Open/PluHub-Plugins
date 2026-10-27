@@ -1,5 +1,8 @@
 import { HostError } from "@pluhub/sdk";
 import { modelPatternMatches } from "./model-pattern.js";
+import { validateInterfaces } from "./upstream-interfaces.js";
+import { resolveWorkflowBindings } from "./workflow-bindings.js";
+export { resolveWorkflowStatic } from "./workflow-bindings.js";
 import type { AIRequest, Protocol } from "@pluhub/contracts/ai";
 import type {
   ChannelWorkflow,
@@ -57,13 +60,23 @@ export function checkProtocolConversion(
       400,
     );
 }
-export function compileWorkflow(flow: ChannelWorkflow) {
+export function compileWorkflow(
+  flow: ChannelWorkflow,
+  personalInterfaces?: import("@pluhub/contracts/ai").UpstreamInterface[],
+  personal = false,
+) {
   if (
     !Array.isArray(flow.nodes) ||
     !flow.nodes.length ||
     flow.nodes.length > 64
   )
     bad("流程需要 1–64 个节点");
+  flow = resolveWorkflowBindings(
+    flow,
+    { personalInterfaces, personal },
+    undefined,
+    bad,
+  );
   const nodes = new Map<string, WorkflowNode>();
   for (const raw of flow.nodes) {
     const node = structuredClone(raw);
@@ -121,6 +134,121 @@ export function compileWorkflow(flow: ChannelWorkflow) {
       !ingressProtocols.includes(node.protocol as Protocol)
     )
       bad("协议分支需要指定有效的入口协议", [node.id]);
+    if (
+      node.type === "condition" &&
+      !["hasTools", "stream", "textLengthAbove", "protocol", "model"].includes(
+        node.test,
+      )
+    )
+      bad("无效的分支条件", [node.id]);
+    if (
+      node.type === "condition" &&
+      node.value !== undefined &&
+      (!Number.isSafeInteger(node.value) ||
+        node.value < 0 ||
+        node.value > 10_000_000)
+    )
+      bad("字符数阈值无效", [node.id]);
+    if (
+      node.type === "condition" &&
+      node.modelSource !== undefined &&
+      !["requested", "mapped"].includes(node.modelSource)
+    )
+      bad("无效的模型比较对象", [node.id]);
+    if (
+      node.type === "condition" &&
+      node.protocol !== undefined &&
+      !ingressProtocols.includes(node.protocol)
+    )
+      bad("协议分支需要指定有效的入口协议", [node.id]);
+    if (
+      node.type === "reasoning" &&
+      !["none", "minimal", "low", "medium", "high", "xhigh", "max"].includes(
+        node.effort,
+      )
+    )
+      bad("无效的思考强度", [node.id]);
+    if (
+      node.type === "prompt" &&
+      (typeof node.text !== "string" ||
+        !node.text.length ||
+        node.text.length > 16384)
+    )
+      bad("请输入有效的系统提示词", [node.id]);
+    if (
+      node.type === "maxTokens" &&
+      (!Number.isSafeInteger(node.limit) ||
+        node.limit < 1 ||
+        node.limit > 1_000_000)
+    )
+      bad("无效的输出预算", [node.id]);
+    if (
+      node.type === "upstream" &&
+      (typeof node.target !== "string" ||
+        !node.target.trim() ||
+        node.target.length > 256 ||
+        !["implicit", "explicit"].includes(node.mode))
+    )
+      bad("请选择有效的目标模型和重定向方式", [node.id]);
+    if (
+      node.type === "routing" &&
+      (typeof node.profile !== "string" ||
+        !node.profile.trim() ||
+        node.profile.length > 128)
+    )
+      bad("请选择有效的路由策略", [node.id]);
+    if (node.type === "provider") {
+      if (
+        node.model !== undefined &&
+        (typeof node.model !== "string" ||
+          !node.model.trim() ||
+          node.model.length > 256)
+      )
+        bad("上游模型 ID 无效", [node.id]);
+      const upstream = node.upstream;
+      if (upstream) {
+        if (
+          ![
+            "openai-chat",
+            "openai-responses",
+            "anthropic",
+            "gemini",
+            "codex",
+            "claude-subscription",
+            "antigravity",
+            "grok",
+          ].includes(upstream.protocol)
+        )
+          bad("无效的上游协议", [node.id]);
+        if (
+          [upstream.accountId, upstream.projectId].some(
+            (value) =>
+              value !== undefined &&
+              (typeof value !== "string" || value.length > 512),
+          )
+        )
+          bad("无效的上游账号或项目", [node.id]);
+        if (
+          upstream.authMode !== undefined &&
+          !["siwc", "cli"].includes(upstream.authMode)
+        )
+          bad("无效的订阅接入方式", [node.id]);
+        if (
+          upstream.subscriptionAccountIds &&
+          (!upstream.subscriptionAccountIds.length ||
+            upstream.subscriptionAccountIds.length > 100 ||
+            new Set(upstream.subscriptionAccountIds).size !==
+              upstream.subscriptionAccountIds.length ||
+            upstream.subscriptionAccountIds.some(
+              (id) => !id || id.length > 256,
+            ))
+        )
+          bad("无效的订阅账号", [node.id]);
+        if (upstream.interfaces !== undefined)
+          validateInterfaces(upstream.interfaces);
+      }
+      if (node.interfaces !== undefined) validateInterfaces(node.interfaces);
+    }
     if (!node.id || nodes.has(node.id))
       bad("节点标识不能为空或重复", [node.id]);
     if (
@@ -147,6 +275,7 @@ export function compileWorkflow(flow: ChannelWorkflow) {
     if (!id) bad("节点出口尚未连接", source ? [source] : []);
     const node = nodes.get(id);
     if (!node) bad("连线指向不存在的节点", source ? [source] : [id]);
+    if (node!.type === "value") bad("数据节点不能连接到请求路径", [id]);
     visiting.add(id);
     if (node!.type === "provider" && node!.fallback) {
       if (nodes.get(node!.fallback)?.type !== "platform")
@@ -162,16 +291,23 @@ export function compileWorkflow(flow: ChannelWorkflow) {
       if (node!.type === "condition") {
         visit(node!.yes, id);
         visit(node!.no, id);
-      } else visit(node!.next, id);
+      } else if ("next" in node!) visit(node.next, id);
+      else bad("数据节点不能连接到请求路径", [id]);
     }
     visiting.delete(id);
     done.add(id);
   }
   visit(flow.entry);
-  if (done.size !== nodes.size)
+  if (
+    [...nodes.values()].some(
+      (node) => node.type !== "value" && !done.has(node.id),
+    )
+  )
     bad(
       "以下节点未接入请求路径，请连接或删除",
-      [...nodes.keys()].filter((id) => !done.has(id)),
+      [...nodes.values()]
+        .filter((node) => node.type !== "value" && !done.has(node.id))
+        .map((node) => node.id),
     );
   return { entry: flow.entry, nodes };
 }
@@ -184,9 +320,16 @@ export function runWorkflow(
     ingressProtocol?: Protocol;
     requestedModel?: string;
     mappedModel?: string;
+    personalInterfaces?: import("@pluhub/contracts/ai").UpstreamInterface[];
+    personal?: boolean;
   } = {},
 ): WorkflowResult {
-  const graph = compileWorkflow(flow),
+  const effective = resolveWorkflowBindings(flow, context, input, bad);
+  const graph = compileWorkflow(
+      effective,
+      context.personalInterfaces,
+      context.personal,
+    ),
     request = structuredClone(input);
   const trace = { profile, nodes: [] as string[] };
   let id = graph.entry;
@@ -197,6 +340,7 @@ export function runWorkflow(
   for (let steps = 0; steps < 64; steps++) {
     signal.throwIfAborted();
     const node = graph.nodes.get(id)!;
+    if (node.type === "value") return bad("数据节点不能连接到请求路径", [id]);
     trace.nodes.push(id);
     if (
       request.operation &&
@@ -225,6 +369,7 @@ export function runWorkflow(
         target: "",
         provider: true,
         providerId: node.id,
+        providerNode: node,
         ...(node.fallback
           ? {
               fallback: (() => {

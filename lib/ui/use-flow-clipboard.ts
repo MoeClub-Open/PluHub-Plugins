@@ -5,6 +5,27 @@ import {
   copyFlowSelection,
   pasteFlowSelection,
 } from "./channel-graph-operations.js";
+import { t as tr } from "./i18n.js";
+
+function removeUnstoredSecrets(
+  selection: ReturnType<typeof copyFlowSelection>,
+) {
+  let removed = false;
+  function safe(value: string | string[] | undefined) {
+    if (!value) return value;
+    const items = Array.isArray(value) ? value : [value];
+    const refs = items.filter((item) => /^(secret:|local:|env:)/.test(item));
+    if (refs.length !== items.length) removed = true;
+    return Array.isArray(value) ? refs : refs[0];
+  }
+  for (const node of selection.nodes) {
+    if (node.type === "value" && node.valueType === "secret")
+      node.secretRef = safe(node.secretRef);
+    if (node.type === "provider" && node.upstream)
+      node.upstream.keyRef = safe(node.upstream.keyRef);
+  }
+  return removed;
+}
 
 export const isFlowTextInput = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -31,6 +52,7 @@ export function useFlowClipboard<N extends Node>({
 }) {
   const pointer = React.useRef<{ x: number; y: number } | undefined>(undefined);
   const pasteCount = React.useRef(0);
+  const [warning, setWarning] = React.useState("");
   const currentFlow = () => ({
     ...flow,
     layout: Object.fromEntries(
@@ -62,10 +84,17 @@ export function useFlowClipboard<N extends Node>({
       y: Math.min(...points.map((p) => p.y)) + 80,
     });
   }
-  function copy(event: React.ClipboardEvent) {
+  function copy(event: React.ClipboardEvent, cut = false) {
     if (isFlowTextInput(event.target)) return false;
     const selection = copyFlowSelection(currentFlow(), selectedIds());
     if (!selection.nodes.length) return false;
+    const removed = removeUnstoredSecrets(selection);
+    if (removed && cut) {
+      event.preventDefault();
+      setWarning(tr("请先保存密钥，再剪切节点"));
+      return false;
+    }
+    setWarning(removed ? tr("未保存的密钥不会复制") : "");
     event.clipboardData.setData(
       "text/plain",
       JSON.stringify({ kind: "pluhub-flow", ...selection }),
@@ -75,14 +104,17 @@ export function useFlowClipboard<N extends Node>({
   }
   return {
     duplicate,
+    warning,
     handlers: {
       onPointerMove: (event: React.PointerEvent) => {
         pointer.current = { x: event.clientX, y: event.clientY };
         pasteCount.current = 0;
       },
-      onCopy: copy,
+      onCopy: (event: React.ClipboardEvent) => {
+        copy(event);
+      },
       onCut: (event: React.ClipboardEvent) => {
-        if (!disabled && copy(event))
+        if (!disabled && copy(event, true))
           void graph.deleteElements({
             nodes: graph
               .getNodes()

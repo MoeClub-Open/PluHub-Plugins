@@ -42,3 +42,43 @@ it("deletes a selection without bypassing removed policy nodes or removing the e
   ]);
   expect(next.layout?.prompt).toBeUndefined();
 });
+
+it("copies only data links inside the selected subgraph and remaps their node IDs", () => {
+  const input: ChannelWorkflow = {
+    ...flow,
+    nodes: [
+      ...flow.nodes,
+      { id: "config", type: "value", valueType: "string", value: "example" },
+    ],
+    bindings: [
+      { source: "config", output: "value", target: "prompt", input: "text" },
+      { source: "config", output: "value", target: "call", input: "model" },
+    ],
+  };
+  expect(copyFlowSelection(input, ["prompt"]).bindings).toEqual([]);
+  const selection = copyFlowSelection(input, ["config", "prompt", "call"]);
+  const pasted = pasteFlowSelection(input, selection, { x: 200, y: 300 })!;
+  expect(pasted.flow.bindings).toEqual([
+    ...input.bindings!,
+    { source: "value", output: "value", target: "prompt1", input: "text" },
+    { source: "value", output: "value", target: "provider", input: "model" },
+  ]);
+});
+
+it("removes data links attached to deleted nodes while preserving other bindings", () => {
+  const input: ChannelWorkflow = {
+    ...flow,
+    nodes: [
+      ...flow.nodes,
+      { id: "config", type: "value", valueType: "string", value: "example" },
+    ],
+    bindings: [
+      { source: "config", output: "value", target: "prompt", input: "text" },
+      { source: "config", output: "value", target: "call", input: "model" },
+    ],
+  };
+  expect(removeFlowNodes(input, ["prompt"]).bindings).toEqual([
+    input.bindings![1],
+  ]);
+  expect(removeFlowNodes(input, ["config"]).bindings).toEqual([]);
+});

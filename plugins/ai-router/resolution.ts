@@ -24,6 +24,7 @@ import {
   runWorkflow,
   checkProtocolConversion,
 } from "../../lib/ai/channel-graph.js";
+import { resolveWorkflowBindings } from "../../lib/ai/workflow-bindings.js";
 
 export async function resolveRoute(
   host: Host,
@@ -161,12 +162,28 @@ export async function resolveRoute(
     let providerModel = route.model;
     let profile = upstream.protocol === "auto-router" ? route.model : undefined;
     if (upstream.flow) {
+      const workflowContext = {
+        ...input,
+        requestedModel,
+        mappedModel: route.model,
+        personal: !!input.channelId?.startsWith("personal:"),
+        personalInterfaces: upstream.interfaces,
+      };
       if (
         input.purpose === "quote" &&
         !input.request &&
-        upstream.flow.nodes.some(
-          (node) => node.type === "condition" && node.test !== "model",
-        )
+        (upstream.flow.bindings?.some(
+          (binding) =>
+            binding.source === upstream.flow!.entry &&
+            ["stream", "hasTools", "textLength"].includes(binding.output),
+        ) ||
+          resolveWorkflowBindings(
+            upstream.flow,
+            workflowContext,
+            prepared,
+          ).nodes.some(
+            (node) => node.type === "condition" && node.test !== "model",
+          ))
       )
         throw new HostError(
           "quote_request_required",
@@ -183,7 +200,7 @@ export async function resolveRoute(
         upstream.flow,
         prepared,
         signal,
-        { ...input, requestedModel, mappedModel: route.model },
+        workflowContext,
       );
       workflows.push(result.trace);
       requestLimits.push(...(result.requestLimits ?? []));
@@ -248,11 +265,13 @@ export async function resolveRoute(
       }
       if (result.provider) {
         providerNodeId = result.providerId;
-        const node = upstream.flow?.nodes.find(
-          (n) => n.id === result.providerId,
-        );
+        const node = result.providerNode;
         connection =
-          node?.type === "provider" && node.upstream ? node.upstream : upstream;
+          node?.type === "provider" && node.upstream
+            ? node.upstream
+            : node?.interfaces
+              ? { ...upstream, interfaces: node.interfaces }
+              : upstream;
         if (node?.type === "provider" && node.model) providerModel = node.model;
       } else if (result.routingProfile) {
         profile =

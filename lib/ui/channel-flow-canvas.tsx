@@ -9,13 +9,15 @@ import {
   useReactFlow,
   useNodesState,
   useEdgesState,
+  useUpdateNodeInternals,
+  useNodesInitialized,
   SelectionMode,
   type Node,
   type NodeProps,
   type Edge,
   type Connection,
 } from "@xyflow/react";
-import type { Upstream } from "@pluhub/contracts/ai";
+import type { Upstream, UpstreamInterface } from "@pluhub/contracts/ai";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
 import {
   ChevronDown,
@@ -33,9 +35,22 @@ import {
   removeFlowNodes,
 } from "./channel-graph-operations.js";
 import { isFlowTextInput, useFlowClipboard } from "./use-flow-clipboard.js";
+import {
+  workflowParameters,
+  workflowDataOutputs,
+  canBindWorkflowPorts,
+} from "../ai/workflow-parameters.js";
+import {
+  FlowParameterContext,
+  flowTypeColor,
+  flowTypeLabel,
+} from "./flow-parameter-port.js";
 export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   get start() {
     return tr("请求入口");
+  },
+  get value() {
+    return tr("参数值");
   },
   get provider() {
     return tr("调用上游");
@@ -78,6 +93,7 @@ type CanvasProps = {
   flow: ChannelWorkflow;
   selected: string;
   channel?: Upstream;
+  personalInterfaces?: UpstreamInterface[];
   personal: boolean;
   select: (id: string) => void;
   update: (flow: ChannelWorkflow) => void;
@@ -99,6 +115,8 @@ const NodeContext = React.createContext<{
   settings: (id: string) => React.ReactNode;
   remove: (id: string) => void;
   duplicate: (id: string) => void;
+  bindings: NonNullable<ChannelWorkflow["bindings"]>;
+  personalInterfaces?: UpstreamInterface[];
   disabled?: boolean;
 }>(null!);
 
@@ -107,107 +125,247 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
     { node } = data;
   const expanded = context.expanded.has(id);
   const expandable = node.type !== "start" || !context.personal;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const nodeElement = React.useRef<HTMLDivElement>(null);
+  const [visibleFields, setVisibleFields] =
+    React.useState<ReadonlySet<string>>();
+  const parameters = workflowParameters(
+    node,
+    context.personalInterfaces,
+    context.personal,
+  );
+  const dataOutputs = workflowDataOutputs(node);
+  const visibleInputs = parameters.filter((p) =>
+    context.bindings.some(
+      (edge) => edge.target === id && edge.input === p.path,
+    ),
+  );
+  const hiddenInputs = visibleInputs.filter(
+    (p) => !expanded || (visibleFields && !visibleFields.has(p.path)),
+  );
+  const signature = JSON.stringify([
+    parameters.map((p) => p.path),
+    dataOutputs.map((p) => p.path),
+    visibleInputs.map((p) => p.path),
+  ]);
+  React.useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, expanded, signature, updateNodeInternals]);
+  React.useLayoutEffect(() => {
+    const element = nodeElement.current;
+    if (!element) return;
+    let frame = 0;
+    const measure = () => {
+      const next = new Set(
+        [
+          ...element.querySelectorAll<HTMLElement>(
+            ".flow-parameter[data-flow-parameter]",
+          ),
+        ]
+          .filter((row) => row.getClientRects().length > 0)
+          .map((row) => row.dataset.flowParameter!),
+      );
+      setVisibleFields((previous) =>
+        previous &&
+        previous.size === next.size &&
+        [...next].every((field) => previous.has(field))
+          ? previous
+          : next,
+      );
+      updateNodeInternals(id);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    const mutation = new MutationObserver(schedule);
+    mutation.observe(element, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["hidden", "aria-expanded", "data-state"],
+    });
+    const resize = new ResizeObserver(schedule);
+    resize.observe(element);
+    element.addEventListener("scroll", schedule, true);
+    schedule();
+    return () => {
+      cancelAnimationFrame(frame);
+      mutation.disconnect();
+      resize.disconnect();
+      element.removeEventListener("scroll", schedule, true);
+    };
+  }, [id, expanded, signature, updateNodeInternals]);
   return (
-    <div
-      className={"flow-node" + (selected ? " is-selected" : "")}
-      style={
-        data.invalid
-          ? { outline: "2px solid var(--danger, #dc2626)" }
-          : undefined
-      }
+    <FlowParameterContext.Provider
+      value={{
+        personalInterfaces: context.personalInterfaces,
+        personal: context.personal,
+        visibleFields,
+      }}
     >
-      {node.type !== "start" && (
-        <Handle type="target" position={Position.Left} id="in" />
-      )}
       <div
-        className="flow-node-header"
-        onDoubleClick={expandable ? () => context.toggle(id) : undefined}
+        ref={nodeElement}
+        className={"flow-node" + (selected ? " is-selected" : "")}
+        style={
+          data.invalid
+            ? { outline: "2px solid var(--danger, #dc2626)" }
+            : undefined
+        }
       >
-        {expandable && (
-          <button
-            className="ghost icon-button nodrag"
-            type="button"
-            aria-label={tr(expanded ? "收起设置" : "展开设置")}
-            onClick={() => context.toggle(id)}
-          >
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
+        {node.type !== "start" && node.type !== "value" && (
+          <Handle type="target" position={Position.Left} id="in" />
         )}
-        <strong>{workflowNodeLabels[node.type]}</strong>
-        {node.type !== "start" && (
-          <>
-            <button
-              className="ghost icon-button nodrag"
-              type="button"
-              title={tr("复制节点") + " (Ctrl/Cmd+D)"}
-              aria-label={tr("复制节点")}
-              disabled={context.disabled}
-              onClick={() => context.duplicate(id)}
-            >
-              <Copy size={13} />
-            </button>
-            <button
-              className="ghost icon-button nodrag"
-              type="button"
-              title={tr("删除节点") + " (Delete)"}
-              aria-label={tr("删除节点")}
-              disabled={context.disabled}
-              onClick={() => context.remove(id)}
-            >
-              <Trash2 size={13} />
-            </button>
-          </>
-        )}
-      </div>
-      {!expanded && data.summary && (
-        <div className="flow-node-summary">{data.summary}</div>
-      )}
-      {expandable && expanded && (
-        <fieldset
-          disabled={context.disabled}
-          className="flow-node-settings nodrag nowheel"
-          style={{ border: 0, margin: 0, minWidth: 0 }}
+        <div
+          className="flow-node-header"
+          onDoubleClick={expandable ? () => context.toggle(id) : undefined}
         >
-          {context.settings(id)}
-        </fieldset>
-      )}
-      {outputs(node)
-        .filter((port) => port.field !== "fallback" || context.personal)
-        .map((port, index) => (
-          <React.Fragment key={port.field}>
-            {(node.type === "condition" || port.field === "fallback") && (
-              <span
-                className="flow-port-label"
-                style={{ top: 42 + index * 24 }}
+          {expandable && (
+            <button
+              className="ghost icon-button nodrag"
+              type="button"
+              aria-label={tr(expanded ? "收起设置" : "展开设置")}
+              onClick={() => context.toggle(id)}
+            >
+              {expanded ? (
+                <ChevronDown size={14} />
+              ) : (
+                <ChevronRight size={14} />
+              )}
+            </button>
+          )}
+          <strong>{workflowNodeLabels[node.type]}</strong>
+          {node.type !== "start" && (
+            <>
+              <button
+                className="ghost icon-button nodrag"
+                type="button"
+                title={tr("复制节点") + " (Ctrl/Cmd+D)"}
+                aria-label={tr("复制节点")}
+                disabled={context.disabled}
+                onClick={() => context.duplicate(id)}
               >
-                {tr(
-                  port.field === "fallback"
-                    ? "失败后"
-                    : port.field === "yes"
-                      ? "是"
-                      : "否",
-                )}
-              </span>
-            )}
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={port.field}
-              style={{
-                top:
-                  node.type === "condition" || port.field === "fallback"
-                    ? 48 + index * 24
-                    : 34,
-              }}
-            />
-          </React.Fragment>
-        ))}
-    </div>
+                <Copy size={13} />
+              </button>
+              <button
+                className="ghost icon-button nodrag"
+                type="button"
+                title={tr("删除节点") + " (Delete)"}
+                aria-label={tr("删除节点")}
+                disabled={context.disabled}
+                onClick={() => context.remove(id)}
+              >
+                <Trash2 size={13} />
+              </button>
+            </>
+          )}
+        </div>
+        {!expanded && data.summary && (
+          <div className="flow-node-summary">{data.summary}</div>
+        )}
+        {hiddenInputs.length > 0 && (
+          <div className="flow-data-ports">
+            {hiddenInputs.map((port) => (
+              <div
+                className="flow-data-port"
+                key={port.path}
+                style={
+                  {
+                    "--flow-param-color": flowTypeColor[port.type],
+                  } as React.CSSProperties
+                }
+              >
+                <Handle
+                  type="target"
+                  position={Position.Left}
+                  id={"param:" + port.path}
+                  className="flow-data-handle"
+                  title={tr(port.label) + " · " + flowTypeLabel(port.type)}
+                />
+                <span>{tr(port.label)}</span>
+                <span>{flowTypeLabel(port.type)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {expandable && expanded && (
+          <fieldset
+            disabled={context.disabled}
+            className="flow-node-settings nodrag nowheel"
+            style={{ border: 0, margin: 0, minWidth: 0 }}
+          >
+            {context.settings(id)}
+          </fieldset>
+        )}
+        {dataOutputs.length > 0 && (
+          <div className="flow-data-ports">
+            {dataOutputs.map((port) => (
+              <div
+                className="flow-data-port"
+                key={port.path}
+                style={
+                  {
+                    "--flow-param-color": flowTypeColor[port.type],
+                  } as React.CSSProperties
+                }
+              >
+                <span>{tr(port.label)}</span>
+                <span>{flowTypeLabel(port.type)}</span>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={"data:" + port.path}
+                  className="flow-data-handle"
+                  title={tr(port.label) + " · " + flowTypeLabel(port.type)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        {outputs(node)
+          .filter((port) => port.field !== "fallback" || context.personal)
+          .map((port, index) => (
+            <React.Fragment key={port.field}>
+              {(node.type === "condition" || port.field === "fallback") && (
+                <span
+                  className="flow-port-label"
+                  style={{ top: 42 + index * 24 }}
+                >
+                  {tr(
+                    port.field === "fallback"
+                      ? "失败后"
+                      : port.field === "yes"
+                        ? "是"
+                        : "否",
+                  )}
+                </span>
+              )}
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={port.field}
+                style={{
+                  top:
+                    node.type === "condition" || port.field === "fallback"
+                      ? 48 + index * 24
+                      : 34,
+                }}
+              />
+            </React.Fragment>
+          ))}
+      </div>
+    </FlowParameterContext.Provider>
   );
 }
 const nodeTypes = { channel: ChannelNode };
 function summary(node: WorkflowNode, channel?: Upstream) {
   switch (node.type) {
+    case "value":
+      return node.valueType === "secret"
+        ? tr("密钥")
+        : typeof node.value === "string"
+          ? node.value.slice(0, 60)
+          : (JSON.stringify(node.value) ?? "");
     case "provider":
       return node.upstream?.protocol ?? channel?.protocol ?? tr("尚未配置上游");
     case "protocol":
@@ -256,7 +414,7 @@ function summary(node: WorkflowNode, channel?: Upstream) {
   }
 }
 function graphEdges(flow: ChannelWorkflow): Edge[] {
-  return flow.nodes.flatMap((node) =>
+  const controls = flow.nodes.flatMap((node) =>
     outputs(node)
       .filter((port) => flow.nodes.some((item) => item.id === port.target))
       .map((port) => ({
@@ -268,10 +426,42 @@ function graphEdges(flow: ChannelWorkflow): Edge[] {
         type: "default",
       })),
   );
+  const data = (flow.bindings ?? []).flatMap((binding) => {
+    const source = flow.nodes.find((node) => node.id === binding.source);
+    const target = flow.nodes.find((node) => node.id === binding.target);
+    if (!source || !target) return [];
+    const port = workflowDataOutputs(source).find(
+      (item) => item.path === binding.output,
+    );
+    return [
+      {
+        id:
+          "binding:" +
+          JSON.stringify([
+            binding.source,
+            binding.output,
+            binding.target,
+            binding.input,
+          ]),
+        source: binding.source,
+        target: binding.target,
+        sourceHandle: "data:" + binding.output,
+        targetHandle: "param:" + binding.input,
+        type: "default",
+        className: "flow-value-edge",
+        style: port
+          ? { stroke: flowTypeColor[port.type], strokeWidth: 2 }
+          : undefined,
+      },
+    ];
+  });
+  return [...controls, ...data];
 }
 function Canvas(props: CanvasProps) {
   const { flow, channel, update, select } = props;
   const graph = useReactFlow<FlowNode>();
+  const initialized = useNodesInitialized();
+  const fitted = React.useRef(false);
   const container = React.useRef<HTMLDivElement>(null);
   const primary = React.useRef(props.selected);
   const pendingSelection = React.useRef<string[] | undefined>(undefined);
@@ -284,7 +474,9 @@ function Canvas(props: CanvasProps) {
       position: positions.get(node.id)!,
       data: {
         node,
-        summary: summary(node, channel),
+        summary: flow.bindings?.some((binding) => binding.target === node.id)
+          ? ""
+          : summary(node, channel),
         invalid: props.invalidNodes?.includes(node.id),
       },
       dragHandle: ".flow-node-header",
@@ -311,6 +503,12 @@ function Canvas(props: CanvasProps) {
           .map((n) => n.id),
       ),
   );
+  React.useEffect(() => {
+    if (initialized && !fitted.current) {
+      fitted.current = true;
+      void graph.fitView({ padding: 0.15, maxZoom: 1 });
+    }
+  }, [initialized, graph]);
   React.useEffect(() => {
     const requested =
       pendingSelection.current ??
@@ -351,6 +549,33 @@ function Canvas(props: CanvasProps) {
     if (props.disabled) return;
     if (!connection.source || !connection.target || !connection.sourceHandle)
       return;
+    if (
+      connection.sourceHandle.startsWith("data:") &&
+      connection.targetHandle?.startsWith("param:")
+    ) {
+      const bindings = (flow.bindings ?? []).filter(
+        (edge) =>
+          !old ||
+          edge.source !== old.source ||
+          edge.output !== old.sourceHandle?.slice(5) ||
+          edge.target !== old.target ||
+          edge.input !== old.targetHandle?.slice(6),
+      );
+      update({
+        ...flow,
+        layout: Object.fromEntries(positions),
+        bindings: [
+          ...bindings,
+          {
+            source: connection.source,
+            output: connection.sourceHandle.slice(5),
+            target: connection.target,
+            input: connection.targetHandle.slice(6),
+          },
+        ],
+      });
+      return;
+    }
     update({
       ...flow,
       layout: Object.fromEntries(positions),
@@ -376,13 +601,98 @@ function Canvas(props: CanvasProps) {
       !connection.source ||
       !connection.target ||
       connection.source === connection.target ||
-      connection.target === flow.entry
+      !connection.sourceHandle ||
+      !connection.targetHandle
     )
       return false;
     const source = flow.nodes.find((node) => node.id === connection.source);
-    const port =
-      source &&
-      outputs(source).find((port) => port.field === connection.sourceHandle);
+    const target = flow.nodes.find((node) => node.id === connection.target);
+    if (!source || !target) return false;
+    const dataOutput = connection.sourceHandle.startsWith("data:");
+    const dataInput = connection.targetHandle.startsWith("param:");
+    if (dataOutput || dataInput) {
+      if (
+        !dataOutput ||
+        !dataInput ||
+        (reconnecting.current &&
+          !reconnecting.current.sourceHandle?.startsWith("data:"))
+      )
+        return false;
+      const output = connection.sourceHandle.slice(5),
+        input = connection.targetHandle.slice(6);
+      if (
+        !canBindWorkflowPorts(
+          source,
+          output,
+          target,
+          input,
+          props.personalInterfaces,
+          props.personal,
+        )
+      )
+        return false;
+      const other = (flow.bindings ?? []).filter(
+        (edge) =>
+          !reconnecting.current ||
+          edge.source !== reconnecting.current.source ||
+          edge.output !== reconnecting.current.sourceHandle?.slice(5) ||
+          edge.target !== reconnecting.current.target ||
+          edge.input !== reconnecting.current.targetHandle?.slice(6),
+      );
+      if (
+        other.some((edge) => edge.target === target.id && edge.input === input)
+      )
+        return false;
+      const bindings = [
+        ...other,
+        { source: source.id, output, target: target.id, input },
+      ];
+      const seen = new Set<string>();
+      const reachesSource = (id: string): boolean => {
+        if (id === source.id) return true;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return bindings
+          .filter((edge) => edge.source === id)
+          .some((edge) => reachesSource(edge.target));
+      };
+      if (reachesSource(target.id)) return false;
+      const requestDerived = (
+        id: string,
+        seen = new Set<string>(),
+      ): boolean => {
+        if (seen.has(id)) return false;
+        seen.add(id);
+        const node = flow.nodes.find((item) => item.id === id);
+        return (
+          node?.type === "start" ||
+          (node?.type === "value" &&
+            bindings.some(
+              (edge) =>
+                edge.target === id &&
+                requestDerived(edge.source, new Set(seen)),
+            ))
+        );
+      };
+      return bindings.every((edge) => {
+        const node = flow.nodes.find((item) => item.id === edge.target)!;
+        const parameter = workflowParameters(
+          node,
+          props.personalInterfaces,
+          props.personal,
+        ).find((item) => item.path === edge.input);
+        return !parameter?.sensitive || !requestDerived(edge.source);
+      });
+    }
+    if (
+      connection.targetHandle !== "in" ||
+      connection.target === flow.entry ||
+      reconnecting.current?.sourceHandle?.startsWith("data:")
+    )
+      return false;
+    const port = outputs(source).find(
+      (port) => port.field === connection.sourceHandle,
+    );
     if (!port) return false;
     if (
       port.field === "fallback" &&
@@ -414,6 +724,8 @@ function Canvas(props: CanvasProps) {
     <NodeContext.Provider
       value={{
         personal: props.personal,
+        personalInterfaces: props.personalInterfaces,
+        bindings: flow.bindings ?? [],
         expanded,
         disabled: props.disabled,
         settings: props.renderSettings,
@@ -479,6 +791,11 @@ function Canvas(props: CanvasProps) {
           <LayoutGrid size={14} />
           {tr("自动排列")}
         </button>
+        {clipboard.warning && (
+          <span className="muted" role="status">
+            {clipboard.warning}
+          </span>
+        )}
       </div>
       <div
         ref={container}
@@ -548,10 +865,25 @@ function Canvas(props: CanvasProps) {
             );
             update({
               ...next,
+              bindings: next.bindings?.filter(
+                (binding) =>
+                  !disconnected.some(
+                    (edge) =>
+                      edge.sourceHandle?.startsWith("data:") &&
+                      edge.source === binding.source &&
+                      edge.sourceHandle.slice(5) === binding.output &&
+                      edge.target === binding.target &&
+                      edge.targetHandle?.slice(6) === binding.input,
+                  ),
+              ),
               nodes: next.nodes.map((node) => {
                 const patch = Object.fromEntries(
                   disconnected
-                    .filter((edge) => edge.source === node.id)
+                    .filter(
+                      (edge) =>
+                        edge.source === node.id &&
+                        !edge.sourceHandle?.startsWith("data:"),
+                    )
                     .map((edge) => [
                       edge.sourceHandle!,
                       edge.sourceHandle === "fallback" ? undefined : "",
@@ -581,7 +913,6 @@ function Canvas(props: CanvasProps) {
                 }),
               );
           }}
-          fitView
           minZoom={0.2}
           maxZoom={2}
           panOnDrag={[1, 2]}

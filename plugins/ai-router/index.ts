@@ -32,11 +32,13 @@ import { planRoute } from "./planning.js";
 import { resolveRoute } from "./resolution.js";
 import {
   compileWorkflow,
+  resolveWorkflowStatic,
   runWorkflow,
   checkProtocolConversion,
   requireIngressProtocol,
 } from "../../lib/ai/channel-graph.js";
 import { channelConnections } from "../../lib/ai/channel-config.js";
+import { keyReferences } from "../../lib/ai/upstream-key.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
 import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
 export default definePlugin({
@@ -269,6 +271,11 @@ export default definePlugin({
         }));
     });
     function validateConnection(upstream: Upstream) {
+      if (
+        upstream.authMode !== undefined &&
+        !["siwc", "cli"].includes(upstream.authMode)
+      )
+        throw new HostError("invalid_config", "无效的订阅接入方式");
       const interfaces = validateInterfaces(upstream.interfaces);
       if (interfaces) {
         if (
@@ -285,6 +292,14 @@ export default definePlugin({
             throw new HostError("invalid_config", "接口对应的上游适配器未安装");
       }
       if (upstream.subscriptionAccountIds) {
+        if (
+          !upstream.subscriptionAccountIds.length ||
+          upstream.subscriptionAccountIds.length > 100 ||
+          new Set(upstream.subscriptionAccountIds).size !==
+            upstream.subscriptionAccountIds.length ||
+          upstream.subscriptionAccountIds.some((id) => !id || id.length > 256)
+        )
+          throw new HostError("invalid_config", "无效的订阅账号");
         if (!Object.hasOwn(subscriptionDefaults, upstream.protocol!))
           throw new HostError(
             "invalid_config",
@@ -299,7 +314,8 @@ export default definePlugin({
             "invalid_config",
             "Subscription account manager is required; use a single credential source",
           );
-      }
+      } else if (!keyReferences(upstream.keyRef).length)
+        throw new HostError("invalid_config", "请配置上游密钥");
       let url: URL;
       try {
         url = new URL(
@@ -342,7 +358,7 @@ export default definePlugin({
       for (const upstream of Object.values(upstreams)) {
         if (upstream.flow) {
           compileWorkflow(upstream.flow);
-          for (const node of upstream.flow.nodes) {
+          for (const node of resolveWorkflowStatic(upstream.flow).nodes) {
             if (
               node.type === "platform" ||
               (node.type === "provider" && node.fallback)
@@ -555,7 +571,7 @@ export default definePlugin({
           mappedModel: mapping?.model ?? body.request.model,
         });
         if (result.provider) {
-          const node = flow.nodes.find((n: any) => n.id === result.providerId);
+          const node = result.providerNode;
           const connection =
             node?.type === "provider" && node.upstream
               ? node.upstream
@@ -573,6 +589,7 @@ export default definePlugin({
             result.protocolPolicy,
           );
         }
+        delete result.providerNode;
         return json(result);
       },
     });

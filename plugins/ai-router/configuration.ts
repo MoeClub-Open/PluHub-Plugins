@@ -11,6 +11,22 @@ import { requireAdmin } from "../../lib/admin/access.js";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { connectionInterfaces } from "../../lib/ai/upstream-interfaces.js";
 
+/** Keep all graph-held credentials encrypted, even when an input is disconnected. */
+function graphSecrets(settings: any): string[] {
+  return Object.values(
+    (settings?.upstreams ?? {}) as Record<string, Upstream>,
+  ).flatMap((channel) => [
+    ...keyReferences(channel.keyRef),
+    ...(channel.flow?.nodes ?? []).flatMap((node) =>
+      node.type === "provider"
+        ? keyReferences(node.upstream?.keyRef)
+        : node.type === "value" && node.valueType === "secret"
+          ? keyReferences(node.secretRef)
+          : [],
+    ),
+  ]);
+}
+
 export function installConfiguration(host: Host) {
   async function dispatch(request: Request, path: string, init?: RequestInit) {
     const headers = new Headers(request.headers);
@@ -90,11 +106,44 @@ export function installConfiguration(host: Host) {
             "invalid_config",
             "Invalid channel configuration",
           );
-        for (const connection of Object.values(
+        for (const channel of Object.values(
           body.config.upstreams ?? {},
-        ).flatMap((value) => channelConnections(value as Upstream)))
-          if (connection.keyRef !== undefined)
-            connection.keyRef = keyReferences(connection.keyRef);
+        ) as Upstream[]) {
+          if (channel.keyRef !== undefined) {
+            const keys = keyReferences(channel.keyRef);
+            if (keys.length) channel.keyRef = keys;
+            else delete channel.keyRef;
+          }
+          for (const node of channel.flow?.nodes ?? []) {
+            if (
+              node.type === "provider" &&
+              node.upstream?.keyRef !== undefined
+            ) {
+              const keys = keyReferences(node.upstream.keyRef);
+              if (keys.length) node.upstream.keyRef = keys;
+              else delete node.upstream.keyRef;
+            }
+            if (
+              node.type === "value" &&
+              node.valueType === "secret" &&
+              node.secretRef !== undefined
+            ) {
+              const keys = keyReferences(node.secretRef);
+              if (keys.length) node.secretRef = keys;
+              else delete node.secretRef;
+            }
+          }
+        }
+        const priorSecrets = new Set(graphSecrets(router.config));
+        const currentSecrets = new Set(graphSecrets(body.config));
+        const retained = (
+          (body.config.secretRefs ??
+            router.config?.secretRefs ??
+            []) as string[]
+        ).filter((ref) => !priorSecrets.has(ref) || currentSecrets.has(ref));
+        const ownedSecrets = [...new Set([...retained, ...currentSecrets])];
+        if (ownedSecrets.length) body.config.secretRefs = ownedSecrets;
+        else delete body.config.secretRefs;
         const references = (settings: any, capability: string) =>
           new Set<string>(
             Object.values(

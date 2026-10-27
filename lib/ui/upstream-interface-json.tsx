@@ -7,10 +7,12 @@ export function InterfaceJsonEditor({
   value,
   onChange,
   reveal,
+  disabled = false,
 }: {
   value?: UpstreamInterface[];
   onChange: (value: UpstreamInterface[] | undefined) => void;
   reveal: () => void;
+  disabled?: boolean;
 }) {
   const serialized = JSON.stringify(value ?? []);
   const applied = React.useRef(serialized);
@@ -36,6 +38,7 @@ export function InterfaceJsonEditor({
         aria-describedby={error ? errorId : undefined}
         value={text}
         rows={16}
+        disabled={disabled}
         spellCheck={false}
         autoCapitalize="off"
         autoComplete="off"
@@ -68,6 +71,11 @@ export function InterfaceJsonEditor({
           }
         }}
       />
+      {disabled && (
+        <p className="field-note">
+          {tr("断开接口规则的参数连线后可编辑 JSON")}
+        </p>
+      )}
       {error && (
         <p className="danger-text" role="alert" id={errorId}>
           {error}

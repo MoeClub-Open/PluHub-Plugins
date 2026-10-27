@@ -35,6 +35,7 @@ export function validateInterfaces(
       !apiProtocols.includes(route.protocol) ||
       !Array.isArray(route.incoming) ||
       !route.incoming.length ||
+      new Set(route.incoming).size !== route.incoming.length ||
       route.incoming.some((p: Protocol) => !apiProtocols.includes(p))
     )
       bad("请选择有效的入口与上游接口");
