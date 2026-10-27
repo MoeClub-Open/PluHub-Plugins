@@ -1388,8 +1388,8 @@ export const en: Record<string, string> = {
   "管理插件安装与启停，查看宿主和网关的运行状态。":
     "Install and manage plugins; inspect host and gateway status.",
   登录与验证: "Sign-in and verification",
-  "注册 邮箱 邮件 SMTP Turnstile reCAPTCHA Geetest 极验 验证码 人机验证 TOTP Passkey FIDO2 硬件安全密钥 ":
-    "registration email mail SMTP Turnstile reCAPTCHA Geetest captcha verification TOTP Passkey FIDO2 hardware security keys ",
+  "注册 邮箱 邮件 SMTP Turnstile reCAPTCHA hCaptcha Geetest 极验 验证码 人机验证 TOTP Passkey FIDO2 硬件安全密钥 ":
+    "registration email mail SMTP Turnstile reCAPTCHA hCaptcha Geetest captcha verification TOTP Passkey FIDO2 hardware security keys ",
   系统设置: "System settings",
   管理后台: "Administration",
   两次输入的密码不一致: "The passwords do not match",
@@ -1990,8 +1990,8 @@ export const en: Record<string, string> = {
     "Manage support tickets, replies and resolution status.",
   "通过授权凭证接入 Antigravity 订阅服务。":
     "Connect authorized Antigravity subscriptions.",
-  "提供 Turnstile、reCAPTCHA 与极验人机验证。":
-    "Provide Turnstile, reCAPTCHA and GeeTest verification.",
+  "提供 Turnstile、reCAPTCHA、hCaptcha 与极验人机验证。":
+    "Provide Turnstile, reCAPTCHA, hCaptcha and GeeTest verification.",
   "限制单个请求的输出 Token 速度。": "Limit token output speed per request.",
   "调用 Anthropic Messages 兼容服务并解析结果。":
     "Call Anthropic Messages compatible services.",

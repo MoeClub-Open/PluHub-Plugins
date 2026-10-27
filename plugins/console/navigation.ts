@@ -192,7 +192,7 @@ export function navigation(
     order: 10,
     searchTerms:
       tr(
-        "注册 邮箱 邮件 SMTP Turnstile reCAPTCHA Geetest 极验 验证码 人机验证 TOTP Passkey FIDO2 硬件安全密钥 ",
+        "注册 邮箱 邮件 SMTP Turnstile reCAPTCHA hCaptcha Geetest 极验 验证码 人机验证 TOTP Passkey FIDO2 硬件安全密钥 ",
       ) + verificationProviders.map((e) => e.title).join(" "),
   };
   const allowed: SettingsPage[] = available

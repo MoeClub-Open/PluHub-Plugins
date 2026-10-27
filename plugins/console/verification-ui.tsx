@@ -359,6 +359,7 @@ export function VerificationSettings({
                       >
                         <option value="turnstile">Cloudflare Turnstile</option>
                         <option value="recaptcha">Google reCAPTCHA</option>
+                        <option value="hcaptcha">hCaptcha</option>
                         <option value="geetest">{tr("极验 v4")}</option>
                       </Select>
                     </label>
@@ -418,7 +419,9 @@ export function VerificationSettings({
                         : tr("公开 Site Key"),
                     )}
                     {input("turnstile", "secretRef", tr("Secret Key"))}
-                    {turnstile.provider !== "geetest" && (
+                    {!["geetest", "hcaptcha"].includes(
+                      turnstile.provider ?? "turnstile",
+                    ) && (
                       <label>
                         {tr("允许的站点主机名")}
                         <input

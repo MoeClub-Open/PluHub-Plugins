@@ -3,9 +3,9 @@
   "id": "official.turnstile",
   "category": "identity",
   "name": "人机验证",
-  "description": "提供 Turnstile、reCAPTCHA 与极验人机验证。",
+  "description": "提供 Turnstile、reCAPTCHA、hCaptcha 与极验人机验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.16",
+  "version": "0.1.0-alpha.17",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -52,7 +52,7 @@
       },
       "provider": {
         "type": "string",
-        "enum": ["turnstile", "recaptcha", "geetest"]
+        "enum": ["turnstile", "recaptcha", "hcaptcha", "geetest"]
       },
       "recaptchaVersion": {
         "type": "string",

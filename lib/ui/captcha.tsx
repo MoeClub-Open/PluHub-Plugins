@@ -3,25 +3,35 @@ import type { CaptchaOptions } from "@pluhub/contracts/security";
 import { t as tr, getLocale } from "./i18n.js";
 
 const scripts = new Map<string, Promise<void>>();
-function loadScript(url: string) {
+let loadId = 0;
+function loadScript(url: string, waitForCallback = false) {
   if (!scripts.has(url)) {
     scripts.set(
       url,
       new Promise<void>((resolve, reject) => {
         const script = document.createElement("script");
-        const failed = () => {
+        const name = waitForCallback
+          ? "pluhubCaptchaReady" + loadId++
+          : undefined;
+        const clear = () => {
           clearTimeout(timer);
+          if (name) delete (window as any)[name];
+        };
+        const ready = () => {
+          clear();
+          resolve();
+        };
+        const failed = () => {
+          clear();
           scripts.delete(url);
           script.remove();
           reject(Error(tr("验证码无法加载，请检查网络后重试")));
         };
         const timer = setTimeout(failed, 20000);
-        script.src = url;
+        if (name) (window as any)[name] = ready;
+        script.src = url + (name ? "&onload=" + name : "");
         script.async = true;
-        script.onload = () => {
-          clearTimeout(timer);
-          resolve();
-        };
+        if (!waitForCallback) script.onload = ready;
         script.onerror = failed;
         document.head.append(script);
       }),
@@ -72,6 +82,7 @@ export const Captcha = React.forwardRef<
     function update(value: string) {
       if (cancelled) return;
       token.current = value;
+      if (value) setError("");
       callback.current(value);
     }
     function failed() {
@@ -151,6 +162,21 @@ export const Captcha = React.forwardRef<
           };
           update("ready");
         }
+      } else if (provider === "hcaptcha") {
+        await loadScript(
+          `https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off&hl=${language.startsWith("en") ? "en" : "zh-CN"}`,
+          true,
+        );
+        if (cancelled || !element.current) return;
+        const api = (window as any).hcaptcha;
+        const id = api.render(element.current, {
+          sitekey: siteKey,
+          callback: update,
+          "expired-callback": () => update(""),
+          "chalexpired-callback": () => update(""),
+          "error-callback": failed,
+        });
+        dispose = () => api.remove(id);
       } else {
         await loadScript(
           "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",

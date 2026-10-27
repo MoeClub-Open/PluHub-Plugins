@@ -25,7 +25,7 @@ export function validateCaptchaConfig(config: Config) {
     config.enabled &&
     (!config.siteKey ||
       !config.secretRef ||
-      ((config.provider ?? "turnstile") !== "geetest" &&
+      (["turnstile", "recaptcha"].includes(config.provider ?? "turnstile") &&
         !config.hostnames?.length))
   )
     throw new HostError("invalid_config", "请填写验证服务所需的密钥与站点配置");
@@ -82,6 +82,13 @@ export function prepareChallenge(
         .update(fields.lot_number)
         .digest("hex"),
     }).toString();
+  } else if (provider === "hcaptcha") {
+    url = "https://api.hcaptcha.com/siteverify";
+    body = new URLSearchParams({
+      secret,
+      response: token,
+      sitekey: config.siteKey,
+    }).toString();
   } else if (provider === "recaptcha") {
     const domain =
       config.recaptchaDomain === "www.recaptcha.net"
@@ -94,7 +101,7 @@ export function prepareChallenge(
     json = true;
     body = JSON.stringify({ secret, response: token });
   }
-  const maxAge = provider === "recaptcha" ? 120000 : 300000;
+  const maxAge = ["recaptcha", "hcaptcha"].includes(provider) ? 120000 : 300000;
   return {
     identity: JSON.stringify([provider, config.siteKey, identity]),
     maxAge,
@@ -118,6 +125,11 @@ export function prepareChallenge(
             data.captcha_args.lot_number !== identity)
         )
           failed();
+        return;
+      }
+      if (provider === "hcaptcha") {
+        // Siteverify enforces expiry and the submitted sitekey; hostname is informational.
+        if (data.success !== true) failed();
         return;
       }
       const timestamp = Date.parse(data.challenge_ts);

@@ -5,13 +5,14 @@ const google =
   "https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/";
 const geetest =
   "https://static.geetest.com https://static.geevisit.com https://gcaptcha4.geetest.com https://gcaptcha4.geevisit.com";
+const hcaptcha = "https://hcaptcha.com https://*.hcaptcha.com";
 const captchaPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com ${google} https://www.gstatic.com/recaptcha/ ${geetest}`,
-  `style-src 'self' 'unsafe-inline' ${geetest}`,
+  `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com ${google} https://www.gstatic.com/recaptcha/ ${geetest} ${hcaptcha}`,
+  `style-src 'self' 'unsafe-inline' ${geetest} ${hcaptcha}`,
   `font-src 'self' data: ${geetest}`,
-  `connect-src 'self' https://challenges.cloudflare.com ${google} ${geetest}`,
-  `frame-src https://challenges.cloudflare.com ${google} https://recaptcha.google.com/recaptcha/ ${geetest}`,
+  `connect-src 'self' https://challenges.cloudflare.com ${google} ${geetest} ${hcaptcha}`,
+  `frame-src https://challenges.cloudflare.com ${google} https://recaptcha.google.com/recaptcha/ ${geetest} ${hcaptcha}`,
   "img-src 'self' data: blob: https:",
   "frame-ancestors 'none'",
   "base-uri 'self'",

@@ -63,85 +63,100 @@ it("rejects email header injection and normalizes application email identities",
   ])
     expect(() => emailAddress(value)).toThrow();
 });
-it("validates Turnstile action, hostname, age, replay and bounded responses", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pluhub-turnstile-")),
-    handlers = new Map<string, any>(),
-    cleanups: (() => any)[] = [];
-  let data: any = {
-      success: true,
-      hostname: "hub.example",
-      action: "login",
-      challenge_ts: new Date().toISOString(),
-    },
-    raw: string | undefined,
-    validation: any;
-  const config = {
-    enabled: true,
-    siteKey: "public",
-    secretRef: "env:SECRET",
-    hostnames: ["hub.example"],
-  };
-  try {
-    plugin.setup({
-      dataDir: dir,
-      config: () => config,
-      cleanup: (f: any) => cleanups.push(f),
-      validateConfig: (f: any) => (validation = f),
-      provide: (n: string, f: any) => handlers.set(n, f),
-      api: () => {},
-      secret: () => "private-server-key",
-      call: async (_n: string, i: any) => {
-        expect(i.url).toBe(
-          "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-        );
-        expect(JSON.parse(i.body).secret).toBe("private-server-key");
-        return new Response(raw ?? JSON.stringify(data));
-      },
-    } as any);
-    validation(config);
-    const verify = (token: string) =>
-      handlers.get("captcha.verify@1")(
-        { token, action: "login" },
-        new AbortController().signal,
-      );
-    expect(handlers.get("captcha.options@1")()).toEqual({
-      enabled: true,
-      provider: "turnstile",
-      siteKey: "public",
-    });
-    expect(await verify("valid")).toBe(true);
-    await expect(verify("valid")).rejects.toMatchObject({
-      code: "captcha_failed",
-    });
-    for (const patch of [
-      { hostname: "evil.example" },
-      { action: "register" },
-      { success: false },
-      { challenge_ts: new Date(Date.now() - 301000).toISOString() },
-      { challenge_ts: "bad" },
-    ]) {
-      data = {
+it.each(["turnstile", "hcaptcha"] as const)(
+  "validates %s tokens, age, replay and bounded responses",
+  async (provider) => {
+    const dir = await mkdtemp(join(tmpdir(), "pluhub-turnstile-")),
+      handlers = new Map<string, any>(),
+      cleanups: (() => any)[] = [];
+    let data: any = {
         success: true,
         hostname: "hub.example",
         action: "login",
         challenge_ts: new Date().toISOString(),
-        ...patch,
-      };
-      await expect(verify(JSON.stringify(patch))).rejects.toMatchObject({
+      },
+      raw: string | undefined,
+      validation: any;
+    const config = {
+      enabled: true,
+      provider,
+      siteKey: "public",
+      secretRef: "secret:CAPTCHA",
+      hostnames: ["hub.example"],
+    };
+    try {
+      plugin.setup({
+        dataDir: dir,
+        config: () => config,
+        cleanup: (f: any) => cleanups.push(f),
+        validateConfig: (f: any) => (validation = f),
+        provide: (n: string, f: any) => handlers.set(n, f),
+        api: () => {},
+        secret: () => "private-server-key",
+        call: async (_n: string, i: any) => {
+          expect(i.url).toBe(
+            provider === "hcaptcha"
+              ? "https://api.hcaptcha.com/siteverify"
+              : "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+          );
+          if (provider === "hcaptcha") {
+            const fields = new URLSearchParams(i.body);
+            expect(fields.get("secret")).toBe("private-server-key");
+            expect(fields.get("sitekey")).toBe("public");
+          } else expect(JSON.parse(i.body).secret).toBe("private-server-key");
+          return new Response(raw ?? JSON.stringify(data));
+        },
+      } as any);
+      validation(config);
+      const verify = (token: string) =>
+        handlers.get("captcha.verify@1")(
+          { token, action: "login" },
+          new AbortController().signal,
+        );
+      expect(handlers.get("captcha.options@1")()).toEqual({
+        enabled: true,
+        provider,
+        siteKey: "public",
+      });
+      expect(await verify("valid")).toBe(true);
+      await expect(verify("valid")).rejects.toMatchObject({
         code: "captcha_failed",
       });
+      for (const patch of [
+        ...(provider === "turnstile"
+          ? [{ hostname: "evil.example" }, { action: "register" }]
+          : []),
+        { success: false },
+        ...(provider === "turnstile"
+          ? [
+              { challenge_ts: new Date(Date.now() - 301000).toISOString() },
+              { challenge_ts: "bad" },
+            ]
+          : [{ success: false, "error-codes": ["expired-input-response"] }]),
+      ]) {
+        data = {
+          success: true,
+          hostname: "hub.example",
+          action: "login",
+          challenge_ts: new Date().toISOString(),
+          ...patch,
+        };
+        await expect(verify(JSON.stringify(patch))).rejects.toMatchObject({
+          code: "captcha_failed",
+        });
+      }
+      raw = "x".repeat(70000);
+      await expect(verify("oversize")).rejects.toMatchObject({
+        code: "captcha_unavailable",
+      });
+      config.enabled = false;
+      await expect(verify("disabled")).rejects.toMatchObject({
+        code: "captcha_unavailable",
+      });
+    } finally {
+      for (const close of cleanups) close();
+      if (process.platform !== "win32")
+        await rm(dir, { recursive: true, force: true });
     }
-    raw = "x".repeat(70000);
-    await expect(verify("oversize")).rejects.toMatchObject({
-      code: "captcha_unavailable",
-    });
-    config.enabled = false;
-    await expect(verify("disabled")).rejects.toMatchObject({
-      code: "captcha_unavailable",
-    });
-  } finally {
-    for (const close of cleanups) close();
-    if (process.platform !== "win32")
-      await rm(dir, { recursive: true, force: true });
-  }
-});
+  },
+);
