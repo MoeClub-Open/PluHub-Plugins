@@ -1,3 +1,4 @@
+import { routingContext } from "./request-context.js";
 import { HostError, json, readObject, requiredString, type Host } from "@pluhub/sdk";
 import type { AIPlan, AIRequest, Upstream, Usage } from "@pluhub/contracts/ai";
 import type { DecisionBackend } from "@pluhub/contracts/routing";
@@ -6,6 +7,7 @@ import { decisionBody, parseDecision, type DifficultyDecision } from "../../lib/
 import { requestLegacyDecision } from "../../lib/ai/legacy-decision.js";
 import { beginObservation, observation, planObservation } from "../../lib/ai/telemetry.js";
 import { generationRejected } from "../../lib/ai/rejection.js";
+import { switchFallback } from "../../lib/ai/fallback.js";
 import { capturePricingContext } from "../../lib/commerce/expression.js";
 import { getDecisionScope } from "./decision-scope.js";
 
@@ -28,7 +30,7 @@ export function installDecisionIngress(host: Host) {
   host.provide("ai.workflow-decision@1", async (input: { profile: string; token?: string }, signal): Promise<DifficultyDecision> => {
     const profile = requiredString(input.profile, "profile", 128);
     const scope = getDecisionScope(host, profile, input.token);
-    const ctx = host.requestContext();
+    const ctx = routingContext(host);
     const config = await host.call<DecisionBackend>("ai.decision-profile@1", { profile }, signal, "official.auto-router");
     if (!kinds.includes(config.kind) || !config.model || config.baseUrl || config.keyRef)
       throw new HostError("decision_migration_required", "请先将决策服务配置为有价格的渠道模型", 409);
@@ -56,6 +58,7 @@ export function installDecisionIngress(host: Host) {
   });
 
   host.route({
+    internal: true, childCallers: [host.id],
     method: "POST", path: "/internal/workflow/decision", access: "authenticated",
     prepare: async (request, ctx) => {
       if (!ctx.parent) throw new HostError("not_found", "Not found", 404);
@@ -88,7 +91,7 @@ export function installDecisionIngress(host: Host) {
         pricingContext: capturePricingContext({ model }, request.headers, state.startedAt),
         ...channelScope(ctx.principal, request.headers.get("x-pluhub-channel") ?? undefined, request.headers.get("x-pluhub-group") ?? undefined),
       }, ctx.signal);
-      if (plan.upstream.protocol !== raw.kind || plan.capability !== `ai.upstream.${raw.kind}@1`)
+      if (plan.kind !== "provider" || plan.upstream.protocol !== raw.kind || plan.capability !== `ai.upstream.${raw.kind}@1`)
         throw new HostError("operation_not_supported", "决策模型协议不匹配", 400);
       if (!plan.pricing) throw new HostError("decision_price_required", "请先配置决策模型价格", 409);
       ctx.state.set("ai.plan", plan);
@@ -97,7 +100,7 @@ export function installDecisionIngress(host: Host) {
     handle: async (_request, ctx) => {
       const input = ctx.state.get("decision.request") as DecisionInput;
       const normalized = ctx.state.get("ai.request") as AIRequest;
-      let plan = ctx.state.get("ai.plan") as AIPlan;
+      const plan = ctx.state.get("ai.plan") as AIPlan;
       const state = observation(ctx)!;
       ctx.state.set("ai.executionStarted", true);
       for (;;) {
@@ -124,23 +127,13 @@ export function installDecisionIngress(host: Host) {
           ctx.state.set("ai.executionRejected", rejected);
           const failure = error as { code?: string; retryable?: boolean; usage?: Usage };
           if (failure.usage) state.usage = failure.usage;
-          if (!rejected || !plan.fallback || !(failure.retryable || ["subscription_unavailable", "subscription_disabled", "credential_unavailable", "credentials_required"].includes(failure.code ?? ""))) {
+          if (!await switchFallback(host, ctx, normalized, plan, error, ctx.signal, (next) => {
+            if (next.kind !== "provider" || next.upstream.protocol !== input.kind || !next.pricing)
+              throw new HostError("decision_price_required", "备用决策模型协议或价格无效", 409);
+          })) {
             state.errorCode = failure.code ?? "upstream_error";
             throw error;
           }
-          ctx.signal.throwIfAborted();
-          const next = await host.call<AIPlan>("ai.routing@2", plan.fallback, ctx.signal);
-          if (next.upstream.protocol !== input.kind || !next.pricing)
-            throw new HostError("decision_price_required", "备用决策模型协议或价格无效", 409);
-          next.attempts = [...(plan.attempts ?? []), { channel: plan.upstreamId, model: plan.model, error: failure.code ?? "upstream_rejected" }];
-          next.requestLimits = [...(plan.requestLimits ?? []), ...(next.requestLimits ?? [])];
-          plan = next;
-          ctx.state.set("ai.plan", plan);
-          ctx.state.set("ai.request", { ...(plan.preparedRequest ?? normalized), model: normalized.model });
-          planObservation(ctx, normalized, plan);
-          await host.call("ai.request-limits@1", { action: "admit", context: ctx, retry: true }, ctx.signal);
-          if (host.hasCapability("billing.admit@1")) await host.call("billing.admit@1", { context: ctx, retry: true }, ctx.signal);
-          ctx.state.set("ai.executionRejected", false);
         }
       }
     },

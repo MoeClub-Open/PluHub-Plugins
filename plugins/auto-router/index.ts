@@ -5,7 +5,7 @@ import {
   readObject,
   requiredString,
 } from "@pluhub/sdk";
-import type { AIPlan, ModelRoute, ReasoningEffort } from "@pluhub/contracts/ai";
+import type { AIPlan, AIProviderPlan, ModelRoute, ReasoningEffort } from "@pluhub/contracts/ai";
 import type {
   RoutingProfile,
   RoutingCandidate,
@@ -20,7 +20,7 @@ import {
 } from "../../lib/commerce/expression.js";
 interface Eligible {
   candidate: RoutingCandidate;
-  plan: AIPlan;
+  plan: AIProviderPlan;
   route: ModelRoute;
   allowed: ReasoningEffort[];
 }
@@ -171,7 +171,7 @@ export default definePlugin({
       const eligible: Eligible[] = [];
       for (const candidate of p.candidates) {
         if (candidate.enabled === false) continue;
-        let target: { plan: AIPlan; route: ModelRoute };
+        let target: { plan: AIProviderPlan; route: ModelRoute };
         try {
           target = await host.call(
             "ai.targets@1",
@@ -470,6 +470,7 @@ export default definePlugin({
     host.api({
       method: "POST",
       path: "/preview",
+      audit: false,
       access: "host.manage",
       handle: async (r, ctx) => {
         const b = await readObject(r, 65536);

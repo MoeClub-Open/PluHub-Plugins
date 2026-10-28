@@ -82,9 +82,6 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   get routing() {
     return tr("自动路由");
   },
-  get condition() {
-    return tr("条件分支");
-  },
   get predicate() {
     return tr("请求条件");
   },
@@ -428,7 +425,6 @@ function summary(node: WorkflowNode, channel?: Upstream) {
         .join(" · ");
     case "prompt":
       return node.text.slice(0, 60) || tr("系统提示词");
-    case "condition":
     case "predicate":
       if (node.test === "model")
         return (

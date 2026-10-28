@@ -237,6 +237,8 @@ export default definePlugin({
             consumptionMultiplier: input.consumptionMultiplier,
           },
         );
+        if (target.plan.kind !== "provider")
+          throw new HostError("invalid_route", "候选必须解析为实际的上游调用", 400);
         const { upstream, model } = target.plan;
         if (upstream.subscriptionAccountIds) {
           const state = await host.call<{ available: boolean }>(
@@ -511,6 +513,8 @@ export default definePlugin({
         { plan, request }: { plan: AIPlan; request: AIRequest },
         signal,
       ) => {
+        if (plan.kind !== "provider")
+          throw new HostError("invalid_route", "上游执行需要完整的调用计划", 400);
         const actual = {
           ...(plan.preparedRequest ?? request),
           model: plan.model,
@@ -537,6 +541,7 @@ export default definePlugin({
     host.api({
       method: "POST",
       path: "/graph/preview",
+      audit: false,
       access: "host.manage",
       handle: async (r, ctx) => {
         const body = await readObject(r);
@@ -619,6 +624,7 @@ export default definePlugin({
     host.api({
       method: "POST",
       path: "/channel-models",
+      audit: false,
       access: "host.manage",
       handle: async (request, ctx) =>
         json(
@@ -631,6 +637,7 @@ export default definePlugin({
     host.api({
       method: "POST",
       path: "/test",
+      audit: false,
       access: "host.manage",
       handle: async (request, ctx) => {
         const body = await readObject(request);

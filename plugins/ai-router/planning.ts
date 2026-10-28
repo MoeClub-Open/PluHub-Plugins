@@ -102,6 +102,7 @@ export async function planRoute(
       }
       if (
         input.purpose !== "quote" &&
+        plan.kind === "provider" &&
         plan.upstream.subscriptionAccountIds?.length
       ) {
         const state = await host.call<{ available: boolean }>(

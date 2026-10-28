@@ -166,8 +166,6 @@ export function installPersonalChannels(
     }
     const resolved = resolveWorkflowStatic(flow, interfaces, true);
     for (const node of resolved.nodes) {
-      if (typeof node?.id !== "string" || node.id.length > 128)
-        throw new HostError("invalid_workflow", "无效节点 ID");
       switch (node.type) {
         case "start":
         case "protocol":
@@ -176,6 +174,11 @@ export function installPersonalChannels(
         case "compare":
         case "logic":
         case "text":
+        case "format":
+        case "predicate":
+        case "prompt":
+        case "reasoning":
+        case "maxTokens":
         case "template":
         case "replace":
         case "llm":
@@ -206,50 +209,9 @@ export function installPersonalChannels(
               (!Array.isArray(node.allowedTargets) ||
                 node.allowedTargets.some(
                   (target) => !Object.hasOwn(models, target),
-                ))) ||
-            !["implicit", "explicit"].includes(node.mode)
+                )))
           )
             throw new HostError("invalid_workflow", "只能转到本渠道内的模型");
-          break;
-        case "condition":
-        case "predicate":
-          if (
-            ![
-              "hasTools",
-              "stream",
-              "textLengthAbove",
-              "protocol",
-              "model",
-            ].includes(node.test) ||
-            (node.test === "textLengthAbove" &&
-              (!Number.isSafeInteger(node.value) || node.value! < 0))
-          )
-            throw new HostError("invalid_workflow", "无效的分支条件");
-          break;
-        case "prompt":
-          requiredString(node.text, "prompt", 16000);
-          break;
-        case "reasoning":
-          if (
-            ![
-              "none",
-              "minimal",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max",
-            ].includes(node.effort)
-          )
-            throw new HostError("invalid_workflow", "无效的思考强度");
-          break;
-        case "maxTokens":
-          if (
-            !Number.isSafeInteger(node.limit) ||
-            node.limit < 1 ||
-            node.limit > 1_000_000
-          )
-            throw new HostError("invalid_workflow", "无效的输出预算");
           break;
         case "rateLimit":
           if (!host.hasCapability("ai.request-limits@1"))
@@ -723,6 +685,7 @@ export function installPersonalChannels(
   host.api({
     method: "POST",
     path: "/personal-channels/discover",
+    audit: false,
     access: "authenticated",
     handle: async (request, ctx) => {
       session(ctx.principal);
@@ -760,6 +723,7 @@ export function installPersonalChannels(
   host.api({
     method: "POST",
     path: "/personal-channels/sync",
+    audit: false,
     access: "authenticated",
     handle: async (request, ctx) => {
       const userId = session(ctx.principal),
@@ -825,6 +789,7 @@ export function installPersonalChannels(
   host.api({
     method: "POST",
     path: "/personal-channels/preview",
+    audit: false,
     access: "authenticated",
     handle: async (request, ctx) => {
       const userId = session(ctx.principal),
@@ -883,6 +848,7 @@ export function installPersonalChannels(
   host.api({
     method: "POST",
     path: "/personal-channels/test",
+    audit: false,
     access: "authenticated",
     handle: async (request, ctx) => {
       const userId = session(ctx.principal),

@@ -33,13 +33,13 @@ it.each([true, false])("preserves fallback and applies the selected provider's r
         })();
       }
       if (capability === "ai.routing@2")
-        return { capability: "backup", upstream: {}, model: "backup-target", recordResponseModel };
+        return {kind: "provider",  capability: "backup", upstream: {}, model: "backup-target", recordResponseModel };
     },
   };
   const state = new Map<string, any>([["ai.observation", { startedAt: Date.now(), protocol: "openai-chat" }]]);
   const ctx = { state } as any;
   const request = { model: "public", messages: [], tools: [], stream: true } as any;
-  const plan = { capability: "primary", upstream: {}, model: "primary-target", recordResponseModel: true, fallback: {} } as any;
+  const plan = {kind: "provider",  capability: "primary", upstream: {}, model: "primary-target", recordResponseModel: true, fallback: {} } as any;
   const events = await executeRequest(host as any, ctx, request, plan, new AbortController().signal);
   const types: string[] = [];
   for await (const event of events) types.push(event.type);

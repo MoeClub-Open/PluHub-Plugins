@@ -16,6 +16,7 @@ export function installPriceQuote(host: Host) {
   host.api({
     method: "POST",
     path: "/quote",
+    audit: false,
     access: "authenticated",
     async handle(request, ctx) {
       const body = await readObject(request);

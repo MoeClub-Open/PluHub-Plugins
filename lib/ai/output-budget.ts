@@ -57,6 +57,10 @@ export function outputBudget(
   plan: AIPlan,
   config: Record<string, unknown>,
 ): { request: AIRequest; budget: OutputBudget } {
+  if (plan.kind !== "provider") return {
+    request: plan.preparedRequest ?? original,
+    budget: { mode: "estimate", source: "default", reservedTokens: 0 },
+  };
   const media = (plan.preparedRequest ?? original).operation;
   if (media) {
     if (

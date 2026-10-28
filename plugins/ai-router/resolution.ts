@@ -1,3 +1,4 @@
+import { computedWorkflowTypes } from "../../lib/ai/workflow-node-validation.js";
 import { resolveGroup, groupPricing } from "./groups.js";
 import { withDecisionScope } from "./decision-scope.js";
 import type { ChannelWorkflow, WorkflowResult } from "@pluhub/contracts/workflow";
@@ -37,7 +38,7 @@ export function workflowDependencies(flow: ChannelWorkflow) {
     const node = nodes.get(id);
     if (!node) return;
     execution.add(id);
-    if (node.type === "condition" || node.type === "branch") {
+    if (node.type === "branch") {
       visit(node.yes);
       visit(node.no);
     } else if (node.type === "provider") {
@@ -71,7 +72,7 @@ export function needsDeferredWorkflow(flow: ChannelWorkflow): boolean {
     return result;
   }
   return [...execution].some((id) => nodes.get(id)?.type === "response") ||
-    [...data].some((id) => ["llm", "jev", "text", "template", "replace"].includes(nodes.get(id)?.type ?? "")) ||
+    [...data].some((id) => computedWorkflowTypes.has(nodes.get(id)?.type ?? "")) ||
     (flow.bindings ?? []).some((binding) =>
       execution.has(binding.target) && nodes.get(binding.target)?.type === "upstream" &&
       binding.input === "target" && dynamicSource(binding.source));
@@ -81,7 +82,7 @@ function quoteNeedsRequest(flow: ChannelWorkflow): boolean {
   const { nodes, execution, data } = workflowDependencies(flow);
   if ([...execution, ...data].some((id) => {
     const node = nodes.get(id);
-    return (node?.type === "condition" || node?.type === "predicate") && node.test !== "model";
+    return node?.type === "predicate" && node.test !== "model";
   })) return true;
   const relevant = new Set([...execution, ...data]);
   return (flow.bindings ?? []).some((binding) =>
@@ -89,7 +90,7 @@ function quoteNeedsRequest(flow: ChannelWorkflow): boolean {
     ((binding.source === flow.entry &&
       !["requestedModel", "mappedModel"].includes(binding.output)) ||
       (binding.input === "test" &&
-        ["condition", "predicate"].includes(nodes.get(binding.target)?.type ?? ""))));
+        nodes.get(binding.target)?.type === "predicate")));
 }
 
 function mergeOutputPolicy(
@@ -294,8 +295,7 @@ export async function resolveRoute(
         return {
           route,
           plan: {
-            capability: "",
-            upstream: {},
+            kind: "workflow",
             upstreamId: route.upstream,
             model: requestedModel,
             workflowDeferred: { input, requestedModel },
@@ -337,7 +337,7 @@ export async function resolveRoute(
         return {
           route,
           plan: {
-            capability: "", upstream: {}, model: requestedModel,
+            kind: "response", model: requestedModel,
             upstreamId: route.upstream,
             workflowResponse: { text: result.responseText },
             responseModel: explicit ? (models[responsePath.at(-1)!]?.publicModel ?? responsePath.at(-1)!) : requestedModel,
@@ -376,7 +376,7 @@ export async function resolveRoute(
               return {
                 route,
                 plan: {
-                  capability: "", upstream: {}, upstreamId: route.upstream,
+                  kind: "workflow", upstreamId: route.upstream,
                   model: requestedModel,
                   workflowDeferred: { input, requestedModel },
                 },
@@ -545,6 +545,7 @@ export async function resolveRoute(
             JSON.stringify(m.pricing) === JSON.stringify(pricing.pricing),
         );
       resolved = {
+        kind: "provider",
         capability:
           (prepared?.operation ? "ai.media." : "ai.upstream.") +
           connection.protocol +
@@ -580,6 +581,8 @@ export async function resolveRoute(
   }
   if (!resolved)
     throw new HostError("routing_cycle", "Channel routing exceeds 32 hops");
+  if (resolved.kind !== "provider")
+    throw new HostError("invalid_route", "流程未生成可执行的上游计划", 400);
   for (const rule of outputPolicies) {
     if (
       rule.model &&

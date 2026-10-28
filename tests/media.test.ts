@@ -89,6 +89,7 @@ it("uses token accounting for embeddings and fixed pricing for media without fab
     "images/generations",
   );
   const plan = {
+    kind: "provider",
     upstream: { protocol: "openai-chat" },
     pricing: { input: 1, output: 2 },
   } as AIPlan;

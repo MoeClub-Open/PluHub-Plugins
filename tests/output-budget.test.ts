@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { AIRequest, AIPlan } from "@pluhub/contracts/ai";
+import type { AIRequest, AIPlan, AIProviderPlan } from "@pluhub/contracts/ai";
 import { outputBudget, validateOutputBudget } from "../lib/ai/output-budget.js";
 const request: AIRequest = {
   model: "public",
@@ -8,8 +8,8 @@ const request: AIRequest = {
   tools: [],
 };
 const plan = (
-  protocol: AIPlan["upstream"]["protocol"] = "openai-chat",
-): AIPlan => ({
+  protocol: AIProviderPlan["upstream"]["protocol"] = "openai-chat",
+): AIPlan => ({kind: "provider", 
   model: "actual",
   capability: "ai.upstream." + protocol + "@1",
   upstream: { protocol },

@@ -42,7 +42,7 @@ function supportsKind(channel: Upstream, kind: NonNullable<CatalogScope["routeKi
     if (node.type === "response") return kind === "chat";
     // Delegated targets are resolved and checked after selection.
     if (node.type === "upstream" || node.type === "routing" || node.type === "platform") return true;
-    if (node.type === "branch" || node.type === "condition")
+    if (node.type === "branch")
       return visit(node.yes) || visit(node.no);
     return "next" in node ? visit(node.next) : false;
   }

@@ -26,6 +26,7 @@ export function createIngress(protocol: Protocol) {
               ? "/v1/messages"
               : "/v1beta/models/*";
       host.route({
+        childCallers: ["official.ai-router"],
         method: "POST",
         path,
         access: "authenticated",

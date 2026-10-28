@@ -293,6 +293,7 @@ export default definePlugin({
     host.api({
       method: "POST",
       path: "/logout",
+      audit: false,
       access: "authenticated",
       handle: (request) => {
         const token = cookie(request);

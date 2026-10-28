@@ -5,7 +5,7 @@
   "name": "OpenAI Chat Completions 入口",
   "description": "接收并解析 OpenAI Chat Completions 客户端请求。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.25",
+  "version": "0.1.0-alpha.26",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

@@ -14,13 +14,8 @@ const flow: ChannelWorkflow = {
   entry: "start",
   nodes: [
     { id: "start", type: "start", next: "condition" },
-    {
-      id: "condition",
-      type: "condition",
-      test: "stream",
-      yes: "prompt",
-      no: "plain",
-    },
+    { id: "condition", type: "branch", condition: false, yes: "prompt", no: "plain" },
+{ id: "condition-predicate", type: "predicate", test: "stream" },
     { id: "prompt", type: "prompt", text: "system", next: "budget" },
     { id: "budget", type: "maxTokens", limit: 8, next: "tps" },
     {
@@ -34,7 +29,7 @@ const flow: ChannelWorkflow = {
     { id: "rich", type: "upstream", target: "smart", mode: "explicit" },
     { id: "plain", type: "upstream", target: "fast", mode: "implicit" },
   ],
-};
+bindings: [{ source: "condition-predicate", output: "result", target: "condition", input: "condition" }]};
 it("executes channel branches, bounded transforms and traces without modifying input", () => {
   const signal = new AbortController().signal;
   expect(runWorkflow("p", flow, request, signal).target).toBe("fast");
@@ -97,24 +92,18 @@ it("branches by requested or mapped model ID with exact and wildcard rules", () 
     entry: "s",
     nodes: [
       { id: "s", type: "start", next: "c" },
-      {
-        id: "c",
-        type: "condition",
-        test: "model",
-        models: ["gpt-*", "claude-*-sonnet*"],
-        yes: "match",
-        no: "other",
-      },
+      { id: "c", type: "branch", condition: false, yes: "match", no: "other" },
+{ id: "c-predicate", type: "predicate", test: "model", models: ["gpt-*", "claude-*-sonnet*"] },
       { id: "match", type: "provider" },
       { id: "other", type: "provider" },
     ],
-  };
+  bindings: [{ source: "c-predicate", output: "result", target: "c", input: "condition" }]};
   const signal = new AbortController().signal;
   const context = { requestedModel: "public", mappedModel: "gpt-5" };
   expect(runWorkflow("p", flow, request, signal, context).providerId).toBe(
     "other",
   );
-  (flow.nodes[1] as any).modelSource = "mapped";
+  (flow.nodes.find((node) => node.type === "predicate") as any).modelSource = "mapped";
   expect(runWorkflow("p", flow, request, signal, context).providerId).toBe(
     "match",
   );
@@ -123,12 +112,12 @@ it("branches by requested or mapped model ID with exact and wildcard rules", () 
       mappedModel: "claude-4-sonnet-latest",
     }).providerId,
   ).toBe("match");
-  (flow.nodes[1] as any).models = ["gpt-5"];
+  (flow.nodes.find((node) => node.type === "predicate") as any).models = ["gpt-5"];
   expect(
     runWorkflow("p", flow, request, signal, { mappedModel: "gpt-5-mini" })
       .providerId,
   ).toBe("other");
-  (flow.nodes[1] as any).models = [];
+  (flow.nodes.find((node) => node.type === "predicate") as any).models = [];
   expect(() => compileWorkflow(flow)).toThrow(/模型条件/);
 });
 it("validates protocol gates and maps subscription providers to their wire protocols", () => {

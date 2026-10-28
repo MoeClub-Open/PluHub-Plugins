@@ -99,7 +99,6 @@ export function workflowParameters(
           node.valueType === "secret",
         ),
       ];
-    case "condition":
     case "predicate":
       return [
         param("test", "string", "判断", false),

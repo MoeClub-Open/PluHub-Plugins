@@ -28,7 +28,6 @@ import { WorkflowTemplateDialog } from "./workflow-template-dialog.js";
 import { remapWorkflowInterfaces } from "./channel-interface-bindings.js";
 import { isFlowTextInput } from "./use-flow-clipboard.js";
 import { defaultChannelFlow } from "../ai/channel-config.js";
-import { migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
 import { useUnsavedChanges } from "./unsaved-changes.js";
 type GraphDraft = {
   channelName: string;
@@ -142,7 +141,7 @@ export function ChannelGraphEditor({
       enabled: channel.enabled !== false,
       priority: channel.priority ?? 0,
       personalInterfaces: channel.interfaces,
-      flow: migrateWorkflowConditions(structuredClone(channel.flow ?? defaultChannelFlow())),
+      flow: structuredClone(channel.flow ?? defaultChannelFlow()),
     };
     if (JSON.stringify(currentDraft.current) === JSON.stringify(next)) {
       setBaseline(JSON.stringify(next));
@@ -216,7 +215,7 @@ export function ChannelGraphEditor({
     type: WorkflowNode["type"],
     position?: { x: number; y: number },
   ) {
-    if (!flow || type === "condition" || flow.nodes.length >= 128) return;
+    if (!flow || flow.nodes.length >= 128) return;
     let key = type;
     let n = 1;
     while (flow.nodes.some((item) => item.id === key))
@@ -245,7 +244,6 @@ export function ChannelGraphEditor({
       provider: {},
       routing: { profile: (loaded.data?.references?.routingProfiles ?? [])[0] ?? "$model" },
       protocol: { next: "", allow: ingressOptions.map((p) => p.value), conversion: "auto" },
-      condition: { test: "hasTools", yes: "", no: "" },
       predicate: { test: "hasTools" },
       branch: { condition: false, yes: "", no: "" },
       compare: { valueType: "string", operator: "eq", left: "", right: "" },
@@ -547,7 +545,6 @@ export function ChannelGraphEditor({
                     .filter(
                       (type) =>
                         type !== "start" &&
-                        type !== "condition" &&
                         (personal ? type !== "routing" : type !== "platform"),
                     )
                     .map((type) => (

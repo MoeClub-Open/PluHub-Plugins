@@ -16,7 +16,7 @@ import {
   compatibleWorkflowTypes,
 } from "./workflow-parameters.js";
 import { evaluateCompare, evaluateLogic, evaluatePredicate } from "./workflow-condition.js";
-import { validateWorkflowDataNode } from "./workflow-node-validation.js";
+import { computedWorkflowTypes, validateWorkflowDataNode } from "./workflow-node-validation.js";
 
 type Context = {
   requestedModel?: string;
@@ -190,7 +190,7 @@ export function resolveWorkflowBindings(
   function needsDataGraph(id: string): boolean {
     if (deferred.has(id)) return deferred.get(id)!;
     const node = nodes.get(id)!;
-    const result = ["text", "format", "template", "replace", "llm", "jev"].includes(node.type) ||
+    const result = computedWorkflowTypes.has(node.type) ||
       (incoming.get(id) ?? []).some((binding) => needsDataGraph(binding.source));
     deferred.set(id, result);
     return result;

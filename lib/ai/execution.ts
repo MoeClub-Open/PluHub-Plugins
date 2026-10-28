@@ -1,7 +1,8 @@
 import { HostError, type Host, type RequestContext } from "@pluhub/sdk";
 import type { AIEvent, AIPlan, AIRequest, Protocol } from "@pluhub/contracts/ai";
 import { generationRejected } from "./rejection.js";
-import { observation, planObservation } from "./telemetry.js";
+import { switchFallback } from "./fallback.js";
+import { observation } from "./telemetry.js";
 import { decodeResult, resultEvents } from "./protocols.js";
 import { upstreamEvents } from "./streams.js";
 import { decodeUsage } from "./usage.js";
@@ -73,83 +74,7 @@ export async function executeRequest(
       } catch (error) {
         const rejected = !delivered && generationRejected(error);
         ctx.state.set("ai.executionRejected", rejected);
-        signal.throwIfAborted();
-        const failure = error as { code?: string; retryable?: boolean };
-        if (
-          !rejected ||
-          !plan.fallback ||
-          !(
-            failure.retryable ||
-            [
-              "subscription_unavailable",
-              "subscription_disabled",
-              "credential_unavailable",
-              "credentials_required",
-            ].includes(failure.code ?? "")
-          )
-        )
-          throw error;
-        const next = await host.call<AIPlan>(
-          "ai.routing@2",
-          plan.fallback,
-          signal,
-        );
-        const attempts = [
-          ...(plan.attempts ?? []),
-          {
-            channel: plan.upstreamId,
-            model: plan.model,
-            error: failure.code ?? "upstream_rejected",
-          },
-        ];
-        next.requestLimits = [
-          ...(plan.requestLimits ?? []),
-          ...(next.requestLimits ?? []),
-        ];
-        if (plan.outputPolicy)
-          next.outputPolicy = {
-            ...plan.outputPolicy,
-            ...next.outputPolicy,
-            ...(plan.outputPolicy.tps || next.outputPolicy?.tps
-              ? {
-                  tps: Math.min(
-                    plan.outputPolicy.tps ?? Infinity,
-                    next.outputPolicy?.tps ?? Infinity,
-                  ),
-                }
-              : {}),
-            ...(plan.outputPolicy.aggregateTps ||
-            next.outputPolicy?.aggregateTps
-              ? {
-                  aggregateTps: Math.min(
-                    plan.outputPolicy.aggregateTps ?? Infinity,
-                    next.outputPolicy?.aggregateTps ?? Infinity,
-                  ),
-                }
-              : {}),
-          };
-        const responseModel = plan.responseModel;
-        for (const key of Object.keys(plan))
-          delete (plan as unknown as Record<string, unknown>)[key];
-        Object.assign(plan, next, { responseModel, attempts });
-        const prepared = {
-          ...(plan.preparedRequest ?? request),
-          model: request.model,
-        };
-        ctx.state.set("ai.plan", plan);
-        ctx.state.set("ai.request", prepared);
-        planObservation(ctx, prepared, plan);
-        await host.call(
-          "ai.request-limits@1",
-          { action: "admit", context: ctx, retry: true },
-          signal,
-        );
-        if (host.hasCapability("billing.admit@1"))
-          await host.call(
-            "billing.admit@1",
-            { context: ctx, retry: true },
-            signal,
-          );
+        if (!await switchFallback(host, ctx, request, plan, error, signal)) throw error;
         if (plan.workflowDeferred) {
           if (!host.hasCapability("ai.workflow-execution@1"))
             throw new HostError("workflow_unavailable", "备用流程执行能力不可用", 503);
@@ -159,7 +84,7 @@ export async function executeRequest(
           ctx.state.set("ai.executionRejected", false);
           ctx.state.set("workflow.ready", true);
           const response = await host.call<Response>("ai.workflow-execution@1", undefined, signal);
-          yield* workflowResponseEvents(response, protocol, responseModel ?? request.model, request.stream, ctx);
+          yield* workflowResponseEvents(response, protocol, plan.responseModel ?? request.model, request.stream, ctx);
           return;
         }
       }

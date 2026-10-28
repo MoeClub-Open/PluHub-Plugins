@@ -76,7 +76,7 @@ it("does not recursively invoke automatic chat routing for any decision protocol
 
 it("uses estimation or a fixed price for decision protocols that cannot enforce an output limit", () => {
   for (const protocol of decisionKinds) {
-    const plan: AIPlan = {
+    const plan: AIPlan = {kind: "provider", 
       model: "remote",
       capability: `ai.upstream.${protocol}@1`,
       upstream: { protocol },

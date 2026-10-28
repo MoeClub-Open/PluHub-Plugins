@@ -5,8 +5,8 @@
   "name": "邮件服务",
   "description": "发送注册、登录及安全验证邮件。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.16",
-  "host": ">=0.1.0-alpha.16 <0.2.0-0",
+  "version": "0.1.0-alpha.17",
+  "host": ">=0.1.0-alpha.17 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"

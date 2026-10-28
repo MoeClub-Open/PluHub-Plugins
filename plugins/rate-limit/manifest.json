@@ -5,7 +5,7 @@
   "name": "请求限流",
   "description": "按规则限制请求频率和 Token 配额。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.16",
+  "version": "0.1.0-alpha.17",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

@@ -6,7 +6,7 @@ export const workflowOutputs = (
 ): { field: WorkflowPort; target: string }[] =>
   node.type === "provider"
     ? [{ field: "fallback", target: node.fallback ?? "" }]
-    : node.type === "condition" || node.type === "branch"
+    : node.type === "branch"
       ? [
           { field: "yes", target: node.yes },
           { field: "no", target: node.no },

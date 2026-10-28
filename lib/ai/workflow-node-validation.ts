@@ -1,6 +1,8 @@
 import { HostError } from "@pluhub/sdk";
 import type { WorkflowNode } from "@pluhub/contracts/workflow";
 
+export const computedWorkflowTypes = new Set<string>(["text", "format", "template", "replace", "llm", "jev"]);
+
 const names = (value: unknown) =>
   Array.isArray(value) &&
   value.length > 0 &&

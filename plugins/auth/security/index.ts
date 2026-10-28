@@ -459,7 +459,7 @@ export function installAuthSecurity(
     path: string,
     access: string,
     handle: (r: Request, ctx: RequestContext) => Response | Promise<Response>,
-  ) => host.api({ method, path, access, handle });
+  ) => host.api({ method, path, access, handle, audit: path !== "/reauth" });
   api("GET", "/options", "public", async () => safeJson(await options()));
   api("POST", "/login/mfa", "public", async (r) => {
     limit("mfa:" + peer(r), 30, 900000);

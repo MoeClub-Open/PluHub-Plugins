@@ -6,6 +6,16 @@ import { planRoute } from "../plugins/ai-router/planning.js";
 const task = { model: "public", messages: [{ role: "user" as const, text: "hello" }], tools: [], stream: false };
 const signal = new AbortController().signal;
 
+it("defers a formatted value connected directly to an execution node", () => {
+  const flow: ChannelWorkflow = { entry: "start", nodes: [
+    { id: "start", type: "start", next: "prompt" },
+    { id: "prompt", type: "prompt", text: "default", next: "provider" },
+    { id: "provider", type: "provider" },
+    { id: "format", type: "format", value: { label: "test" } },
+  ], bindings: [{ source: "format", output: "text", target: "prompt", input: "text" }] };
+  expect(needsDeferredWorkflow(flow)).toBe(true);
+});
+
 it("defers only data needed by a reachable execution node", () => {
   const flow: ChannelWorkflow = {
     entry: "start",
@@ -49,10 +59,11 @@ it("tries another matching channel when a static mixed graph resolves to the wro
     upstreams: {
       mixed: { priority: 5, flow: { entry: "start", nodes: [
         { id: "start", type: "start", next: "choice" },
-        { id: "choice", type: "condition", test: "hasTools", yes: "chat", no: "jev" },
+        { id: "choice", type: "branch", condition: false, yes: "chat", no: "jev" },
+{ id: "choice-predicate", type: "predicate", test: "hasTools" },
         { id: "chat", type: "provider", upstream: { protocol: "openai-chat", baseUrl: "https://chat.example" } },
         { id: "jev", type: "provider", upstream: { protocol: "systemone", baseUrl: "https://jev.example" } },
-      ] } },
+      ] ,bindings: [{ source: "choice-predicate", output: "result", target: "choice", input: "condition" }]} },
       chat: { protocol: "openai-chat", baseUrl: "https://chat.example" },
     },
     models: {
@@ -122,7 +133,7 @@ it("retains deferred execution through a personal channel's platform delegation"
     hasCapability: () => true,
     async call(name: string, input: any) {
       if (name === "ai.user-channels@1") return [channel];
-      if (name === "ai.routing@2") return { capability: "", upstream: {}, model: "target", workflowDeferred: { input, requestedModel: "target" } };
+      if (name === "ai.routing@2") return { kind: "workflow", model: "target", workflowDeferred: { input, requestedModel: "target" } };
       throw Error("unexpected call " + name);
     },
   } as any;

@@ -9,7 +9,7 @@ it.each([false, true])("runs an admitted asynchronous fallback without charging 
   const state = new Map<string, any>([["ai.observation", { startedAt: Date.now(), protocol: "openai-chat" }]]);
   const ctx = { state } as any;
   const request = { model: "public", messages: [], tools: [], stream: streaming } as any;
-  const plan = { capability: "primary", upstream: {}, model: "primary", fallback: {} } as any;
+  const plan = {kind: "provider",  capability: "primary", upstream: {}, model: "primary", fallback: {} } as any;
   const host = {
     hasCapability: (name: string) => ["billing.admit@1", "ai.workflow-execution@1"].includes(name),
     async call(name: string, input?: any) {
@@ -17,7 +17,7 @@ it.each([false, true])("runs an admitted asynchronous fallback without charging 
       if (name === "ai.execution@1") return (async function* () {
         throw Object.assign(new Error("rejected"), { generationRejected: true, retryable: true });
       })();
-      if (name === "ai.routing@2") return { capability: "", upstream: {}, model: "public", workflowDeferred: { input: {}, requestedModel: "public" } };
+      if (name === "ai.routing@2") return {kind: "workflow", model: "public", workflowDeferred: { input: {}, requestedModel: "public" } };
       if (name === "billing.admit@1" || name === "ai.request-limits@1") {
         expect(input.retry).toBe(true);
         return;
@@ -53,14 +53,14 @@ it("cancels the asynchronous fallback stream when the client stops reading", asy
   let closed = false;
   const state = new Map<string, any>([["ai.observation", { startedAt: Date.now(), protocol: "openai-chat" }]]);
   const request = { model: "public", messages: [], tools: [], stream: true } as any;
-  const plan = { capability: "primary", upstream: {}, model: "primary", fallback: {} } as any;
+  const plan = {kind: "provider",  capability: "primary", upstream: {}, model: "primary", fallback: {} } as any;
   const host = {
     hasCapability: (name: string) => name === "ai.workflow-execution@1",
     async call(name: string) {
       if (name === "ai.execution@1") return (async function* () {
         throw Object.assign(new Error("rejected"), { generationRejected: true, retryable: true });
       })();
-      if (name === "ai.routing@2") return { capability: "", upstream: {}, model: "public", workflowDeferred: { input: {}, requestedModel: "public" } };
+      if (name === "ai.routing@2") return {kind: "workflow", model: "public", workflowDeferred: { input: {}, requestedModel: "public" } };
       if (name === "ai.request-limits@1") return;
       if (name === "ai.workflow-execution@1") {
         const source = (async function* () {

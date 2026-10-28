@@ -1,3 +1,4 @@
+import { routingContext, workflowCallers } from "./request-context.js";
 import { HostError, json, type Host } from "@pluhub/sdk";
 import type { AIEvent, AIPlan, AIRequest, Protocol } from "@pluhub/contracts/ai";
 import type { WorkflowNode } from "@pluhub/contracts/workflow";
@@ -53,7 +54,7 @@ function llmTask(node: LLMNode, input: AIRequest): AIRequest {
 /** Execute a deferred graph under the already admitted outer request. */
 export function installWorkflowExecution(host: Host) {
   host.provide("ai.workflow-execution@1", async (_input, signal): Promise<Response> => {
-    const ctx = host.requestContext();
+    const ctx = routingContext(host);
     const request = ctx.state.get("ai.request") as AIRequest;
     const plan = ctx.state.get("ai.plan") as AIPlan;
     const protocol = observation(ctx)?.protocol as Protocol;
@@ -167,5 +168,5 @@ export function installWorkflowExecution(host: Host) {
           state.errorCode = result?.errorCode ?? outcome.errorCode ?? "workflow_child_failed";
       },
     });
-  });
+  }, { callers: workflowCallers });
 }

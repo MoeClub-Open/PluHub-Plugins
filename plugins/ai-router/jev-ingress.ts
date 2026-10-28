@@ -1,3 +1,4 @@
+import { switchFallback } from "../../lib/ai/fallback.js";
 import { HostError, json, readObject, requiredString, type Host } from "@pluhub/sdk";
 import type { AIPlan, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { channelScope } from "../../lib/ai/channel-scope.js";
@@ -41,6 +42,7 @@ export function installJevIngress(host: Host) {
     }, input.request, signal, key);
   });
   host.route({
+    internal: true, childCallers: [host.id],
     method: "POST",
     path: "/internal/workflow/jev",
     access: "authenticated",
@@ -80,14 +82,14 @@ export function installJevIngress(host: Host) {
         pricingContext: capturePricingContext({ model: input.model }, request.headers, state.startedAt),
         ...channelScope(ctx.principal, request.headers.get("x-pluhub-channel") ?? undefined, request.headers.get("x-pluhub-group") ?? undefined),
       }, ctx.signal);
-      if (plan.upstream.protocol !== "systemone" || plan.capability !== "ai.upstream.systemone@1")
+      if (plan.kind !== "provider" || plan.upstream.protocol !== "systemone" || plan.capability !== "ai.upstream.systemone@1")
         throw new HostError("operation_not_supported", "Selected model is not a System One model", 400);
       ctx.state.set("ai.plan", plan);
       planObservation(ctx, normalized, plan);
     },
     handle: async (_request, ctx) => {
       const input = ctx.state.get("jev.request") as JevRequest;
-      let plan = ctx.state.get("ai.plan") as AIPlan;
+      const plan = ctx.state.get("ai.plan") as AIPlan;
       const request = ctx.state.get("ai.request") as AIRequest;
       const state = observation(ctx)!;
       ctx.state.set("ai.executionStarted", true);
@@ -107,28 +109,13 @@ export function installJevIngress(host: Host) {
           const usage = (error as { usage?: JevResult["usage"] })?.usage;
           if (usage) state.usage = usage;
           const failure = error as { code?: string; retryable?: boolean };
-          if (!rejected || !plan.fallback || !(failure.retryable || [
-            "subscription_unavailable", "subscription_disabled", "credential_unavailable", "credentials_required",
-          ].includes(failure.code ?? ""))) {
+          if (!await switchFallback(host, ctx, request, plan, error, ctx.signal, (next) => {
+            if (next.kind !== "provider" || next.upstream.protocol !== "systemone" || next.capability !== "ai.upstream.systemone@1")
+              throw new HostError("operation_not_supported", "备用模型不是 System One 模型", 400);
+          })) {
             state.errorCode = failure.code ?? "upstream_error";
             throw error;
           }
-          ctx.signal.throwIfAborted();
-          const next = await host.call<AIPlan>("ai.routing@2", plan.fallback, ctx.signal);
-          if (next.upstream.protocol !== "systemone" || next.capability !== "ai.upstream.systemone@1")
-            throw new HostError("operation_not_supported", "备用模型不是 System One 模型", 400);
-          next.attempts = [...(plan.attempts ?? []), {
-            channel: plan.upstreamId, model: plan.model, error: failure.code ?? "upstream_rejected",
-          }];
-          next.requestLimits = [...(plan.requestLimits ?? []), ...(next.requestLimits ?? [])];
-          plan = next;
-          ctx.state.set("ai.plan", plan);
-          ctx.state.set("ai.request", { ...(plan.preparedRequest ?? request), model: request.model });
-          planObservation(ctx, request, plan);
-          await host.call("ai.request-limits@1", { action: "admit", context: ctx, retry: true }, ctx.signal);
-          if (host.hasCapability("billing.admit@1"))
-            await host.call("billing.admit@1", { context: ctx, retry: true }, ctx.signal);
-          ctx.state.set("ai.executionRejected", false);
         }
       }
     },

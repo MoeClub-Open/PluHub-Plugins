@@ -62,7 +62,7 @@ export function ChannelNodeSettings({
           {tr("全局限制")}
         </button>
       )}
-      {(node.type === "condition" || node.type === "predicate") && (
+      {node.type === "predicate" && (
         <>
           <FlowParameter field="test">
             <label>
@@ -855,7 +855,7 @@ function ModelConditionFields({
   node,
   change,
 }: {
-  node: Extract<WorkflowNode, { type: "condition" | "predicate" }>;
+  node: Extract<WorkflowNode, { type: "predicate" }>;
   change: (patch: any) => void;
 }) {
   const [text, setText] = React.useState(() => node.models?.join("\n") ?? "");

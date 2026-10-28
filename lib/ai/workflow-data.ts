@@ -370,5 +370,12 @@ export function createWorkflowDataGraph<N extends Node>(options: {
         throw new HostError("invalid_workflow", "节点不能作为数据来源", 400);
     }
   }
-  return { get, resolveNode };
+  function beginStep() {
+    // Model calls run once; pure values observe changes made by preceding nodes.
+    for (const id of evaluated.keys())
+      if (!["llm", "jev"].includes(sourceNode(id).type)) evaluated.delete(id);
+    for (const id of resolved.keys())
+      if (!["llm", "jev"].includes(sourceNode(id).type)) resolved.delete(id);
+  }
+  return { get, resolveNode, beginStep };
 }

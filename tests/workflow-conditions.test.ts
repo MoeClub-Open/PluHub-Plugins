@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AIRequest } from "@pluhub/contracts/ai";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
 import { compileWorkflow, runWorkflow } from "../lib/ai/channel-graph.js";
-import { migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
+import { type LegacyWorkflowCondition, type LegacyChannelWorkflow, migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
 
 const signal = new AbortController().signal;
 const request: AIRequest = {
@@ -12,7 +12,7 @@ const request: AIRequest = {
   stream: false,
 };
 
-function legacyFlow(condition: Extract<WorkflowNode, { type: "condition" }>): ChannelWorkflow {
+function legacyFlow(condition: LegacyWorkflowCondition): LegacyChannelWorkflow {
   return {
     entry: "start",
     nodes: [
@@ -58,7 +58,7 @@ describe("workflow conditions", () => {
       source: "choose-predicate", output: "result", target: "choose", input: "condition",
     });
     expect(migrateWorkflowConditions(migrated)).toBe(migrated);
-    expect(runWorkflow("channel", flow, input as AIRequest, signal, context).providerId).toBe("yes");
+    expect(runWorkflow("channel", migrated, input as AIRequest, signal, context).providerId).toBe("yes");
   });
 
   it.each([
@@ -69,7 +69,7 @@ describe("workflow conditions", () => {
     [{ test: "model", models: ["provider-*"], modelSource: "mapped" }, { mappedModel: "other" }],
   ] as const)("preserves the false branch of a migrated %s condition", (settings, context) => {
     const flow = legacyFlow({ id: "choose", type: "condition", ...settings, yes: "yes", no: "no" });
-    expect(runWorkflow("channel", flow, request, signal, context).providerId).toBe("no");
+    expect(runWorkflow("channel", migrateWorkflowConditions(flow), request, signal, context).providerId).toBe("no");
   });
 
   it("migrates linked parameters and layout without changing the original or colliding IDs", () => {
@@ -132,11 +132,11 @@ describe("workflow conditions", () => {
     const flow = legacyFlow({ id: "choose", type: "condition", test: "textLengthAbove", value: 10, yes: "yes", no: "no" });
     flow.nodes[0] = { id: "start", type: "start", next: "prompt" };
     flow.nodes.push({ id: "prompt", type: "prompt", text: "system prompt", next: "choose" });
-    expect(runWorkflow("channel", flow, request, signal).providerId).toBe("yes");
+    expect(runWorkflow("channel", migrateWorkflowConditions(flow), request, signal).providerId).toBe("yes");
   });
 
   it("does not evaluate an unreachable conditional branch", () => {
-    const flow: ChannelWorkflow = {
+    const flow: LegacyChannelWorkflow = {
       entry: "start",
       nodes: [
         { id: "start", type: "start", next: "first" },
@@ -146,7 +146,7 @@ describe("workflow conditions", () => {
         { id: "no", type: "provider" },
       ],
     };
-    expect(runWorkflow("channel", flow, { ...request, stream: true }, signal).providerId).toBe("yes");
+    expect(runWorkflow("channel", migrateWorkflowConditions(flow), { ...request, stream: true }, signal).providerId).toBe("yes");
   });
 
   it("restricts dynamic redirect targets to the configured allowed models", () => {

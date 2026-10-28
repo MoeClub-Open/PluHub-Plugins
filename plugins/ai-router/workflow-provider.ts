@@ -33,6 +33,7 @@ export function installWorkflowProvider(host: Host) {
     },
   });
   host.route({
+    internal: true, childCallers: [host.id],
     method: "POST",
     path: "/internal/workflow/provider",
     access: "authenticated",

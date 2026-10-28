@@ -148,6 +148,7 @@ export default definePlugin({
     host.api({
       method: "POST",
       path: "/preview",
+      audit: false,
       access: "host.manage",
       handle: async (r, ctx) => {
         const { message, ...metadata } = await sample(await readObject(r), ctx);

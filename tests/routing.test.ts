@@ -79,7 +79,7 @@ function harness(
       s.throwIfAborted();
       if (n === "ai.targets@1")
         return {
-          plan: {
+          plan: {kind: "provider", 
             capability: "ai.upstream.openai-chat@1",
             upstream: { protocol: "openai-chat" },
             upstreamId: i.target,
