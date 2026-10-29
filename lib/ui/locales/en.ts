@@ -1,5 +1,6 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "展示模型用量、平台价格和用户用量排行。": "Shows model usage, platform pricing and user usage rankings.",
   "API 接入示意": "API routing overview",
   "已复制模型 ID": "Model ID copied",
   "复制模型 ID：": "Copy model ID: ",
