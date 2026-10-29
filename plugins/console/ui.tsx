@@ -54,7 +54,9 @@ import {
 } from "./plugin-list.js";
 import { Portal } from "./portal-ui.js";
 import { PortalSettings } from "./portal-settings.js";
-import { defaultPortal, type PortalContent } from "./portal.js";
+import { GatewayVisual } from "./gateway-visual.js";
+import { ThemeButton } from "./theme-button.js";
+import { defaultPortal, localizePortal, type PortalContent } from "./portal.js";
 import { Onboarding } from "./onboarding-ui.js";
 import { setupRedirect, type SetupState } from "./onboarding.js";
 import { Icon, PageHeading, Empty } from "../../lib/ui/components.js";
@@ -174,7 +176,7 @@ const pageIcons: Record<string, string> = {
   "/status": "activity",
 };
 function App() {
-  useLocale();
+  const locale = useLocale();
   const [user, setUser] = React.useState<any>();
   const [loaded, setLoaded] = React.useState(false);
   const [extensions, setExtensions] = React.useState<Extension[]>([]);
@@ -600,6 +602,7 @@ function App() {
           </a>
           <nav className="auth-navigation" aria-label={tr("公开导航")}>
             <LanguageMenu />
+            <ThemeButton theme={theme} />
             {modelCatalog && (
               <a className="auth-home" href="#/models">
                 {tr("查看模型")}
@@ -607,24 +610,17 @@ function App() {
             )}
           </nav>
         </header>
-        <div
-          className={
-            "login-layout" +
-            (!brand.loginTitle && !brand.loginDescription
-              ? " login-compact"
-              : "")
-          }
-        >
-          {(brand.loginTitle || brand.loginDescription) && (
-            <section className="login-story">
-              <div>
-                {brand.loginTitle && (
-                  <h1 className="brand-login-title">{brand.loginTitle}</h1>
-                )}
-                {brand.loginDescription && <p>{brand.loginDescription}</p>}
-              </div>
-            </section>
-          )}
+        <div className="login-layout">
+          <section className="login-story">
+            <div className="login-story-copy">
+              <h2 className="brand-login-title">
+                {brand.loginTitle ||
+                  localizePortal(portal, locale, brand.defaultLanguage).title}
+              </h2>
+              {brand.loginDescription && <p>{brand.loginDescription}</p>}
+            </div>
+            <GatewayVisual name={brand.name} example={false} />
+          </section>
           <div className="login-panel">
             <div
               className="login-content"

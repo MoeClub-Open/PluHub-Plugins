@@ -63,7 +63,7 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
       jsx: "automatic",
       minify: true,
       plugins: [expressionLicense],
-      banner: ["model-catalog", "console"].includes(entry.name)
+      banner: ["model-catalog", "console", "leaderboard"].includes(entry.name)
         ? {
             js:
               "/*!\n" +

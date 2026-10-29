@@ -1,4 +1,5 @@
-import { definePlugin, HostError } from "@pluhub/sdk";
+import { definePlugin, HostError, type RequestContext } from "@pluhub/sdk";
+import { channelScope } from "../../lib/ai/channel-scope.js";
 import type { CatalogModel } from "@pluhub/contracts/ai";
 import type {
   AggregateRanking,
@@ -13,6 +14,41 @@ import type {
 
 export default definePlugin({
   setup(host) {
+    async function visibleModels(ctx: RequestContext) {
+      if (!host.hasCapability("ai.catalog@2")) return [];
+      const models = await host.call<CatalogModel[]>("ai.catalog@2", {
+        principalId: ctx.principal!.id,
+        ...channelScope(ctx.principal),
+      });
+      const allowed = ctx.principal?.attributes?.models as string[] | undefined;
+      return models.filter(
+        (model) =>
+          !model.channelId?.startsWith("personal:") &&
+          (!allowed?.length || allowed.includes(model.id)),
+      );
+    }
+    host.api({
+      method: "GET",
+      path: "/prices",
+      access: "authenticated",
+      async handle(_request, ctx) {
+        const models = await visibleModels(ctx);
+        return Response.json(
+          models.map((model) => ({
+            id: model.id,
+            name: model.name,
+            provider: model.provider,
+            inputPrice: model.inputPrice,
+            outputPrice: model.outputPrice,
+            pricing: model.pricing,
+            billing: model.billing,
+            consumptionMultiplier: model.consumptionMultiplier,
+            channel: model.channel,
+          })),
+          { headers: { "cache-control": "private, no-store" } },
+        );
+      },
+    });
     host.api({
       method: "GET",
       path: "/rankings",
@@ -28,11 +64,11 @@ export default definePlugin({
           !["7d", "30d", "all"].includes(range)
         )
           throw new HostError("invalid_request", "排行榜筛选无效");
-        // Public rankings use the platform catalog, never a viewer's BYOK catalog.
+        // Model visibility follows the viewer's platform catalog; BYOK stays private.
         const [users, models] = await Promise.all([
           host.call<PublicUserProfile[]>("users.directory@1", {}),
-          kind === "models" && host.hasCapability("ai.catalog@2")
-            ? host.call<CatalogModel[]>("ai.catalog@2", {})
+          kind === "models"
+            ? visibleModels(ctx)
             : Promise.resolve([] as CatalogModel[]),
         ]);
         const names = new Map(users.map((user) => [user.id, user.name]));

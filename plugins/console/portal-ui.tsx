@@ -8,6 +8,8 @@ import { useLocale } from "../../lib/ui/language.js";
 import { PortalModels } from "./portal-models.js";
 import { Empty, Icon } from "../../lib/ui/components.js";
 import type { ThemeMode } from "./theme.js";
+import { GatewayVisual } from "./gateway-visual.js";
+import { ThemeButton } from "./theme-button.js";
 import { LanguageMenu } from "./language-menu.js";
 
 export function Portal({
@@ -42,17 +44,6 @@ export function Portal({
   }, [content.description, brand.description]);
   const [copyStatus, setCopyStatus] = React.useState("");
   const endpoint = location.origin + "/v1";
-  const themeNames = {
-    system: tr("跟随系统"),
-    light: tr("浅色"),
-    dark: tr("深色"),
-  };
-  const nextTheme =
-    theme.mode === "system"
-      ? "light"
-      : theme.mode === "light"
-        ? "dark"
-        : "system";
   React.useEffect(() => {
     if (!copyStatus) return;
     const timer = setTimeout(() => setCopyStatus(""), 3000);
@@ -84,6 +75,8 @@ export function Portal({
             </a>
           )}
           {content.docsUrl && <a href={content.docsUrl}>{tr("文档")}</a>}
+          <LanguageMenu />
+          <ThemeButton theme={theme} />
           {user ? (
             <a
               className="portal-account-link"
@@ -126,11 +119,7 @@ export function Portal({
                   {content.announcement}
                 </div>
               )}
-              <div
-                className={
-                  "portal-intro" + (modelCatalog ? "" : " portal-intro-text")
-                }
-              >
+              <div className="portal-intro">
                 <section className="portal-hero">
                   {content.eyebrow && (
                     <p className="portal-kicker">{content.eyebrow}</p>
@@ -151,9 +140,7 @@ export function Portal({
                     )}
                   </div>
                 </section>
-                {modelCatalog && (
-                  <PortalModels host={host} selected={content.featuredModels} />
-                )}
+                <GatewayVisual name={brand.name} />
               </div>
               {content.showEndpoint && (
                 <div className="portal-endpoint">
@@ -175,6 +162,9 @@ export function Portal({
                     <span role="status">{copyStatus || tr("复制")}</span>
                   </button>
                 </div>
+              )}
+              {modelCatalog && (
+                <PortalModels host={host} selected={content.featuredModels} />
               )}
               {content.features.length > 0 && (
                 <section
@@ -223,31 +213,6 @@ export function Portal({
             )}
           </nav>
         )}
-        <div className="portal-utilities">
-          <LanguageMenu />
-          <button
-            className="ghost icon-button portal-theme"
-            aria-label={
-              tr("颜色模式：") +
-              themeNames[theme.mode] +
-              tr("，点击切换为") +
-              themeNames[nextTheme]
-            }
-            title={tr("颜色模式：") + themeNames[theme.mode]}
-            onClick={() => theme.change(nextTheme)}
-          >
-            <Icon
-              name={
-                theme.mode === "system"
-                  ? "monitor"
-                  : theme.mode === "dark"
-                    ? "moon"
-                    : "sun"
-              }
-              size={15}
-            />
-          </button>
-        </div>
       </footer>
     </div>
   );

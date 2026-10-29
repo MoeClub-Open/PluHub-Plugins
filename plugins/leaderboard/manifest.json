@@ -3,9 +3,9 @@
   "id": "official.leaderboard",
   "category": "operations",
   "name": "整站排行榜",
-  "description": "展示用户用量榜和平台模型热度榜。",
+  "description": "展示模型用量、平台价格和用户用量排行。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.12",
+  "version": "0.1.0-alpha.13",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",

@@ -1,5 +1,26 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "API 接入示意": "API routing overview",
+  "已复制模型 ID": "Model ID copied",
+  "复制模型 ID：": "Copy model ID: ",
+  "复制模型 ID": "Copy model ID",
+  用户排行: "User ranking",
+  价格排行: "Price ranking",
+  模型排行: "Model ranking",
+  "搜索模型名称或 ID": "Search model name or ID",
+  模型用量占比: "Model usage share",
+  "USD / 百万 Token · 已含渠道倍率":
+    "USD / million tokens · Channel multiplier included",
+  价格排序: "Sort by price",
+  输出价格从低到高: "Output price: low to high",
+  模型价格排行: "Model price ranking",
+  "正在加载价格…": "Loading prices…",
+  价格暂不可用: "Prices are unavailable",
+  没有可比较的模型价格: "No comparable model prices",
+  "仅比较可见平台模型的固定 Token 单价；按次与阶梯计价模型请在模型目录查看。":
+    "Compares fixed token prices for visible platform models. See the model catalog for per-request and tiered pricing.",
+
+
   "由参数连线提供": "Supplied by a parameter connection",
   "当前目标不在可用模型目录中，请重新选择。": "The current target is not in the available model directory. Select another model.",
   "重新获取模型": "Reload models",
