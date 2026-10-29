@@ -1,7 +1,7 @@
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { Extension, UIHost, UIExtensionModule } from "@pluhub/ui-sdk";
-import { Empty, Icon } from "../../lib/ui/components.js";
+import { Empty, Icon, PageHeading } from "../../lib/ui/components.js";
 import { paymentAdapterSelection, paymentMethodsPath } from "./navigation.js";
 
 export function PaymentMethods({
@@ -59,7 +59,6 @@ export function PaymentMethods({
             <Icon name="back" size={15} />
             {tr("全部支付方式")}
           </a>
-          <span className="muted">{selected.title}</span>
         </div>
         {loading && <p role="status">{tr("正在加载配置…")}</p>}
         {error && (
@@ -72,6 +71,7 @@ export function PaymentMethods({
     );
   return (
     <>
+      <PageHeading title={tr("支付方式")} />
       {requested && (
         <div className="notice" role="status">
           {tr("该支付适配器未启用或不存在，请重新选择。")}

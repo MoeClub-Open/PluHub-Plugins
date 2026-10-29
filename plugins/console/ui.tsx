@@ -998,7 +998,7 @@ function App() {
                 selected?.path === verificationPath ? verificationPath : hash
               }
             >
-              {section && !selected?.url && (
+              {section && !selected?.url && selected?.path !== paymentMethodsPath && (
                 <PageHeading title={selected?.title ?? section.title} />
               )}
               {selected?.path === "/settings/traffic" ? (
