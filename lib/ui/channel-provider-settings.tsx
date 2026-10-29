@@ -43,6 +43,8 @@ export function ProviderNodeSettings({
     setPersonalInterfaces,
     subscriptionAccounts,
   } = context;
+  const providedModels = context.providedModels.filter(route =>
+    personal || (node.modelMap ? Object.hasOwn(node.modelMap, route.model) : node.model !== undefined));
   function changeProtocol(protocol: string) {
     if (node?.type !== "provider") return;
     const upstream: any = { protocol };
@@ -54,7 +56,7 @@ export function ProviderNodeSettings({
       upstream.keyRef = node.upstream?.keyRef ?? "";
     }
     change(
-      { upstream },
+      { upstream, model: undefined, modelMap: {} },
       node.upstream?.interfaces?.map(() => -1),
     );
   }
@@ -288,9 +290,9 @@ export function ProviderNodeSettings({
             <span>{tr("提供模型")}</span>
             {context.boundInputs.has("model") || context.boundInputs.has("modelMap") ? (
               <p>{tr("由参数连线提供")}</p>
-            ) : context.providedModels.length ? (
+            ) : providedModels.length ? (
               <dl className="provider-model-summary">
-                {context.providedModels.map((route) => {
+                {providedModels.map((route) => {
                   const target = node.modelMap ? node.modelMap[route.model] : (node.model ?? route.model);
                   return <div key={route.id}>
                     <dt>{route.name}</dt>

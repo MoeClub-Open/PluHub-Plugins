@@ -244,7 +244,7 @@ export function ChannelGraphEditor({
       },
       response: { text: "" },
       platform: { groupId: platformGroups.data?.[0]?.id ?? "" },
-      provider: {},
+      provider: { modelMap: {} },
       routing: { profile: (loaded.data?.references?.routingProfiles ?? [])[0] ?? "$model" },
       protocol: { next: "", allow: ingressOptions.map((p) => p.value), conversion: "auto" },
       branch: { condition: false, yes: "", no: "" },

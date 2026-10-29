@@ -1,8 +1,91 @@
 import { expect, it } from "vitest";
-import { readNodeModels } from "../plugins/ai-router/provider-models.js";
+import {
+  readNodeModels,
+  validateProviderModels,
+} from "../plugins/ai-router/provider-models.js";
 import { assignProviderModel } from "../plugins/ai-router/model-config.js";
 import { planRoute } from "../plugins/ai-router/planning.js";
 import { compileWorkflow } from "../lib/ai/channel-graph.js";
+import { providerModel } from "../lib/ai/channel-config.js";
+
+it("does not inherit another provider's offered models when assigning a target", () => {
+  const config: any = {
+    upstreams: {
+      channel: {
+        flow: {
+          entry: "start",
+          nodes: [
+            { id: "start", type: "start", next: "agy" },
+            {
+              id: "agy",
+              type: "provider",
+              modelMap: { gemini: "gemini-high" },
+            },
+            { id: "codex", type: "provider", modelMap: {} },
+          ],
+        },
+      },
+    },
+    models: {
+      gemini: { upstream: "channel", model: "gemini" },
+      gpt: { upstream: "channel", model: "gpt" },
+    },
+  };
+  assignProviderModel(config, "channel", "codex", "gpt", "gpt-native");
+  const nodes = config.upstreams.channel.flow.nodes;
+  expect(nodes[1].modelMap).toEqual({ gemini: "gemini-high" });
+  expect(nodes[2].modelMap).toEqual({ gpt: "gpt-native" });
+  expect(() => providerModel(nodes[2], "gemini")).toThrow(/未提供/);
+});
+
+it("checks changed subscription targets against that node's catalog only", async () => {
+  const previous: any = {
+    upstreams: {
+      channel: {
+        flow: {
+          entry: "start",
+          nodes: [
+            { id: "start", type: "start", next: "agy" },
+            {
+              id: "agy",
+              type: "provider",
+              upstream: {
+                protocol: "antigravity",
+                subscriptionAccountIds: ["a"],
+              },
+              modelMap: { gemini: "gemini-high" },
+            },
+          ],
+        },
+      },
+    },
+  };
+  const config: any = structuredClone(previous);
+  config.upstreams.channel.flow.nodes.push({
+    id: "codex",
+    type: "provider",
+    upstream: { protocol: "codex", subscriptionAccountIds: ["b"] },
+  });
+  const calls: string[] = [];
+  const host = {
+    call: async (_: string, request: any) => {
+      calls.push(request.provider);
+      return [{ id: "gpt-native" }];
+    },
+  } as any;
+  const signal = new AbortController().signal;
+  await validateProviderModels(host, config, previous, signal);
+  expect(config.upstreams.channel.flow.nodes[2].modelMap).toEqual({});
+  expect(calls).toEqual([]);
+  config.upstreams.channel.flow.nodes[2].modelMap = { gemini: "gemini-high" };
+  await expect(
+    validateProviderModels(host, config, previous, signal),
+  ).rejects.toMatchObject({ code: "model_not_found" });
+  expect(calls).toEqual(["codex"]);
+  config.upstreams.channel.flow.nodes[2].modelMap = { gemini: "gpt-native" };
+  await validateProviderModels(host, config, previous, signal);
+  expect(calls).toEqual(["codex", "codex"]);
+});
 
 it("keeps same-name model directories scoped to the selected provider node", async () => {
   const calls: string[] = [];
@@ -54,7 +137,14 @@ it("routes a provided model through each node's mapping while retaining its exte
           entry: "start",
           nodes: [
             { id: "start", type: "start", next: "branch" },
-            { id: "has-tools", type: "compare", valueType: "boolean", operator: "eq", left: false, right: true },
+            {
+              id: "has-tools",
+              type: "compare",
+              valueType: "boolean",
+              operator: "eq",
+              left: false,
+              right: true,
+            },
             {
               id: "branch",
               type: "branch",
@@ -72,8 +162,13 @@ it("routes a provided model through each node's mapping while retaining its exte
             })),
           ],
           bindings: [
-            { source: "start", output: "hasTools", target: "has-tools", input: "left" },
-{
+            {
+              source: "start",
+              output: "hasTools",
+              target: "has-tools",
+              input: "left",
+            },
+            {
               source: "has-tools",
               output: "result",
               target: "branch",

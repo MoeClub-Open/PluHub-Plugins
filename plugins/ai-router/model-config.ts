@@ -25,11 +25,7 @@ export function assignProviderModel(
     )
   )
     throw new Error("请先断开上游节点的模型参数连线");
-  node.modelMap ??= Object.fromEntries(
-    Object.values(config.models)
-      .filter((route) => route.upstream === channelId)
-      .map((route) => [route.model, node.model ?? route.model]),
-  );
+  node.modelMap ??= {};
   node.modelMap[model] = target;
   delete node.model;
 }

@@ -10,6 +10,7 @@ import type { Upstream } from "@pluhub/contracts/ai";
 import { requireAdmin } from "../../lib/admin/access.js";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { connectionInterfaces } from "../../lib/ai/upstream-interfaces.js";
+import { validateProviderModels } from "./provider-models.js";
 
 /** Keep all graph-held credentials encrypted, even when an input is disconnected. */
 function graphSecrets(settings: any): string[] {
@@ -134,6 +135,7 @@ export function installConfiguration(host: Host) {
             }
           }
         }
+        await validateProviderModels(host, body.config, router.config ?? {}, ctx.signal);
         const priorSecrets = new Set(graphSecrets(router.config));
         const currentSecrets = new Set(graphSecrets(body.config));
         const retained = (

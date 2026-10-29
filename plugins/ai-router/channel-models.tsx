@@ -234,7 +234,7 @@ export function ChannelModels({
                         {node
                           ? node.modelMap
                             ? (node.modelMap[route.model] ?? tr("未映射"))
-                            : (node.model ?? route.model)
+                            : (node.model ?? tr("未映射"))
                           : "—"}
                       </td>
                       <td>

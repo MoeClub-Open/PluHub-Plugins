@@ -289,7 +289,7 @@ function Page({ host }: { host: UIHost }) {
                   return node?.type === "provider"
                     ? node.modelMap
                       ? (node.modelMap[modelDialog.model.model] ?? "")
-                      : (node.model ?? modelDialog.model.model)
+                      : (node.model ?? "")
                     : "";
                 })()
               : undefined
