@@ -39,6 +39,7 @@ export default definePlugin({
       `ALTER TABLE requests ADD COLUMN parent_request_id TEXT;
        ALTER TABLE requests ADD COLUMN workflow_node_id TEXT;
        CREATE INDEX requests_parent ON requests(parent_request_id,created_at);`,
+      "ALTER TABLE requests DROP COLUMN generation_ms;",
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -243,13 +244,13 @@ export default definePlugin({
               state.pricing,
             ).amount;
         } catch {
-          /* Invalid provider usage remains unpriced for review. */
+          /* Invalid usage has no usage-based estimate; Billing posts the reserved amount. */
         }
         let recorded = false;
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,generation_ms,billing_mode,consumption_source,user_name,key_name,upstream_response_model,parent_request_id,workflow_node_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,billing_mode,consumption_source,user_name,key_name,upstream_response_model,parent_request_id,workflow_node_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -272,7 +273,6 @@ export default definePlugin({
               state.routing ? JSON.stringify(state.routing) : null,
               usageDetails,
               prices,
-              state.generationMs ?? null,
               (ctx.state.get("billing.mode") as string | undefined) ??
                 (workflow ? "workflow" : null),
               state.consumptionSource ?? null,
@@ -497,6 +497,7 @@ export default definePlugin({
           "first_token_ms",
           "input_tokens",
           "output_tokens",
+          "output_tps",
           "estimated_cost_micro_usd",
           "consumption_source",
           "charged_micro_usd",

@@ -14,7 +14,6 @@ export interface AIObservation {
   upstream?: string;
   stream?: boolean;
   firstTokenMs?: number;
-  generationMs?: number;
   usage?: Usage;
   pricing?: RequestPricing;
   consumptionSource?: ConsumptionSource;
@@ -79,9 +78,7 @@ export async function* observeEvents(
   ctx: RequestContext,
 ) {
   const state = observation(ctx)!;
-  let contentEvents = 0;
   const searchCalls = new Set<string>();
-  let firstOutputMs: number | undefined;
   try {
     for await (const event of events) {
       if (
@@ -93,11 +90,6 @@ export async function* observeEvents(
       ) {
         const elapsed = Date.now() - state.startedAt;
         state.firstTokenMs ??= elapsed;
-        if (event.type !== "reasoning") {
-          firstOutputMs ??= elapsed;
-          if (state.stream && ++contentEvents > 1 && elapsed > firstOutputMs)
-            state.generationMs = elapsed - firstOutputMs;
-        }
       }
       if (
         event.type === "usage" &&

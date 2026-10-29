@@ -1,3 +1,4 @@
+import { settleRequest, recoverRequestSettlements } from "./settlement.js";
 import type { RequestContext } from "@pluhub/sdk";
 import { installRequestCharges } from "./request-charges.js";
 import { consumptionSource } from "../../lib/commerce/consumption.js";
@@ -12,15 +13,9 @@ import {
 import type { AIRequest, AIPlan } from "@pluhub/contracts/ai";
 import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
 import { integer } from "../../lib/commerce/money.js";
-import {
-  priceUsage,
-  reserveCost,
-  validateUsage,
-  type PriceReceipt,
-} from "../../lib/commerce/pricing.js";
+import { reserveCost } from "../../lib/commerce/pricing.js";
 import { installPriceQuote } from "./quote.js";
 import { mediaInputBound } from "../../lib/ai/media.js";
-import { fixedPricing } from "../../lib/commerce/expression.js";
 import { retirePricingFactors } from "../../lib/commerce/migrations.js";
 import { observation } from "../../lib/ai/telemetry.js";
 import { requireAdmin, adminTarget } from "../../lib/admin/access.js";
@@ -51,9 +46,6 @@ export default definePlugin({
         retirePricingFactors("reservations", "receipt", "$.pricing") +
         "DROP TABLE pricing_users;",
     ]);
-    db.prepare(
-      "UPDATE reservations SET status='review',note='Host restarted before settlement' WHERE status='reserved'",
-    ).run();
     host.cleanup(() => db.close());
     function wallet(userId: string, create = true) {
       if (create)
@@ -71,7 +63,7 @@ export default definePlugin({
         (
           db
             .prepare(
-              "SELECT COALESCE(SUM(amount),0) AS n FROM reservations WHERE user_id=? AND status IN ('reserved','review')",
+              "SELECT COALESCE(SUM(amount),0) AS n FROM reservations WHERE user_id=? AND status='reserved'",
             )
             .get(userId) as any
         ).n,
@@ -128,6 +120,7 @@ export default definePlugin({
         userId,
       );
     }
+    recoverRequestSettlements(db, post);
     installPaymentBalances(host, db, post, wallet);
     host.provide("billing.credit@1", ({ userId, amount, source }) =>
       transaction(db, () => {
@@ -234,98 +227,36 @@ export default definePlugin({
           !ctx.state.get("billing.reserved")
         )
           return;
-        transaction(db, () => {
-          const row = db
-            .prepare("SELECT * FROM reservations WHERE id=?")
-            .get(ctx.id) as any;
-          if (!row || row.status !== "reserved") return;
-          if (!ctx.state.get("ai.executionStarted")) {
-            db.prepare(
-              "UPDATE reservations SET status='released' WHERE id=?",
-            ).run(ctx.id);
-            return;
-          }
-          if (ctx.state.get("ai.executionRejected")) {
-            db.prepare(
-              "UPDATE reservations SET status='released',note='Upstream rejected before generation' WHERE id=?",
-            ).run(ctx.id);
-            return;
-          }
-          const state = observation(ctx);
-          const pricing = JSON.parse(row.pricing);
-          if (state?.usage) {
-            let reported: string | undefined;
-            try {
-              validateUsage(state.usage);
-              const usage = Object.fromEntries(
-                [
-                  "input",
-                  "output",
-                  "cacheRead",
-                  "cacheWrite",
-                  "cacheWrite1h",
-                  "reasoning",
-                  "webSearch",
-                ].flatMap((key) =>
-                  (state.usage as any)[key] === undefined
-                    ? []
-                    : [[key, (state.usage as any)[key]]],
-                ),
-              );
-              reported = JSON.stringify(usage);
-            } catch {
-              // An invalid report is never retained as a financial usage fact.
-            }
-            if (reported !== undefined)
-              db.prepare(
-                "UPDATE reservations SET reported_usage=? WHERE id=?",
-              ).run(reported, row.id);
-          }
-          if (
-            !state?.finished ||
-            state.errorCode ||
-            (!state.usage && !fixedPricing(pricing))
-          ) {
-            db.prepare(
-              "UPDATE reservations SET status='review',note=? WHERE id=?",
-            ).run(
-              state?.errorCode === "upstream_budget_exceeded"
-                ? "Output limit exceeded"
-                : ctx.signal.aborted
-                  ? "Canceled before complete usage"
-                  : !state?.finished
-                    ? "Response interrupted before settlement"
-                    : "Usage unavailable",
-              ctx.id,
-            );
-            return;
-          }
-          let amount: number;
-          let receipt: PriceReceipt;
-          try {
-            receipt = priceUsage(
-              state.usage ?? {
-                input: 0,
-                output: 0,
-                ...(state.routing?.webSearchCalls
-                  ? { webSearch: state.routing.webSearchCalls }
-                  : {}),
-              },
-              pricing,
-            );
-            amount = receipt.amount;
-          } catch {
-            db.prepare(
-              "UPDATE reservations SET status='review',note='Usage or cost exceeds supported integer range' WHERE id=?",
-            ).run(ctx.id);
-            return;
-          }
-          post(row.user_id, -amount, "request:" + ctx.id);
+        const row = db
+          .prepare("SELECT * FROM reservations WHERE id=?")
+          .get(ctx.id) as any;
+        if (!row || row.status !== "reserved") return;
+        if (
+          !ctx.state.get("ai.executionStarted") ||
+          ctx.state.get("ai.executionRejected")
+        ) {
           db.prepare(
-            "UPDATE reservations SET status='settled',actual=?,receipt=? WHERE id=?",
-          ).run(amount, JSON.stringify(receipt), ctx.id);
-          ctx.state.set("billing.receipt", receipt);
+            "UPDATE reservations SET status='released',note=? WHERE id=?",
+          ).run(
+            ctx.state.get("ai.executionRejected")
+              ? "Upstream rejected before generation"
+              : null,
+            ctx.id,
+          );
+          return;
+        }
+        const state = observation(ctx);
+        const receipt = settleRequest(db, post, row, {
+          usage: state?.usage,
+          webSearchCalls: state?.routing?.webSearchCalls,
+          ...(state?.errorCode === "upstream_budget_exceeded"
+            ? {
+                reservedReason:
+                  "Output limit exceeded; charged reserved amount",
+              }
+            : {}),
         });
+        ctx.state.set("billing.receipt", receipt);
       },
     });
     host.api({
@@ -345,19 +276,6 @@ export default definePlugin({
               "SELECT l.amount,l.source,l.created_at,r.receipt FROM ledger l LEFT JOIN reservations r ON l.source='request:'||r.id WHERE l.user_id=? ORDER BY l.id DESC LIMIT 100",
             )
             .all(ctx.principal!.id),
-        ),
-    });
-    host.api({
-      method: "GET",
-      path: "/review",
-      access: "host.manage",
-      handle: () =>
-        json(
-          db
-            .prepare(
-              "SELECT * FROM reservations WHERE status='review' ORDER BY created_at LIMIT 100",
-            )
-            .all(),
         ),
     });
     host.api({
@@ -385,36 +303,6 @@ export default definePlugin({
             ctx.principal!.id,
             reason,
           );
-        });
-        return json({ ok: true });
-      },
-    });
-    host.api({
-      method: "POST",
-      path: "/reconcile",
-      access: "host.manage",
-      handle: async (r, ctx) => {
-        await requireAdmin(host, r, ctx);
-        const b = await readObject(r);
-        const note = requiredString(b.reason, "reason");
-        transaction(db, () => {
-          const row = db
-            .prepare(
-              "SELECT * FROM reservations WHERE id=? AND status='review'",
-            )
-            .get(requiredString(b.id, "id")) as any;
-          if (!row)
-            throw new HostError(
-              "not_found",
-              "Pending reservation not found",
-              404,
-            );
-          adminTarget(ctx, row.user_id, row.id, note);
-          const amount = integer(b.amount);
-          post(row.user_id, -amount, "request:" + row.id);
-          db.prepare(
-            "UPDATE reservations SET status='settled',actual=?,note=? WHERE id=?",
-          ).run(amount, ctx.principal!.id + ":" + note, row.id);
         });
         return json({ ok: true });
       },

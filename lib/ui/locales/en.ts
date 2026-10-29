@@ -1,5 +1,17 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "按预扣金额结算，未将估算用量记为实际用量。": "Settled at the reserved amount; estimated usage is not reported as actual usage.",
+  "上游未提供有效用量，已按预扣金额结算。": "Valid usage was unavailable; the reserved amount was charged.",
+  "上游用量无效，已按预扣金额结算。": "The reported usage was invalid; the reserved amount was charged.",
+  "实际费用无法计算，已按预扣金额结算。": "The actual cost could not be calculated; the reserved amount was charged.",
+  "上游超过输出上限，已按预扣金额结算。": "The provider exceeded the output limit; the reserved amount was charged.",
+  "历史未结算请求已按预扣金额结算。": "The outstanding request was settled at its reserved amount.",
+  "历史未结算请求已按有效用量结算。": "The outstanding request was settled using valid usage.",
+  "上游在生成前拒绝请求，预扣已释放。": "The provider rejected the request before generation; the reservation was released.",
+  "TPS（输出 / 总耗时）": "TPS (output / total time)",
+  "输出 Token 数 / 请求总耗时（秒）": "Output tokens / total request time in seconds",
+  "成功请求输出 Token 总数 / 请求总耗时；{0} 个样本": "Successful requests: total output tokens / total request time; {0} samples",
+
   待转换内容: "Value to format",
   自动: "Automatic",
   格式化文本: "Format as text",

@@ -45,7 +45,6 @@ const billingStatus = (status: string) =>
     (
       {
         settled: "已扣费",
-        review: "待核账",
         reserved: "预留中",
         released: "已释放",
         personal: "不扣余额",
@@ -126,6 +125,7 @@ function WorkflowCall({ host, row }: { host: UIHost; row: any }) {
               服务端完成耗时: latency(row.latency_ms),
               "输入 Token": number(row.input_tokens),
               "输出 Token": number(row.output_tokens),
+              "TPS（输出 / 总耗时）": number(row.output_tps),
               "估算消耗 (USD)": money(
                 row.cost_micro_usd == null ? null : row.cost_micro_usd / 1000000,
               ),
@@ -618,6 +618,7 @@ function Page({ host }: { host: UIHost }) {
                 <th>{tr("服务端耗时 / 首 Token")}</th>
                 <th className="numeric">{tr("输入 Token")}</th>
                 <th className="numeric">{tr("输出 Token")}</th>
+                <th className="numeric" title={tr("输出 Token 数 / 请求总耗时（秒）")}>TPS</th>
                 <th>{tr("估算消耗")}</th>
                 <th>{tr("实际扣费")}</th>
                 <th>{tr("详情")}</th>
@@ -662,6 +663,7 @@ function Page({ host }: { host: UIHost }) {
                   </td>
                   <td className="numeric">{number(r.input_tokens)}</td>
                   <td className="numeric">{number(r.output_tokens)}</td>
+                  <td className="numeric">{number(r.output_tps)}</td>
                   <td>
                     {money(
                       r.cost_micro_usd == null
@@ -744,6 +746,7 @@ function Page({ host }: { host: UIHost }) {
               "服务端首 Token 延迟": latency(selected.first_token_ms),
               "输入 Token": number(selected.input_tokens),
               "输出 Token": number(selected.output_tokens),
+              "TPS（输出 / 总耗时）": number(selected.output_tps),
               "估算消耗 (USD)": money(
                 selected.cost_micro_usd == null
                   ? null

@@ -26,9 +26,9 @@ export function installRequestCharges(host: Host, db: DatabaseSync) {
           FROM json_each(?)
         )
         SELECT COALESCE(SUM(l.amount IS NOT NULL OR r.status='released'),0) knownRequests,
-          COALESCE(SUM(r.status IN ('reserved','review')),0) pendingRequests,
+          COALESCE(SUM(r.status='reserved'),0) pendingRequests,
           COALESCE(SUM(-l.amount),0) charged,
-          COALESCE(SUM(CASE WHEN r.status IN ('reserved','review') THEN r.amount ELSE 0 END),0) held
+          COALESCE(SUM(CASE WHEN r.status='reserved' THEN r.amount ELSE 0 END),0) held
         FROM identities i JOIN reservations r ON r.id=i.id AND r.user_id=i.user_id
         LEFT JOIN ledger l ON l.source='request:'||r.id AND l.user_id=r.user_id
       `,
@@ -67,7 +67,7 @@ export function installRequestCharges(host: Host, db: DatabaseSync) {
                   ? 0
                   : null
                 : -row.posted,
-            held: ["reserved", "review"].includes(row.status) ? row.amount : 0,
+            held: row.status === "reserved" ? row.amount : 0,
             receipt: row.receipt ? JSON.parse(row.receipt) : undefined,
           },
         ];

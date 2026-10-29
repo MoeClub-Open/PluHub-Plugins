@@ -2,13 +2,7 @@ import { t as tr } from "../../lib/ui/i18n.js";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { AdminTable, adminTime } from "../../lib/ui/admin.js";
 import { PriceReceiptView } from "../../lib/ui/price-receipt.js";
-export function BillingAdmin({
-  host,
-  version,
-}: {
-  host: UIHost;
-  version: number;
-}) {
+export function BillingAdmin({ host }: { host: UIHost }) {
   const money = (n: number) => "$" + (n / 1e6).toFixed(6);
   return (
     <>
@@ -17,7 +11,6 @@ export function BillingAdmin({
         host={host}
         title={tr("全站资金账本")}
         endpoint="/api/plugins/official.billing/admin/ledger"
-        version={version}
         columns={[
           { title: tr("时间"), render: (r) => adminTime(r.created_at) },
           {

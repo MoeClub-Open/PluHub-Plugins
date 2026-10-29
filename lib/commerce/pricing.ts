@@ -132,7 +132,7 @@ export function validateUsage(usage: Usage) {
       502,
     );
 }
-export interface PriceReceipt {
+export interface UsagePriceReceipt {
   amount: number;
   originalAmount: number;
   mode: "tokens" | "request";
@@ -144,10 +144,17 @@ export interface PriceReceipt {
   pricing: RequestPricing;
   lines: { kind: string; quantity: number; rate: number }[];
 }
+export interface ReservedPriceReceipt {
+  mode: "reserved";
+  amount: number;
+  pricing?: RequestPricing;
+  lines: [];
+}
+export type PriceReceipt = UsagePriceReceipt | ReservedPriceReceipt;
 export function priceUsage(
   usage: Usage,
   pricing: RequestPricing,
-): PriceReceipt {
+): UsagePriceReceipt {
   validatePricing(pricing);
   validateUsage(usage);
   if (pricing.mode === "expression") {

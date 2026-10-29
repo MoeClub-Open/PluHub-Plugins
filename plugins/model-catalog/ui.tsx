@@ -480,8 +480,8 @@ function Page({ host }: { host: UIHost }) {
                 <dd>{latency(selected.metrics?.avgFirstTokenMs)}</dd>
               </div>
               <div
-                title={tr("可见输出 Token / 内容流持续时间；{0} 个样本", {
-                  "0": textValue(selected.metrics?.streamSamples ?? 0),
+                title={tr("成功请求输出 Token 总数 / 请求总耗时；{0} 个样本", {
+                  "0": textValue(selected.metrics?.outputSamples ?? 0),
                 })}
               >
                 <dt>{tr("输出速度")}</dt>

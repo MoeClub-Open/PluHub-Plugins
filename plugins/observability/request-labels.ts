@@ -38,6 +38,7 @@ export async function attachRequestLabels(
     } catch {}
     return {
       ...row,
+      output_tps: row.output_tokens != null && row.latency_ms > 0 ? row.output_tokens * 1000 / row.latency_ms : null,
       user_name: row.user_name ?? userNames.get(row.user_id) ?? null,
       key_name:
         row.key_name ?? names.get(identity(row.user_id, row.key_id)) ?? null,

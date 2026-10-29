@@ -1,6 +1,6 @@
 {
   "name": "@pluhub/plugin-rate-limit",
-  "version": "0.1.0-alpha.17",
+  "version": "0.1.0-alpha.18",
   "type": "module",
   "private": true,
   "files": [

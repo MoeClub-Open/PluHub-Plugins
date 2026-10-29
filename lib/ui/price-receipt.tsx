@@ -16,6 +16,14 @@ export function PriceReceiptView({
   } catch {
     return null;
   }
+  if (receipt.mode === "reserved")
+    return (
+      <details>
+        <summary>{title ?? tr("计费明细")}</summary>
+        <p>{tr("按预扣金额结算，未将估算用量记为实际用量。")}</p>
+        <strong>${(receipt.amount / 1e6).toFixed(6)}</strong>
+      </details>
+    );
   const labels: Record<string, string> = {
     input: tr("输入"),
     output: tr("输出"),
