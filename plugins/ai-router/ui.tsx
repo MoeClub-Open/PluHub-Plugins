@@ -18,7 +18,7 @@ import {
 } from "./model-config.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { channelEditorTarget } from "../../lib/ui/channel-location.js";
-import { defaultChannelFlow } from "../../lib/ai/channel-config.js";
+import { defaultChannelFlow, channelProviderNodes } from "../../lib/ai/channel-config.js";
 import { setChannelState } from "../../lib/ai/channel-list.js";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, Icon, Empty, Dialog } from "../../lib/ui/components.js";
@@ -268,12 +268,18 @@ function Page({ host }: { host: UIHost }) {
       )}
       {modelDialog && (
         <ModelEditor
+          host={host}
           key={
             modelDialog.id ||
             modelDialog.model.upstream + ":" + modelDialog.model.model
           }
           {...modelDialog}
           upstreams={upstreams}
+          provider={modelDialog.nodeId ? {
+            id: modelDialog.nodeId,
+            catalogOnly: !!channelProviderNodes(upstreams[modelDialog.model.upstream]!)
+              .find((item) => item.id === modelDialog.nodeId)?.connection.subscriptionAccountIds,
+          } : undefined}
           providerModel={
             modelDialog.nodeId
               ? (() => {

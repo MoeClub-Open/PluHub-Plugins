@@ -40,6 +40,7 @@ import { AuditPage } from "./audit-ui.js";
 import { RuntimeLogs } from "./logs-ui.js";
 import { PaymentMethods } from "./payment-methods.js";
 import { SettingsHome, SettingsNavigation } from "./settings.js";
+import { SettingsExtension } from "../../lib/ui/settings-extension.js";
 import { BrandMark, BrandingSettings, useBranding } from "./branding-ui.js";
 import { CommandSearch } from "./command-search.js";
 import { IdentityConfirmation } from "./identity-confirmation.js";
@@ -385,7 +386,7 @@ function App() {
       return;
     }
     const destination = channelSettingsDestination(path!);
-    if (admin && destination && extensions.some((e) => e.path === "/channels"))
+    if (admin && destination && (destination === "/settings/traffic" || extensions.some((e) => e.path === "/channels")))
       client.navigate(destination);
   }, [admin, hash, path, client, extensions]);
   const modelCatalog = extensions.find(
@@ -1008,7 +1009,13 @@ function App() {
               {section && (
                 <PageHeading title={selected?.title ?? section.title} />
               )}
-              {selected?.path === verificationPath ? (
+              {selected?.path === "/settings/traffic" ? (
+                <div className="settings-content">
+                  {["/rate-limit", "/token-speed"]
+                    .filter((target) => extensions.some((entry) => entry.path === target))
+                    .map((target) => <SettingsExtension key={target} host={client} path={target} slot="settings" />)}
+                </div>
+              ) : selected?.path === verificationPath ? (
                 <div className="settings-content">
                   <VerificationSettings
                     client={client}

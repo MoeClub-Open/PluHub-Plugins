@@ -20,6 +20,39 @@
   );
   --xy-selection-border: 1px solid var(--accent);
 }
+.workflow-tools.workflow-channel-tools {
+  align-items: flex-end;
+}
+.workflow-channel-tools .workflow-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.workflow-channel-tools input,
+.workflow-channel-tools button:not([role="switch"]),
+.workflow-channel-tools .checkbox-row {
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+}
+.workflow-channel-tools .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.provider-model-summary {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.provider-model-summary dt {
+  margin-top: 6px;
+}
+.provider-model-summary dd {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
 .channel-flow-canvas:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

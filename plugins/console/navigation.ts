@@ -28,9 +28,8 @@ export const verificationProviderGroup = "verification-services";
 export const channelSettingsGroup = "channel-settings";
 export function channelSettingsDestination(path: string) {
   return path === "/rate-limit" ||
-    path === "/token-speed" ||
-    path === "/settings/traffic"
-    ? "/channels?panel=limits"
+    path === "/token-speed"
+    ? "/settings/traffic"
     : path === "/auto-router"
       ? "/channels?panel=routing"
       : undefined;
@@ -200,6 +199,7 @@ export function navigation(
       (e) =>
         e.group !== paymentAdapterGroup &&
         e.group !== verificationProviderGroup &&
+        !["/rate-limit", "/token-speed"].includes(e.path) &&
         (e.group !== channelSettingsGroup ||
           !available.some((p) => p.path === "/channels")),
     )
@@ -219,6 +219,9 @@ export function navigation(
           }
         : entry,
     );
+  if (admin && available.some((entry) => ["/rate-limit", "/token-speed"].includes(entry.path)))
+    allowed.push({ id: "console:traffic", title: tr("全局限制"), path: "/settings/traffic", url: "", group: "routing", order: 20,
+      searchTerms: tr("请求限流") + " TPS" });
   if (admin) allowed.push(paymentMethods, verification, ...systemPages);
   const sections = admin
     ? groups

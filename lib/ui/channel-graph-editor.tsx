@@ -11,7 +11,7 @@ import { Checkbox } from "./checkbox.js";
 import { listSubscriptionAccounts } from "./subscription-providers.js";
 import { t as tr, textValue } from "./i18n.js";
 import { Select } from "./select.js";
-import { ChannelExtension } from "./channel-extension.js";
+import { SettingsExtension } from "./settings-extension.js";
 import { Dialog } from "./components.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -473,7 +473,7 @@ export function ChannelGraphEditor({
       <Notice message={message || loaded.error || ""} />
       {!personal && panel && (
         <Dialog
-          title={panel === "limits" ? tr("全局限制") : tr("路由策略")}
+          title={tr("路由策略")}
           close={() => {
             setPanel(undefined);
             loaded.reload();
@@ -481,14 +481,7 @@ export function ChannelGraphEditor({
         >
           <div className="channel-policy-settings">
             <style>{`.modal:has(.channel-policy-settings){width:min(1060px,calc(100vw - 24px));max-width:1060px}`}</style>
-            {panel === "limits" ? (
-              <>
-                <p className="field-note">{tr("对全部渠道生效")}</p>
-                <ChannelExtension host={host} path="/rate-limit" />
-                <ChannelExtension host={host} path="/token-speed" />
-              </>
-            ) : (
-              <ChannelExtension
+              <SettingsExtension
                 host={host}
                 path="/auto-router"
                 query={
@@ -497,21 +490,23 @@ export function ChannelGraphEditor({
                     : ""
                 }
               />
-            )}
           </div>
         </Dialog>
       )}
       {flow && (
         <>
-          <div className="workflow-tools">
-            <input
+          <div className="workflow-tools workflow-channel-tools">
+            <label className="workflow-field">
+              {tr("渠道名称")}
+              <input
               disabled={busy}
               aria-label={tr("渠道名称")}
               value={channelName}
               maxLength={128}
               onChange={(e) => setChannelName(e.target.value)}
-            />
-            <label>
+              />
+            </label>
+            <label className="workflow-field">
               {tr("优先级")}
               <input
                 disabled={busy}
@@ -640,6 +635,9 @@ export function ChannelGraphEditor({
                         ),
                         subscriptionAccounts,
                         modelTargets,
+                        providedModels: Object.entries(router?.models ?? {})
+                          .filter(([, model]: [string, any]) => personal || model.upstream === channelId)
+                          .map(([id, model]: [string, any]) => ({ id, model: model.model, name: model.publicModel ?? id })),
                         personalChannels,
                         references: loaded.data?.references,
                         onPanel: setPanel,

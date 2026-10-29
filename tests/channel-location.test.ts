@@ -32,10 +32,7 @@ it("opens bookmarks in the corresponding channel editor and preserves old settin
     panel: undefined,
   });
   for (const query of ["panel=limits", "tab=protection"])
-    expect(channelEditorTarget("#/channels?" + query, channels)).toEqual({
-      channelId: "provider/a",
-      panel: "limits",
-    });
+    expect(channelEditorTarget("#/channels?" + query, channels)).toBeUndefined();
   for (const query of ["panel=routing", "tab=policies"])
     expect(channelEditorTarget("#/channels?" + query, channels)).toEqual({
       channelId: "smart",

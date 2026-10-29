@@ -164,7 +164,7 @@ export function workflowParameters(
       ];
     case "provider":
       return [
-        param("modelMap", "object", "模型映射"),
+        param("modelMap", "object", "提供模型"),
         param("recordResponseModel", "boolean", "记录上游响应模型"),
         ...(!personal
           ? [

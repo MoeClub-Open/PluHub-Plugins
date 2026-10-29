@@ -33,6 +33,7 @@ export interface ChannelNodeContext {
   sourceHasBindings: boolean;
   subscriptionAccounts: { data?: any[]; error?: string };
   modelTargets: string[];
+  providedModels: { id: string; model: string; name: string }[];
   personalChannels?: { id: string; name?: string }[];
   onPanel: (panel: ChannelPanel) => void;
 }
@@ -56,11 +57,6 @@ export function ChannelNodeSettings({
           personal={personal}
           linked={context.sourceHasBindings}
         />
-      )}
-      {node.type === "start" && !personal && (
-        <button className="secondary" onClick={() => onPanel("limits")}>
-          {tr("全局限制")}
-        </button>
       )}
       {node.type === "predicate" && (
         <>

@@ -1,5 +1,9 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "由参数连线提供": "Supplied by a parameter connection",
+  "当前目标不在可用模型目录中，请重新选择。": "The current target is not in the available model directory. Select another model.",
+  "重新获取模型": "Reload models",
+
   "平台手续费：{0} USD / 次": "Platform fee: {0} USD / request",
   "请求手续费": "Request fee",
   "请求计费": "Request billing",

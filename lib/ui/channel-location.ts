@@ -1,6 +1,6 @@
 import type { Upstream } from "@pluhub/contracts/ai";
 
-export type ChannelPanel = "limits" | "routing";
+export type ChannelPanel = "routing";
 
 /** Old bookmarks resolve into the editor without creating a second settings page. */
 export function channelEditorTarget(
@@ -9,9 +9,7 @@ export function channelEditorTarget(
 ) {
   const query = new URLSearchParams(page.split("?")[1]);
   const panel =
-    query.get("panel") === "limits" || query.get("tab") === "protection"
-      ? "limits"
-      : query.get("panel") === "routing" || query.get("tab") === "policies"
+    query.get("panel") === "routing" || query.get("tab") === "policies"
         ? "routing"
         : undefined;
   const requested = query.get("channel");

@@ -3,14 +3,16 @@ import type { Extension, UIHost, UIExtensionModule } from "@pluhub/ui-sdk";
 import { t as tr } from "./i18n.js";
 
 /** Load settings through the public UI extension contract. */
-export function ChannelExtension({
+export function SettingsExtension({
   host,
   path,
   query = "",
+  slot = "channel.settings",
 }: {
   host: UIHost;
   path: string;
   query?: string;
+  slot?: string;
 }) {
   const target = React.useRef<HTMLDivElement>(null);
   const [error, setError] = React.useState("");
@@ -28,7 +30,7 @@ export function ChannelExtension({
           dispose = mod.mount(target.current, {
             ...host,
             page: path + query,
-            slot: "channel.settings",
+            slot,
           });
       })
       .catch((e) => {
@@ -38,7 +40,7 @@ export function ChannelExtension({
       canceled = true;
       dispose?.();
     };
-  }, [host, path, query]);
+  }, [host, path, query, slot]);
   return (
     <>
       {error && <p role="alert">{error}</p>}
