@@ -2,6 +2,7 @@ import React from "react";
 import type { ModelRoute, Upstream } from "@pluhub/contracts/ai";
 import { Dialog } from "../../lib/ui/components.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
+import { Select } from "../../lib/ui/select.js";
 import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
 import {
   ModelPriceFields,
@@ -52,6 +53,8 @@ export function ModelEditor({
       next.model = model.model || text("publicModel");
       next.publicModel = text("publicModel");
       next.enabled = enabled;
+      if (text("visibility")) next.visibility = text("visibility") as ModelRoute["visibility"];
+      else delete next.visibility;
       next.operations = form.getAll("operations") as ModelRoute["operations"];
       for (const field of ["name", "provider", "description"] as const) {
         if (text(field)) next[field] = text(field);
@@ -137,6 +140,15 @@ export function ModelEditor({
                   />
                 </label>
               )}
+              <label className="full">
+                {tr("模型可见范围")}
+                <Select name="visibility" defaultValue={model.visibility ?? ""}>
+                  <option value="">{tr("所有人")}</option>
+                  <option value="authenticated">{tr("已登录用户")}</option>
+                  <option value="consumed">{tr("已消费用户")}</option>
+                  <option value="paid">{tr("已付款用户")}</option>
+                </Select>
+              </label>
               <details className="full">
                 <summary>{tr("模型能力")}</summary>
                 <div className="form-grid">

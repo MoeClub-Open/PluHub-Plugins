@@ -1,5 +1,17 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "平台手续费：{0} USD / 次": "Platform fee: {0} USD / request",
+  "请求手续费": "Request fee",
+  "请求计费": "Request billing",
+  "个人渠道请求手续费（USD / 次）": "Personal channel request fee (USD / request)",
+  "设为 0 不收取；上游模型费用仍由用户自行结算。": "Set to 0 for no fee. Users pay their provider separately.",
+  "平台请求手续费 · USD / 次": "Platform request fee · USD / request",
+  "模型可见范围": "Model visibility",
+  "所有人": "Everyone",
+  "已登录用户": "Signed-in users",
+  "已消费用户": "Users with billed usage",
+  "已付款用户": "Paying users",
+
   "提供模型": "Provided models",
   "从上游导入": "Import from upstream",
   "上游节点": "Provider node",

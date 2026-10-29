@@ -1,7 +1,7 @@
 {
   "name": "@pluhub/plugin-model-catalog",
   "private": false,
-  "version": "0.1.0-alpha.28",
+  "version": "0.1.0-alpha.29",
   "type": "module",
   "files": [
     "dist",

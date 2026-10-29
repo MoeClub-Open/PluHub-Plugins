@@ -10,7 +10,7 @@ export const unroutedSql =
   "(status IN ('error','cancelled') AND upstream IS NULL AND billing_mode IS NULL AND input_tokens IS NULL AND pricing_json IS NULL)";
 export const consumptionSourceSql = `COALESCE(consumption_source, CASE WHEN ${unroutedSql} THEN 'unrouted' ELSE 'unknown' END)`;
 const exemptSql =
-  "(consumption_source IN ('byoapi','byosub','personal') OR billing_mode IN ('personal','disabled','workflow'))";
+  "((consumption_source IN ('byoapi','byosub','personal') AND COALESCE(billing_mode,'')<>'personal-fee') OR billing_mode IN ('personal','disabled','workflow'))";
 
 export async function consumptionSummary(
   host: Host,
@@ -155,7 +155,7 @@ export async function attachCharges(
       !row.pricing_json;
     const workflow = row.billing_mode === "workflow";
     const exempt =
-      personal || row.billing_mode === "disabled" || workflow || notStarted;
+      (personal && row.billing_mode !== "personal-fee") || row.billing_mode === "disabled" || workflow || notStarted;
     return {
       ...row,
       consumption_source:

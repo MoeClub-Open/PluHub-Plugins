@@ -5,7 +5,7 @@
   "name": "控制台",
   "description": "提供站点门户、登录页面及管理界面。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.80",
+  "version": "0.1.0-alpha.81",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",

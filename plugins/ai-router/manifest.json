@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.54",
+  "version": "0.1.0-alpha.55",
   "host": ">=0.1.0-alpha.17 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -1096,6 +1096,9 @@
                 ]
               }
             },
+            "visibility": {
+              "enum": ["authenticated", "consumed", "paid"]
+            },
             "publicModel": {
               "type": "string",
               "minLength": 1,
@@ -1182,6 +1185,8 @@
     "auth.admit@1",
     "ai.decision-profile@1",
     "billing.admit@1",
+    "billing.customer-status@1",
+    "billing.personal-pricing@1",
     "credentials.select@1",
     "ai.upstream.codex@1",
     "ai.upstream.claude-subscription@1",

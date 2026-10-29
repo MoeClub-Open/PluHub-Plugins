@@ -8,8 +8,13 @@ import type {
 } from "@pluhub/contracts/ai";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { routeKindForProtocol } from "../../lib/ai/decision-route-kind.js";
+import { modelVisible } from "./model-visibility.js";
+import type { BillingCustomerStatus } from "@pluhub/contracts/commerce";
+import type { RequestPricing } from "@pluhub/contracts/ai";
 
 export interface CatalogScope {
+  /** Internal planning and quotes retain models hidden only from user-facing listings. */
+  forRouting?: boolean;
   principalId?: string;
   channelId?: string;
   channelIds?: readonly string[];
@@ -110,11 +115,18 @@ export async function readCatalog(
       : resolveGroup(host.config(), input.groupId, input.principalId);
   if (group && input.channelId && !group.channelIds.includes(input.channelId))
     throw new HostError("channel_forbidden", "渠道不在使用分组内", 403);
+  const routes = (host.config().models ?? {}) as Record<string, ModelRoute>;
+  const status = !input.forRouting && input.principalId &&
+    Object.values(routes).some((model) => ["paid", "consumed"].includes(model.visibility ?? "")) &&
+    host.hasCapability("billing.customer-status@1")
+    ? await host.call<BillingCustomerStatus>("billing.customer-status@1", { userId: input.principalId }, signal)
+    : undefined;
   const models: CatalogModel[] = (
     input.personalOnly ? [] : catalog(host.config(), input.channelId, input.routeKind)
   )
     .filter(
       (model) =>
+        (input.forRouting || modelVisible(routes[model.routeId!]!, input.principalId, status)) &&
         (!allowed || allowed.includes(model.channelId!)) &&
         (!group || group.channelIds.includes(model.channelId!)),
     )
@@ -167,6 +179,9 @@ export async function readCatalog(
     },
     signal,
   );
+  const fee = host.hasCapability("billing.personal-pricing@1")
+    ? await host.call<RequestPricing>("billing.personal-pricing@1", {}, signal)
+    : undefined;
   for (const id of personal ?? channels.map((channel) => channel.id)) {
     const channel = channels.find((item) => item.id === id);
     if (!channel) {
@@ -188,7 +203,7 @@ export async function readCatalog(
         },
         id,
         input.routeKind,
-      ),
+      ).map((model) => ({ ...model, requestFee: fee?.request ?? 0 })),
     );
   }
   return models.sort(

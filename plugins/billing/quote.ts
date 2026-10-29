@@ -11,6 +11,8 @@ import { readMedia } from "../../lib/ai/media.js";
 import { priceUsage } from "../../lib/commerce/pricing.js";
 import { channelScope } from "../../lib/ai/channel-scope.js";
 import { capturePricingContext } from "../../lib/commerce/expression.js";
+import { consumptionSource } from "../../lib/commerce/consumption.js";
+import { personalRequestPricing } from "./personal-fee.js";
 
 export function installPriceQuote(host: Host) {
   host.api({
@@ -33,6 +35,7 @@ export function installPriceQuote(host: Host) {
       if (allowed?.length && !allowed.includes(model))
         throw new HostError("forbidden", "Model is not allowed", 403);
       const models = await host.call<CatalogModel[]>("ai.catalog@2", {
+        forRouting: true,
         principalId: ctx.principal!.id,
         ...channels,
       });
@@ -94,13 +97,14 @@ export function installPriceQuote(host: Host) {
         },
         ctx.signal,
       );
-      if (!plan.pricing)
+      const pricing = consumptionSource(plan) === "platform" ? plan.pricing : personalRequestPricing(host.config());
+      if (!pricing)
         throw new HostError(
           "price_unavailable",
           "Model has no billing price",
           404,
         );
-      return json(priceUsage(body.usage, plan.pricing));
+      return json(priceUsage(body.usage, pricing));
     },
   });
 }

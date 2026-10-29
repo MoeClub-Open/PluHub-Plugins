@@ -5,11 +5,12 @@ import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { Select } from "../../lib/ui/select.js";
 import type { OutputBudgetMode } from "../../lib/ai/output-budget.js";
 
-export function OutputBudgetSettings({ host }: { host: UIHost }) {
+export function RequestBillingSettings({ host }: { host: UIHost }) {
   const config = useLoad<any>(() => host.request("/api/host/config"));
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [reserveOutputTokens, setReserveOutputTokens] = React.useState(4096);
+  const [personalRequestFee, setPersonalRequestFee] = React.useState(0);
   const [outputBudgetMode, setOutputBudgetMode] =
     React.useState<OutputBudgetMode>("automatic");
   React.useEffect(() => {
@@ -18,12 +19,13 @@ export function OutputBudgetSettings({ host }: { host: UIHost }) {
     );
     if (plugin) {
       setReserveOutputTokens(plugin.config?.reserveOutputTokens ?? 4096);
+      setPersonalRequestFee(plugin.config?.personalRequestFee ?? 0);
       setOutputBudgetMode(plugin.config?.outputBudgetMode ?? "automatic");
     }
   }, [config.data]);
   return (
     <section className="card">
-      <h2>{tr("输出预算")}</h2>
+      <h2>{tr("请求计费")}</h2>
       <Notice message={message || config.error} />
       <form
         onSubmit={async (e) => {
@@ -40,6 +42,7 @@ export function OutputBudgetSettings({ host }: { host: UIHost }) {
               ...plugin.config,
               reserveOutputTokens,
               outputBudgetMode,
+              personalRequestFee,
             };
             await host.request("/api/host/config", {
               method: "PUT",
@@ -55,6 +58,21 @@ export function OutputBudgetSettings({ host }: { host: UIHost }) {
         }}
       >
         <div className="form-grid">
+          <label className="full">
+            {tr("个人渠道请求手续费（USD / 次）")}
+            <input
+              type="number"
+              min="0"
+              max="1000000"
+              step="0.000001"
+              required
+              value={personalRequestFee}
+              onChange={(event) =>
+                setPersonalRequestFee(Number(event.target.value))
+              }
+            />
+            <small>{tr("设为 0 不收取；上游模型费用仍由用户自行结算。")}</small>
+          </label>
           <label>
             {tr("输出预算策略")}
             <Select

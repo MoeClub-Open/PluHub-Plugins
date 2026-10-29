@@ -1,4 +1,5 @@
 import { settleRequest, recoverRequestSettlements } from "./settlement.js";
+import { personalRequestPricing } from "./personal-fee.js";
 import type { RequestContext } from "@pluhub/sdk";
 import { installRequestCharges } from "./request-charges.js";
 import { consumptionSource } from "../../lib/commerce/consumption.js";
@@ -132,6 +133,15 @@ export default definePlugin({
     host.provide("billing.balance@1", ({ userId }) =>
       wallet(requiredString(userId, "userId")),
     );
+    host.provide("billing.personal-pricing@1", () => personalRequestPricing(host.config()));
+    host.provide("billing.customer-status@1", ({ userId }) => {
+      const id = requiredString(userId, "userId");
+      const row = db.prepare(`SELECT
+        EXISTS(SELECT 1 FROM ledger WHERE user_id=? AND amount>0 AND source LIKE 'payment:%') paid,
+        EXISTS(SELECT 1 FROM ledger WHERE user_id=? AND amount<0 AND source LIKE 'request:%') consumed`
+      ).get(id, id) as { paid: number; consumed: number };
+      return { paid: !!row.paid, consumed: !!row.consumed };
+    });
     function admit(ctx: RequestContext, retry = false) {
       if (retry && ctx.state.get("billing.reserved"))
         db.prepare(
@@ -152,21 +162,25 @@ export default definePlugin({
         "billing.mode",
         personal ? "personal" : host.config().enabled ? "platform" : "disabled",
       );
-      if (personal || !host.config().enabled) return;
-      if (!plan.pricing)
+      if (!host.config().enabled) return;
+      const pricing = personal ? personalRequestPricing(host.config()) : structuredClone(plan.pricing);
+      if (personal && !pricing?.request) return;
+      if (personal) ctx.state.set("billing.mode", "personal-fee");
+      if (!pricing)
         throw new HostError(
           "price_unavailable",
           "Model has no billing price",
           503,
         );
       // Conservative UTF-8 byte bound plus per-message/tool framing; actual provider usage is authoritative.
-      const { request: prepared, budget } = outputBudget(
-        request,
-        plan,
-        host.config(),
-      );
-      plan.preparedRequest = prepared;
-      const inputBound = prepared.operation
+      let prepared = plan.preparedRequest ?? request;
+      let budget: ReturnType<typeof outputBudget>["budget"] | undefined;
+      if (!personal) {
+        ({ request: prepared, budget } = outputBudget(request, plan, host.config()));
+        plan.preparedRequest = prepared;
+        plan.pricing = pricing;
+      }
+      const inputBound = personal ? 0 : prepared.operation
         ? mediaInputBound(prepared)
         : Buffer.byteLength(
             JSON.stringify({
@@ -174,18 +188,16 @@ export default definePlugin({
               tools: prepared.tools,
             }),
           ) + 1024;
-      const pricing = structuredClone(plan.pricing);
-      plan.pricing = pricing;
       const state = observation(ctx);
-      if (state) {
+      if (state && !personal) {
         state.pricing = pricing;
         state.routing = { ...state.routing, outputBudget: budget };
       }
       const amount = reserveCost(
         inputBound,
-        budget.reservedTokens,
+        budget?.reservedTokens ?? 0,
         pricing,
-        prepared.webSearch ? (prepared.webSearch.maxCalls ?? 3) : 0,
+        !personal && prepared.webSearch ? (prepared.webSearch.maxCalls ?? 3) : 0,
       );
       transaction(db, () => {
         const userId = ctx.principal!.id;
@@ -222,11 +234,7 @@ export default definePlugin({
       id: "settle",
       phase: "Finalize",
       handle(ctx) {
-        if (
-          ctx.state.get("billing.mode") !== "platform" ||
-          !ctx.state.get("billing.reserved")
-        )
-          return;
+        if (!ctx.state.get("billing.reserved")) return;
         const row = db
           .prepare("SELECT * FROM reservations WHERE id=?")
           .get(ctx.id) as any;

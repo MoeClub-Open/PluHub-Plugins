@@ -47,7 +47,7 @@ export function planObservation(
   plan: AIPlan,
 ) {
   const source = consumptionSource(plan);
-  // Personal routes are free to the wallet; observation retains their upstream cost.
+  // Personal provider cost remains separate from any platform handling fee.
   const pricing =
     source !== "platform" && plan.pricing
       ? { ...plan.pricing, multiplier: 1 }

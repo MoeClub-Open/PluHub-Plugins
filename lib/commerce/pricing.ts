@@ -205,7 +205,7 @@ export function priceUsage(
   const mode = pricing.mode ?? "tokens";
   const lines =
     mode === "request"
-      ? [{ kind: "request", quantity: 1, rate: pricing.request! }]
+      ? [{ kind: pricing.purpose === "personal-fee" ? "serviceFee" : "request", quantity: 1, rate: pricing.request! }]
       : [
           {
             kind: "input",

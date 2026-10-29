@@ -524,6 +524,14 @@ function Page({ host }: { host: UIHost }) {
               </div>
             </dl>
             <ModelPrices model={selected} />
+            {selected.requestFee !== undefined && selected.requestFee > 0 && (
+              <dl className="catalog-detail-facts">
+                <div>
+                  <dt>{tr("平台请求手续费 · USD / 次")}</dt>
+                  <dd>{price(selected.requestFee)}</dd>
+                </div>
+              </dl>
+            )}
             {selected.pricing?.webSearch !== undefined && (
               <dl className="catalog-detail-facts">
                 <div>
@@ -538,20 +546,20 @@ function Page({ host }: { host: UIHost }) {
               </dl>
             )}
             {!guest &&
-              selected.channel?.scope !== "personal" &&
+              (selected.channel?.scope === "personal" ? (selected.requestFee ?? 0) > 0 :
               (["request", "expression"].includes(
                 selected.pricing?.mode ?? "tokens",
               ) ||
                 (selected.inputPrice !== undefined &&
-                  selected.outputPrice !== undefined)) && (
+                  selected.outputPrice !== undefined))) && (
                 <PriceQuote
                   key={selected.channel?.id + ":" + selected.id}
                   host={host}
                   model={selected.id}
                   groupId={selected.serviceGroup?.id}
                   channelId={selected.channel?.id ?? (channel || undefined)}
-                  requestPriced={selected.pricing?.mode === "request"}
-                  expression={selected.pricing?.expression}
+                  requestPriced={selected.channel?.scope === "personal" || selected.pricing?.mode === "request"}
+                  expression={selected.channel?.scope === "personal" ? undefined : selected.pricing?.expression}
                 />
               )}
             <details className="catalog-api-example">

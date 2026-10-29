@@ -31,6 +31,7 @@ export function PriceReceiptView({
     cacheWrite: tr("缓存写入 · 5 分钟"),
     cacheWrite1h: tr("缓存写入 · 1 小时"),
     request: tr("请求"),
+    serviceFee: tr("请求手续费"),
     expression: tr("表达式计价"),
     webSearch: tr("网页搜索"),
   };
@@ -57,7 +58,7 @@ export function PriceReceiptView({
                   {line.rate}{" "}
                   {line.kind === "expression"
                     ? "USD"
-                    : ["request", "webSearch"].includes(line.kind)
+                    : ["request", "webSearch", "serviceFee"].includes(line.kind)
                       ? tr("USD / 次")
                       : tr("USD / 百万 Token")}
                 </td>

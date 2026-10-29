@@ -451,6 +451,9 @@ function ChatPage({
           </button>
         </div>
       </div>
+      {!!selectedModel?.requestFee && (
+        <p className="field-note">{tr("平台手续费：{0} USD / 次", { "0": textValue(selectedModel.requestFee) })}</p>
+      )}
       <div className="playground-grid">
         <section className="chat-panel">
           <div

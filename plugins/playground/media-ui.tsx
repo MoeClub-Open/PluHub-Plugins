@@ -354,6 +354,9 @@ export function MediaPage({
                   </option>
                 ))}
               </Select>
+              {!!selected?.requestFee && (
+                <small>{tr("平台手续费：{0} USD / 次", { "0": String(selected.requestFee) })}</small>
+              )}
             </label>
             {models.data && !models.data.length && (
               <p className="field-note">

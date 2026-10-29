@@ -21,6 +21,7 @@ export async function planRoute(
   const catalog = await readCatalog(
     host,
     {
+      forRouting: true,
       principalId: input.principalId,
       channelId: input.channelId,
       channelIds: input.channelIds,

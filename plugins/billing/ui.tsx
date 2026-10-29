@@ -4,7 +4,7 @@ import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, Stat } from "../../lib/ui/components.js";
 import { BillingAdmin } from "./admin-ui.js";
-import { OutputBudgetSettings } from "./budget-ui.js";
+import { RequestBillingSettings } from "./request-settings-ui.js";
 import { BillingHistory } from "./history-ui.js";
 const api = "/api/plugins/official.billing";
 const usd = (n: number) =>
@@ -101,7 +101,7 @@ function Page({ host }: { host: UIHost }) {
         </section>
       )}
       {settings && me.data?.role === "admin" && (
-        <OutputBudgetSettings host={host} />
+        <RequestBillingSettings host={host} />
       )}
       {settings && me.data?.role === "admin" && <BillingAdmin host={host} />}
     </>
