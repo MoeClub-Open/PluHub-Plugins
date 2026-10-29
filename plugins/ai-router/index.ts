@@ -16,7 +16,6 @@ import type {
   AIPlan,
   RoutingRequest,
   CatalogModel,
-  ModelRedirect,
   PersonalChannel,
 } from "@pluhub/contracts/ai";
 import { readCatalog, type CatalogScope } from "./catalog.js";
@@ -25,7 +24,6 @@ import {
   validateInterfaces,
 } from "../../lib/ai/upstream-interfaces.js";
 import { channelScope } from "../../lib/ai/channel-scope.js";
-import { redirectModel } from "./redirects.js";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { planRoute } from "./planning.js";
 import { resolveRoute } from "./resolution.js";
@@ -289,8 +287,7 @@ export default definePlugin({
               );
             if (
               node.type === "upstream" &&
-              !Object.hasOwn(config.models ?? {}, node.target) &&
-              !Object.hasOwn(config.redirects ?? {}, node.target)
+              !Object.hasOwn(config.models ?? {}, node.target)
             )
               throw new HostError(
                 "invalid_config",
@@ -356,19 +353,6 @@ export default definePlugin({
             "invalid_config",
             "Model references a missing upstream",
           );
-      const redirects = (config.redirects ?? {}) as Record<
-        string,
-        ModelRedirect
-      >;
-      for (const [id, rule] of Object.entries(redirects)) {
-        if (rule.enabled === false) continue;
-        const target = redirectModel(id, redirects).model;
-        if (!Object.hasOwn(config.models ?? {}, target))
-          throw new HostError(
-            "invalid_config",
-            "Redirect target model is missing",
-          );
-      }
     });
     host.route({
       method: "GET",

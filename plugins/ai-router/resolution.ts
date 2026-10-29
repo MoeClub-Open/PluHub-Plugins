@@ -9,7 +9,6 @@ import type {
   AIPlan,
   RoutingRequest,
   ModelRoute,
-  ModelRedirect,
   Upstream,
   PersonalChannel,
 } from "@pluhub/contracts/ai";
@@ -166,7 +165,6 @@ export async function resolveRoute(
       : resolveGroup(host.config(), input.groupId, input.principalId);
   const models = (config.models ?? {}) as Record<string, ModelRoute>;
   const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
-  const redirects = (config.redirects ?? {}) as Record<string, ModelRedirect>;
   const operation =
     input.request?.operation?.kind ??
     (input.purpose === "quote" ? input.operation : undefined) ??
@@ -210,15 +208,6 @@ export async function resolveRoute(
     if (path.includes(model))
       throw new HostError("routing_cycle", "Channel or model redirect cycle");
     path.push(model);
-    const redirect = Object.hasOwn(redirects, model)
-      ? redirects[model]
-      : undefined;
-    if (redirect && redirect.enabled !== false) {
-      explicit ||= redirect.mode === "explicit";
-      model = redirect.target;
-      responsePath.push(model);
-      continue;
-    }
     const route = Object.hasOwn(models, model) ? models[model] : undefined;
     if (!route || route.enabled === false)
       throw new HostError("model_not_found", "Unknown model", 404);

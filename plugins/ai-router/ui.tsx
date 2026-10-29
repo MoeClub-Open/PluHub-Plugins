@@ -6,10 +6,8 @@ import type { UIHost } from "@pluhub/ui-sdk";
 import type {
   Upstream,
   ModelRoute,
-  ModelRedirect,
   ServiceGroup,
 } from "@pluhub/contracts/ai";
-import { Redirects } from "./redirect-ui.js";
 import { ChannelTable } from "./channel-table.js";
 import { ChannelModels, type ChannelModel } from "./channel-models.js";
 import { ModelEditor } from "./model-editor.js";
@@ -27,7 +25,6 @@ import { PageHeading, Icon, Empty, Dialog } from "../../lib/ui/components.js";
 type Router = {
   upstreams: Record<string, Upstream>;
   models: Record<string, ModelRoute>;
-  redirects?: Record<string, ModelRedirect>;
   nextChannelId?: string;
   groups?: Record<string, ServiceGroup>;
 };
@@ -40,7 +37,6 @@ function Page({ host }: { host: UIHost }) {
   const [tab, setTab] = React.useState(
     requestedTab === "groups" ||
       requestedTab === "models" ||
-      requestedTab === "redirects" ||
       requestedTab === "advanced"
       ? requestedTab
       : "channels",
@@ -135,7 +131,7 @@ function Page({ host }: { host: UIHost }) {
         );
         if (existing) continue;
         const alias = availableModelId(
-          [...Object.keys(r.models), ...Object.keys(r.redirects ?? {})],
+          Object.keys(r.models),
           id,
           model.id,
         );
@@ -153,7 +149,7 @@ function Page({ host }: { host: UIHost }) {
       nodeId,
       suggestedId: model
         ? availableModelId(
-            [...Object.keys(models), ...Object.keys(router.redirects ?? {})],
+            Object.keys(models),
             channelId,
             model.id,
           )
@@ -297,14 +293,13 @@ function Page({ host }: { host: UIHost }) {
               const alias =
                 id ||
                 availableModelId(
-                  [...Object.keys(r.models), ...Object.keys(r.redirects ?? {})],
+                  Object.keys(r.models),
                   model.upstream,
                   model.model,
                 );
               if (
                 !modelDialog.id &&
-                (Object.hasOwn(r.models, alias) ||
-                  Object.hasOwn(r.redirects ?? {}, alias))
+                Object.hasOwn(r.models, alias)
               )
                 throw new Error(tr("该 ID 已存在，请使用不同的 ID。"));
               if (modelDialog.id && !r.models[modelDialog.id])
@@ -406,16 +401,6 @@ function Page({ host }: { host: UIHost }) {
         </button>
         <button
           role="tab"
-          aria-selected={tab === "redirects"}
-          className={tab === "redirects" ? "active" : ""}
-          onClick={() => setTab("redirects")}
-        >
-          {tr("模型重定向 {0}", {
-            "0": textValue(Object.keys(router.redirects ?? {}).length),
-          })}
-        </button>
-        <button
-          role="tab"
           aria-selected={tab === "advanced"}
           className={tab === "advanced" ? "active" : ""}
           onClick={() => setTab("advanced")}
@@ -423,16 +408,6 @@ function Page({ host }: { host: UIHost }) {
           {tr("高级 JSON")}
         </button>
       </div>
-      {tab === "redirects" && (
-        <Redirects
-          rules={router.redirects ?? {}}
-          targets={[
-            ...Object.keys(models),
-            ...Object.keys(router.redirects ?? {}),
-          ]}
-          save={mutate}
-        />
-      )}
       {tab === "channels" &&
         (Object.keys(upstreams).length ? (
           <ChannelTable

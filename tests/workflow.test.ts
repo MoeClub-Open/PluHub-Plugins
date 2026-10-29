@@ -1,7 +1,6 @@
 import { it, expect } from "vitest";
 import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { compileWorkflow, runWorkflow } from "../lib/ai/channel-graph.js";
-import { redirectModel } from "../plugins/ai-router/redirects.js";
 import { checkProtocolConversion } from "../lib/ai/channel-graph.js";
 const request = {
   model: "public",
@@ -152,22 +151,4 @@ it("validates protocol gates and maps subscription providers to their wire proto
       } as any),
     ).toThrow(/协议准入/);
   }
-});
-it("resolves implicit and explicit redirect chains and rejects loops", () => {
-  expect(
-    redirectModel("a", {
-      a: { target: "b", mode: "implicit" },
-      b: { target: "c", mode: "explicit" },
-    }),
-  ).toEqual({ model: "c", path: ["a", "b", "c"], explicit: true });
-  expect(
-    redirectModel("a", { a: { target: "b", mode: "explicit", enabled: false } })
-      .model,
-  ).toBe("a");
-  expect(() =>
-    redirectModel("a", {
-      a: { target: "b", mode: "implicit" },
-      b: { target: "a", mode: "implicit" },
-    }),
-  ).toThrow(/cycle/);
 });

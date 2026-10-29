@@ -3,11 +3,9 @@ import { HostError, type Host } from "@pluhub/sdk";
 import type {
   CatalogModel,
   ModelRoute,
-  ModelRedirect,
   Upstream,
   PersonalChannel,
 } from "@pluhub/contracts/ai";
-import { redirectModel } from "./redirects.js";
 import { routePricing } from "../../lib/commerce/pricing.js";
 import { routeKindForProtocol } from "../../lib/ai/decision-route-kind.js";
 
@@ -55,13 +53,7 @@ function catalog(
   routeKind?: CatalogScope["routeKind"],
 ): CatalogModel[] {
   const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
-  const models = { ...(config.models ?? {}) } as Record<string, ModelRoute>;
-  const redirects = (config.redirects ?? {}) as Record<string, ModelRedirect>;
-  for (const [id, rule] of Object.entries(redirects)) {
-    if (rule.enabled === false) continue;
-    const target = redirectModel(id, redirects).model;
-    if (models[target]) models[id] = { ...models[target]!, publicModel: id };
-  }
+  const models = (config.models ?? {}) as Record<string, ModelRoute>;
   return Object.entries(models)
     .filter(
       ([, m]) =>
