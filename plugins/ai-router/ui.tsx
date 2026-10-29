@@ -13,7 +13,11 @@ import { Redirects } from "./redirect-ui.js";
 import { ChannelTable } from "./channel-table.js";
 import { ChannelModels, type ChannelModel } from "./channel-models.js";
 import { ModelEditor } from "./model-editor.js";
-import { availableModelId, discoveredModelRoute } from "./model-config.js";
+import {
+  availableModelId,
+  discoveredModelRoute,
+  assignProviderModel,
+} from "./model-config.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { channelEditorTarget } from "../../lib/ui/channel-location.js";
 import { defaultChannelFlow } from "../../lib/ai/channel-config.js";
@@ -57,12 +61,15 @@ function Page({ host }: { host: UIHost }) {
   const [tests, setTests] = React.useState<Record<string, string>>({});
   const [advanced, setAdvanced] = React.useState("");
   const [modelChannel, setModelChannel] = React.useState("");
+  const [modelNodeId, setModelNodeId] = React.useState("");
   const [modelQuery, setModelQuery] = React.useState("");
   const [modelUpstream, setModelUpstream] = React.useState("");
   const [modelDialog, setModelDialog] = React.useState<{
     id?: string;
     suggestedId: string;
     model: ModelRoute;
+    mode: "offer" | "price";
+    nodeId?: string;
   }>();
   const router: Router = loaded.data?.config ?? { upstreams: {}, models: {} };
   const upstreams = router.upstreams ?? {};
@@ -108,16 +115,25 @@ function Page({ host }: { host: UIHost }) {
   const mutate = (fn: (r: Router) => void) => {
     void save(fn).catch(() => {});
   };
-  async function addChannelModels(id: string, picked: ChannelModel[]) {
+  async function addChannelModels(
+    id: string,
+    picked: ChannelModel[],
+    nodeId: string,
+  ) {
     await save((r) => {
       if (!r.upstreams[id]) throw new Error(tr("渠道已被删除，请刷新。"));
       for (const model of picked) {
-        if (
-          Object.values(r.models).some(
-            (route) => route.upstream === id && route.model === model.id,
-          )
-        )
-          continue;
+        const existing = Object.values(r.models).find(
+          (route) => route.upstream === id && route.model === model.id,
+        );
+        assignProviderModel(
+          r,
+          id,
+          nodeId,
+          existing?.model ?? model.id,
+          model.id,
+        );
+        if (existing) continue;
         const alias = availableModelId(
           [...Object.keys(r.models), ...Object.keys(r.redirects ?? {})],
           id,
@@ -127,8 +143,14 @@ function Page({ host }: { host: UIHost }) {
       }
     });
   }
-  function createModel(channelId: string, model?: ChannelModel) {
+  function createModel(
+    channelId: string,
+    model?: ChannelModel,
+    nodeId?: string,
+  ) {
     setModelDialog({
+      mode: "offer",
+      nodeId,
       suggestedId: model
         ? availableModelId(
             [...Object.keys(models), ...Object.keys(router.redirects ?? {})],
@@ -141,8 +163,13 @@ function Page({ host }: { host: UIHost }) {
         : { upstream: channelId, model: "", enabled: true },
     });
   }
-  function editModel(id: string) {
-    if (models[id]) setModelDialog({ id, suggestedId: id, model: models[id] });
+  function editModel(
+    id: string,
+    nodeId?: string,
+    mode: "offer" | "price" = "offer",
+  ) {
+    if (models[id])
+      setModelDialog({ id, suggestedId: id, model: models[id], mode, nodeId });
   }
   async function test(id: string) {
     const mapping = Object.entries(models).find(([, m]) => m.upstream === id);
@@ -212,10 +239,32 @@ function Page({ host }: { host: UIHost }) {
           channelId={modelChannel}
           upstreams={upstreams}
           models={models}
-          changeChannel={setModelChannel}
+          initialNodeId={modelNodeId}
           add={addChannelModels}
           edit={editModel}
           create={createModel}
+          toggle={(id, enabled) =>
+            save((r) => {
+              r.models[id]!.enabled = enabled;
+            })
+          }
+          remove={(id) =>
+            save((r) => {
+              const removed = r.models[id]!;
+              delete r.models[id];
+              if (
+                !Object.values(r.models).some(
+                  (route) =>
+                    route.upstream === removed.upstream &&
+                    route.model === removed.model,
+                )
+              )
+                for (const node of r.upstreams[removed.upstream]?.flow?.nodes ??
+                  [])
+                  if (node.type === "provider" && node.modelMap)
+                    delete node.modelMap[removed.model];
+            })
+          }
           close={() => {
             if (!busy) setModelChannel("");
           }}
@@ -229,7 +278,21 @@ function Page({ host }: { host: UIHost }) {
           }
           {...modelDialog}
           upstreams={upstreams}
-          save={(id, model) =>
+          providerModel={
+            modelDialog.nodeId
+              ? (() => {
+                  const node = upstreams[
+                    modelDialog.model.upstream
+                  ]?.flow?.nodes.find((item) => item.id === modelDialog.nodeId);
+                  return node?.type === "provider"
+                    ? node.modelMap
+                      ? (node.modelMap[modelDialog.model.model] ?? "")
+                      : (node.model ?? modelDialog.model.model)
+                    : "";
+                })()
+              : undefined
+          }
+          save={(id, model, providerModel) =>
             save((r) => {
               const alias =
                 id ||
@@ -248,6 +311,14 @@ function Page({ host }: { host: UIHost }) {
                 throw new Error(tr("模型已被删除，请刷新。"));
               if (!r.upstreams[model.upstream])
                 throw new Error(tr("渠道已被删除，请刷新。"));
+              if (modelDialog.nodeId && providerModel !== undefined)
+                assignProviderModel(
+                  r,
+                  model.upstream,
+                  modelDialog.nodeId,
+                  model.model,
+                  providerModel,
+                );
               r.models[alias] = model;
             })
           }
@@ -280,13 +351,17 @@ function Page({ host }: { host: UIHost }) {
           host={host}
           key={graph.channelId}
           channelId={graph.channelId}
+          configurationRevision={loaded.data?.revision}
           initialPanel={graph.panel}
           close={() => {
             host.navigate("/channels");
             loaded.reload();
           }}
           saved={() => loaded.reload()}
-          manageModels={() => setModelChannel(graph.channelId)}
+          manageModels={(nodeId) => {
+            setModelNodeId(nodeId ?? "");
+            setModelChannel(graph.channelId);
+          }}
         />
       </>
     );
@@ -301,21 +376,13 @@ function Page({ host }: { host: UIHost }) {
           <Icon name="refresh" size={15} />
           {tr("刷新")}
         </button>
-        {(tab === "channels" || tab === "models") && (
+        {tab === "channels" && (
           <button
-            disabled={
-              !loaded.data ||
-              busy ||
-              (tab === "models" && !Object.keys(upstreams).length)
-            }
-            onClick={() =>
-              tab === "models"
-                ? setModelChannel(modelUpstream || Object.keys(upstreams)[0]!)
-                : setDialog({ id: "" })
-            }
+            disabled={!loaded.data || busy}
+            onClick={() => setDialog({ id: "" })}
           >
             <Icon name="plus" size={16} />
-            {tab === "models" ? tr("添加模型") : tr("添加渠道")}
+            {tr("添加渠道")}
           </button>
         )}
       </PageHeading>
@@ -335,7 +402,7 @@ function Page({ host }: { host: UIHost }) {
           className={tab === "models" ? "active" : ""}
           onClick={() => setTab("models")}
         >
-          {tr("模型与定价")} {textValue(Object.keys(models).length)}
+          {tr("模型定价")} {textValue(Object.keys(models).length)}
         </button>
         <button
           role="tab"
@@ -380,7 +447,10 @@ function Page({ host }: { host: UIHost }) {
               mutate((r) => setChannelState(r.upstreams, [id], enabled))
             }
             test={(id) => void test(id)}
-            modelsFor={setModelChannel}
+            modelsFor={(id) => {
+              setModelUpstream(id);
+              setTab("models");
+            }}
             remove={(id) =>
               mutate((r) => {
                 if (
@@ -430,7 +500,7 @@ function Page({ host }: { host: UIHost }) {
               <thead>
                 <tr>
                   <th>{tr("公开模型 / 名称")}</th>
-                  <th>{tr("渠道 / 实际模型")}</th>
+                  <th>{tr("渠道")}</th>
                   <th>{tr("原价 · USD")}</th>
                   <th>{tr("渠道消耗倍率")}</th>
                   <th>{tr("状态")}</th>
@@ -447,10 +517,7 @@ function Page({ host }: { host: UIHost }) {
                         <small>{m.publicModel ?? id}</small>
                       )}
                     </td>
-                    <td>
-                      {upstreams[m.upstream]?.name || m.upstream}
-                      <small>{m.model}</small>
-                    </td>
+                    <td>{upstreams[m.upstream]?.name || m.upstream}</td>
                     <td>
                       {m.pricing?.mode === "expression" ? (
                         tr("动态定价")
@@ -485,30 +552,11 @@ function Page({ host }: { host: UIHost }) {
                       </span>
                     </td>
                     <td>
-                      <button className="ghost" onClick={() => editModel(id)}>
-                        {tr("编辑")}
-                      </button>
                       <button
                         className="ghost"
-                        disabled={busy}
-                        onClick={() =>
-                          mutate((r) => {
-                            r.models[id]!.enabled = m.enabled === false;
-                          })
-                        }
+                        onClick={() => editModel(id, undefined, "price")}
                       >
-                        {m.enabled === false ? tr("启用") : tr("停用")}
-                      </button>
-                      <button
-                        className="ghost danger"
-                        disabled={busy}
-                        onClick={() =>
-                          mutate((r) => {
-                            delete r.models[id];
-                          })
-                        }
-                      >
-                        {tr("删除")}
+                        {tr("定价")}
                       </button>
                     </td>
                   </tr>

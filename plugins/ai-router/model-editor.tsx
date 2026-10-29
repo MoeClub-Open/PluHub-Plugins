@@ -2,7 +2,6 @@ import React from "react";
 import type { ModelRoute, Upstream } from "@pluhub/contracts/ai";
 import { Dialog } from "../../lib/ui/components.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
-import { Select } from "../../lib/ui/select.js";
 import { ModelEndpoints } from "../../lib/ui/model-endpoints.js";
 import {
   ModelPriceFields,
@@ -16,6 +15,8 @@ export function ModelEditor({
   suggestedId,
   model,
   upstreams,
+  mode,
+  providerModel,
   save,
   close,
 }: {
@@ -23,7 +24,13 @@ export function ModelEditor({
   suggestedId: string;
   model: ModelRoute;
   upstreams: Record<string, Upstream>;
-  save: (id: string, model: ModelRoute) => Promise<void>;
+  mode: "offer" | "price";
+  providerModel?: string;
+  save: (
+    id: string,
+    model: ModelRoute,
+    providerModel?: string,
+  ) => Promise<void>;
   close: () => void;
 }) {
   const [busy, setBusy] = React.useState(false);
@@ -33,37 +40,43 @@ export function ModelEditor({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const text = (key: string) => String(form.get(key) ?? "").trim();
-    const next: ModelRoute = {
-      ...model,
-      upstream: text("upstream"),
-      model: text("model"),
-      publicModel: text("publicModel"),
-      enabled,
-      operations: form.getAll("operations") as ModelRoute["operations"],
-    };
-    for (const field of ["name", "provider", "description"] as const) {
-      if (text(field)) next[field] = text(field);
-      else delete next[field];
+    const next: ModelRoute = { ...model };
+    if (mode === "price") {
+      for (const field of ["inputPrice", "outputPrice"] as const) {
+        if (text(field)) next[field] = Number(text(field));
+        else delete next[field];
+      }
+      next.pricing = readModelPricing(form);
+      if (!next.pricing) delete next.pricing;
+    } else {
+      next.model = model.model || text("publicModel");
+      next.publicModel = text("publicModel");
+      next.enabled = enabled;
+      next.operations = form.getAll("operations") as ModelRoute["operations"];
+      for (const field of ["name", "provider", "description"] as const) {
+        if (text(field)) next[field] = text(field);
+        else delete next[field];
+      }
+      for (const field of ["contextWindow"] as const) {
+        if (text(field)) next[field] = Number(text(field));
+        else delete next[field];
+      }
+      if (text("reasoningEfforts"))
+        next.reasoningEfforts = text("reasoningEfforts")
+          .split(",")
+          .map((value) => value.trim()) as ModelRoute["reasoningEfforts"];
+      else delete next.reasoningEfforts;
     }
-    for (const field of [
-      "inputPrice",
-      "outputPrice",
-      "contextWindow",
-    ] as const) {
-      if (text(field)) next[field] = Number(text(field));
-      else delete next[field];
-    }
-    next.pricing = readModelPricing(form);
-    if (!next.pricing) delete next.pricing;
-    if (text("reasoningEfforts"))
-      next.reasoningEfforts = text("reasoningEfforts")
-        .split(",")
-        .map((value) => value.trim()) as ModelRoute["reasoningEfforts"];
-    else delete next.reasoningEfforts;
     setBusy(true);
     setMessage("");
     try {
-      await save(id || text("id"), next);
+      await save(
+        id || suggestedId,
+        next,
+        mode === "offer" && providerModel !== undefined
+          ? text("providerModel")
+          : undefined,
+      );
       close();
     } catch (error) {
       setMessage((error as Error).message);
@@ -73,7 +86,13 @@ export function ModelEditor({
   }
   return (
     <Dialog
-      title={id ? tr("模型与定价") : tr("添加模型")}
+      title={
+        mode === "price"
+          ? tr("模型定价")
+          : id
+            ? tr("编辑提供模型")
+            : tr("添加模型")
+      }
       close={() => {
         if (!busy) close();
       }}
@@ -82,103 +101,92 @@ export function ModelEditor({
         <Notice message={message} />
         {model.model && (
           <p>
-            <strong>{model.name || model.model}</strong>
+            <strong>{model.name || model.publicModel || model.model}</strong>
             <small>{upstreams[model.upstream]?.name || model.upstream}</small>
           </p>
         )}
         <div className="form-grid">
-          <label className="full">
-            {tr("显示名称")}
-            <input
-              name="name"
-              defaultValue={model.name ?? ""}
-              maxLength={128}
-            />
-          </label>
-          <label className="full">
-            {tr("公开模型名")}
-            <input
-              name="publicModel"
-              required
-              maxLength={256}
-              defaultValue={model.publicModel ?? id ?? suggestedId}
-            />
-          </label>
-          <ModelPriceFields model={model} />
-          <details className="full" open={!model.model}>
-            <summary>{tr("模型映射")}</summary>
-            <div className="form-grid">
-              <label>
-                {tr("渠道")}
-                <Select name="upstream" required defaultValue={model.upstream}>
-                  {Object.entries(upstreams).map(([key, upstream]) => (
-                    <option key={key} value={key}>
-                      {upstream.name || key}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label>
-                {tr("实际模型 ID")}
-                <input name="model" required defaultValue={model.model} />
-              </label>
+          {mode === "price" ? (
+            <ModelPriceFields model={model} />
+          ) : (
+            <>
               <label className="full">
-                {tr("路由 ID")}
+                {tr("显示名称")}
                 <input
-                  name="id"
-                  readOnly={!!id}
-                  placeholder={tr("自动生成")}
-                  defaultValue={id || suggestedId}
-                  pattern={"[a-zA-Z0-9][a-zA-Z0-9._\\-\\/]{0,127}"}
-                />
-              </label>
-            </div>
-          </details>
-          <details className="full">
-            <summary>{tr("模型能力")}</summary>
-            <div className="form-grid">
-              <ModelEndpoints value={model.operations} />
-              <label>
-                {tr("供应商")}
-                <input name="provider" defaultValue={model.provider ?? ""} />
-              </label>
-              <label>
-                {tr("上下文长度")}
-                <input
-                  name="contextWindow"
-                  type="number"
-                  min="1"
-                  max="100000000"
-                  step="1"
-                  defaultValue={model.contextWindow ?? ""}
+                  name="name"
+                  defaultValue={model.name ?? ""}
+                  maxLength={128}
                 />
               </label>
               <label className="full">
-                {tr("支持的思考档位（逗号分隔）")}
+                {tr("公开模型名")}
                 <input
-                  name="reasoningEfforts"
-                  defaultValue={model.reasoningEfforts?.join(",") ?? ""}
+                  name="publicModel"
+                  required
+                  maxLength={256}
+                  defaultValue={model.publicModel ?? id ?? suggestedId}
                 />
               </label>
-              <label className="full">
-                {tr("模型描述")}
-                <textarea
-                  name="description"
-                  rows={2}
-                  maxLength={1024}
-                  defaultValue={model.description ?? ""}
+              {providerModel !== undefined && (
+                <label className="full">
+                  {tr("上游模型 ID")}
+                  <input
+                    name="providerModel"
+                    required
+                    defaultValue={providerModel}
+                  />
+                </label>
+              )}
+              <details className="full">
+                <summary>{tr("模型能力")}</summary>
+                <div className="form-grid">
+                  <ModelEndpoints value={model.operations} />
+                  <label>
+                    {tr("供应商")}
+                    <input
+                      name="provider"
+                      defaultValue={model.provider ?? ""}
+                    />
+                  </label>
+                  <label>
+                    {tr("上下文长度")}
+                    <input
+                      name="contextWindow"
+                      type="number"
+                      min="1"
+                      max="100000000"
+                      step="1"
+                      defaultValue={model.contextWindow ?? ""}
+                    />
+                  </label>
+                  <label className="full">
+                    {tr("支持的思考档位（逗号分隔）")}
+                    <input
+                      name="reasoningEfforts"
+                      defaultValue={model.reasoningEfforts?.join(",") ?? ""}
+                    />
+                  </label>
+                  <label className="full">
+                    {tr("模型描述")}
+                    <textarea
+                      name="description"
+                      rows={2}
+                      maxLength={1024}
+                      defaultValue={model.description ?? ""}
+                    />
+                  </label>
+                </div>
+              </details>
+              <label className="checkbox full">
+                <Checkbox
+                  appearance="switch"
+                  checked={enabled}
+                  onCheckedChange={(checked) => setEnabled(checked === true)}
                 />
+                {tr("启用模型")}
               </label>
-            </div>
-          </details>
-          <label className="checkbox full">
-            <Checkbox
-              appearance="switch"
-              checked={enabled}
-              onCheckedChange={(checked) => setEnabled(checked === true)}
-            />
-            {tr("启用模型")}
-          </label>
+            </>
+          )}
         </div>
         <div className="modal-actions">
           <button

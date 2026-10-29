@@ -178,6 +178,18 @@ export function validateWorkflowNode(
     bad("请选择有效的路由策略", [node.id]);
   if (node.type === "provider") {
     if (
+      node.modelMap !== undefined &&
+      (!node.modelMap ||
+        typeof node.modelMap !== "object" ||
+        Array.isArray(node.modelMap) ||
+        Object.entries(node.modelMap).some(
+          ([model, target]) =>
+            !model.trim() || typeof target !== "string" || !target.trim(),
+        ) ||
+        node.model !== undefined)
+    )
+      bad("上游模型映射无效", [node.id]);
+    if (
       node.recordResponseModel !== undefined &&
       typeof node.recordResponseModel !== "boolean"
     )

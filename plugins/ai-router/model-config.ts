@@ -1,5 +1,38 @@
-import type { ModelRoute } from "@pluhub/contracts/ai";
+import type { ModelRoute, Upstream } from "@pluhub/contracts/ai";
 import type { ChannelModel } from "./channel-models.js";
+import { defaultChannelFlow } from "../../lib/ai/channel-config.js";
+
+export function assignProviderModel(
+  config: {
+    upstreams: Record<string, Upstream>;
+    models: Record<string, ModelRoute>;
+  },
+  channelId: string,
+  nodeId: string,
+  model: string,
+  target: string,
+) {
+  const channel = config.upstreams[channelId]!;
+  const flow = (channel.flow ??= defaultChannelFlow());
+  const node = flow.nodes.find((item) => item.id === nodeId);
+  if (node?.type !== "provider")
+    throw new Error("上游节点不存在或尚未配置连接");
+  if (
+    flow.bindings?.some(
+      (binding) =>
+        binding.target === nodeId &&
+        ["model", "modelMap"].includes(binding.input),
+    )
+  )
+    throw new Error("请先断开上游节点的模型参数连线");
+  node.modelMap ??= Object.fromEntries(
+    Object.values(config.models)
+      .filter((route) => route.upstream === channelId)
+      .map((route) => [route.model, node.model ?? route.model]),
+  );
+  node.modelMap[model] = target;
+  delete node.model;
+}
 
 export function availableModelId(
   reserved: Iterable<string>,

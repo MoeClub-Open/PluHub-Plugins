@@ -188,6 +188,13 @@ export function installPersonalChannels(
         case "provider":
           if (
             node.upstream ||
+            (node.modelMap &&
+              Object.values(node.modelMap).some(
+                (target) =>
+                  !Object.values(models).some(
+                    (model) => model.model === target,
+                  ),
+              )) ||
             (node.model &&
               !Object.values(models).some((m) => m.model === node.model))
           )

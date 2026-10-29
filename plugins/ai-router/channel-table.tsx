@@ -282,7 +282,7 @@ export function ChannelTable({
                       onClick={() => modelsFor(id)}
                     >
                       <Icon name="eye" size={14} />
-                      {tr("模型与定价")}
+                      {tr("模型定价")}
                       <span className="badge">{channelModels.length}</span>
                     </button>
                     <small title={channelModels.join("、")}>

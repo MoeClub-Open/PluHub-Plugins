@@ -18,7 +18,6 @@ import type {
   CatalogModel,
   ModelRedirect,
   PersonalChannel,
-  ProviderConnection,
 } from "@pluhub/contracts/ai";
 import { readCatalog, type CatalogScope } from "./catalog.js";
 import {
@@ -37,11 +36,14 @@ import {
   checkProtocolConversion,
   requireIngressProtocol,
 } from "../../lib/ai/channel-graph.js";
-import { channelConnections } from "../../lib/ai/channel-config.js";
+import {
+  channelConnections,
+  providerModel as resolveProviderModel,
+} from "../../lib/ai/channel-config.js";
+import { readNodeModels } from "./provider-models.js";
 import { keyReferences } from "../../lib/ai/upstream-key.js";
 import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
-import { discoverConnectionModels } from "../../lib/ai/model-directory.js";
 import { installWorkflowProvider } from "./workflow-provider.js";
 import { installJevIngress } from "./jev-ingress.js";
 import { installDecisionIngress } from "./decision-ingress.js";
@@ -107,99 +109,6 @@ export default definePlugin({
             }))
           : [];
       return [...platform, ...personal];
-    }
-    async function channelModels(id: string, signal: AbortSignal) {
-      const channel = (
-        (host.config().upstreams ?? {}) as Record<string, Upstream>
-      )[id];
-      if (!channel) throw new HostError("not_found", "Channel not found", 404);
-      const connections = channelConnections(channel);
-      if (!connections.length)
-        return {
-          models: [],
-          errors: [{ protocol: "", message: "渠道尚未配置上游节点" }],
-        };
-      const discovered = await Promise.allSettled(
-        connections.map(async (connection: ProviderConnection) => {
-          if (Object.hasOwn(subscriptionDefaults, connection.protocol)) {
-            const ids = connection.subscriptionAccountIds ?? [];
-            if (!ids.length)
-              throw new HostError("subscription_missing", "尚未选择订阅账号");
-            const providers = await Promise.all(
-              ids.map(async (accountId) => {
-                return host.call<
-                  import("../../lib/ai/subscription-models.js").SubscriptionModel[]
-                >(
-                  `ai.subscription.${connection.protocol}@1`,
-                  {
-                    action: "models",
-                    id: accountId,
-                    ownerId: "",
-                    provider: connection.protocol,
-                  },
-                  signal,
-                );
-              }),
-            );
-            return {
-              models: providers.flat().map((model) => ({
-                ...model,
-                protocols: [connection.protocol],
-              })),
-              errors: [],
-            };
-          }
-          return discoverConnectionModels(host, connection, signal);
-        }),
-      );
-      const models = new Map<
-        string,
-        {
-          id: string;
-          name?: string;
-          contextLength?: number;
-          maxOutputTokens?: number;
-          protocols: string[];
-        }
-      >();
-      const errors: { protocol: string; message: string }[] = [];
-      for (const [index, result] of discovered.entries()) {
-        if (result.status === "rejected") {
-          errors.push({
-            protocol: connections[index]!.protocol,
-            message:
-              result.reason instanceof Error
-                ? result.reason.message
-                : "模型目录查询失败",
-          });
-          continue;
-        }
-        errors.push(...result.value.errors);
-        for (const model of result.value.models) {
-          const previous = models.get(model.id);
-          models.set(model.id, {
-            ...previous,
-            ...model,
-            contextLength:
-              Math.max(
-                previous?.contextLength ?? 0,
-                model.contextLength ?? 0,
-              ) || undefined,
-            maxOutputTokens:
-              Math.max(
-                previous?.maxOutputTokens ?? 0,
-                model.maxOutputTokens ?? 0,
-              ) || undefined,
-            protocols: [
-              ...new Set([...(previous?.protocols ?? []), ...model.protocols]),
-            ],
-          });
-        }
-      }
-      return {
-        models: [...models.values()].sort((a, b) => a.id.localeCompare(b.id)),
-        errors,
-      };
     }
     host.provide("ai.channels@1", channels);
     host.api({
@@ -593,8 +502,9 @@ export default definePlugin({
               ? node.upstream
               : upstream;
           const model =
-            (node?.type === "provider" ? node.model : undefined) ||
-            mapping?.model;
+            node?.type === "provider"
+              ? resolveProviderModel(node, mapping?.model ?? body.request.model)
+              : mapping?.model;
           checkProtocolConversion(
             ingressProtocol,
             resolveInterface(
@@ -626,13 +536,17 @@ export default definePlugin({
       path: "/channel-models",
       audit: false,
       access: "host.manage",
-      handle: async (request, ctx) =>
-        json(
-          await channelModels(
-            requiredString((await readObject(request)).id, "channel id", 256),
+      handle: async (request, ctx) => {
+        const body = await readObject(request);
+        return json(
+          await readNodeModels(
+            host,
+            requiredString(body.id, "channel id", 256),
+            typeof body.nodeId === "string" ? body.nodeId : undefined,
             ctx.signal,
           ),
-        ),
+        );
+      },
     });
     host.api({
       method: "POST",

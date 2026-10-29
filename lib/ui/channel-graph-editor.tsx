@@ -44,6 +44,7 @@ export function ChannelGraphEditor({
   personal = false,
   initialPanel,
   manageModels,
+  configurationRevision,
 }: {
   host: UIHost;
   channelId: string;
@@ -51,14 +52,16 @@ export function ChannelGraphEditor({
   saved: () => void;
   personal?: boolean;
   initialPanel?: ChannelPanel;
-  manageModels?: () => void;
+  manageModels?: (nodeId?: string) => void;
+  configurationRevision?: string;
 }) {
-  const loaded = useLoad<any>(() =>
-    host.request(
+  const loaded = useLoad<any>(
+    () => host.request(
       personal
         ? "/api/plugins/official.byok/personal-channels"
         : "/api/plugins/official.ai-router/configuration",
     ),
+    [configurationRevision],
   );
   const platformGroups = useLoad<
     { id: string; name: string; multiplier: number }[]
@@ -346,7 +349,7 @@ export function ChannelGraphEditor({
         body: JSON.stringify({ config: next, revision: loaded.data.revision }),
       });
       setBaseline(JSON.stringify(draft));
-      loaded.reload();
+      if (!configurationRevision) loaded.reload();
       saved();
       return true;
     } catch (e) {
@@ -447,9 +450,11 @@ export function ChannelGraphEditor({
             <button
               className="secondary"
               disabled={busy || !flow}
-              onClick={() => guard.leave(manageModels)}
+              onClick={() => guard.leave(() =>
+                manageModels(node?.type === "provider" ? node.id : undefined),
+              )}
             >
-              {tr("模型与定价")}
+              {tr("提供模型")}
             </button>
           )}
           <span className="muted" role="status">

@@ -1,3 +1,4 @@
+import { providerModel as resolveProviderModel } from "../../lib/ai/channel-config.js";
 import { computedWorkflowTypes } from "../../lib/ai/workflow-node-validation.js";
 import { resolveGroup, groupPricing } from "./groups.js";
 import { withDecisionScope } from "./decision-scope.js";
@@ -432,7 +433,7 @@ export async function resolveRoute(
             : node?.interfaces
               ? { ...upstream, interfaces: node.interfaces }
               : upstream;
-        if (node?.type === "provider" && node.model) providerModel = node.model;
+        if (node?.type === "provider") providerModel = resolveProviderModel(node, route.model);
       } else if (result.routingProfile) {
         profile =
           result.routingProfile === "$model"

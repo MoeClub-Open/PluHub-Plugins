@@ -284,16 +284,120 @@ export function ProviderNodeSettings({
                 : connection({ interfaces }, remap)
             }
           />
-          <FlowParameter field="model">
-            <label>
-              {tr("上游模型（可选）")}
-              <input
-                value={node.model ?? ""}
-                onChange={(e) => change({ model: e.target.value || undefined })}
-                placeholder={tr("留空使用模型映射中的实际模型")}
-              />
-            </label>
+          <FlowParameter field="modelMap">
+            <fieldset>
+              <legend>{tr("模型映射")}</legend>
+              <label className="checkbox-row">
+                <Checkbox
+                  checked={node.modelMap !== undefined}
+                  onCheckedChange={(checked) =>
+                    change({
+                      modelMap: checked ? {} : undefined,
+                      model: undefined,
+                    })
+                  }
+                />
+                {tr("按模型分别映射")}
+              </label>
+              {node.modelMap && (
+                <>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{tr("渠道模型 ID")}</th>
+                          <th>{tr("上游模型 ID")}</th>
+                          <th>{tr("操作")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(node.modelMap).map(
+                          ([model, target], index) => (
+                            <tr key={index}>
+                              <td>
+                                <input
+                                  aria-label={tr("渠道模型 ID")}
+                                  value={model}
+                                  onChange={(event) =>
+                                    change({
+                                      modelMap: Object.fromEntries(
+                                        Object.entries(node.modelMap!).map(
+                                          ([key, value]) => [
+                                            key === model
+                                              ? event.target.value
+                                              : key,
+                                            value,
+                                          ],
+                                        ),
+                                      ),
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  aria-label={tr("上游模型 ID")}
+                                  value={target}
+                                  onChange={(event) =>
+                                    change({
+                                      modelMap: {
+                                        ...node.modelMap,
+                                        [model]: event.target.value,
+                                      },
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="ghost danger"
+                                  onClick={() =>
+                                    change({
+                                      modelMap: Object.fromEntries(
+                                        Object.entries(node.modelMap!).filter(
+                                          ([key]) => key !== model,
+                                        ),
+                                      ),
+                                    })
+                                  }
+                                >
+                                  {tr("删除")}
+                                </button>
+                              </td>
+                            </tr>
+                          ),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      change({ modelMap: { ...node.modelMap, "": "" } })
+                    }
+                  >
+                    {tr("添加映射")}
+                  </button>
+                </>
+              )}
+            </fieldset>
           </FlowParameter>
+          {!node.modelMap && (
+            <FlowParameter field="model">
+              <label>
+                {tr("上游模型（可选）")}
+                <input
+                  value={node.model ?? ""}
+                  onChange={(e) =>
+                    change({ model: e.target.value || undefined })
+                  }
+                  placeholder={tr("留空使用模型映射中的实际模型")}
+                />
+              </label>
+            </FlowParameter>
+          )}
           <FlowParameter field="recordResponseModel">
             <label className="checkbox-row">
               <Checkbox
