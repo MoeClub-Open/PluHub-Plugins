@@ -51,7 +51,8 @@ import {
   pluginCategoryOptions,
   pluginStates,
 } from "./plugin-list.js";
-import { Portal, PortalSettings } from "./portal-ui.js";
+import { Portal } from "./portal-ui.js";
+import { PortalSettings } from "./portal-settings.js";
 import { defaultPortal, type PortalContent } from "./portal.js";
 import { Onboarding } from "./onboarding-ui.js";
 import { setupRedirect, type SetupState } from "./onboarding.js";
@@ -261,7 +262,7 @@ function App() {
   );
   React.useEffect(() => {
     setAccountLanguage(user?.id, user?.language);
-  }, [user?.id]);
+  }, [user?.id, user?.language]);
   const setupChecked = !!setupState;
   const finishSetup = React.useCallback(() => {
     setSetupState({ required: false, stage: "complete" });

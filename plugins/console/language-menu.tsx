@@ -1,24 +1,30 @@
 import * as Select from "@radix-ui/react-select";
 import { Languages, Check } from "lucide-react";
-import type { Locale } from "@pluhub/ui-sdk";
-import { useLocale } from "../../lib/ui/language.js";
-import { setLanguagePreference, t } from "../../lib/ui/i18n.js";
+import { useLanguagePreference } from "../../lib/ui/language.js";
+import {
+  setLanguagePreference,
+  t,
+  type LanguagePreference,
+} from "../../lib/ui/i18n.js";
 
 export function LanguageMenu() {
-  const locale = useLocale();
+  const preference = useLanguagePreference();
   const options = [
+    { value: "auto", label: t("跟随浏览器") },
     { value: "zh-CN", label: t("简体中文") },
     { value: "en-US", label: t("英语") },
   ];
   return (
     <Select.Root
-      value={locale}
-      onValueChange={(value) => setLanguagePreference(value as Locale)}
+      value={preference}
+      onValueChange={(value) =>
+        setLanguagePreference(value as LanguagePreference)
+      }
     >
       <Select.Trigger
         className="language-menu"
         aria-label={t("界面语言")}
-        title={`${t("界面语言")}: ${options.find((item) => item.value === locale)?.label}`}
+        title={`${t("界面语言")}: ${options.find((item) => item.value === preference)?.label}`}
       >
         <Languages size={16} strokeWidth={1.6} aria-hidden="true" />
       </Select.Trigger>

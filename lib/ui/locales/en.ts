@@ -1,5 +1,7 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  跟随浏览器: "Browser language",
+  内容语言: "Content language",
   "按预扣金额结算，未将估算用量记为实际用量。": "Settled at the reserved amount; estimated usage is not reported as actual usage.",
   "上游未提供有效用量，已按预扣金额结算。": "Valid usage was unavailable; the reserved amount was charged.",
   "上游用量无效，已按预扣金额结算。": "The reported usage was invalid; the reserved amount was charged.",

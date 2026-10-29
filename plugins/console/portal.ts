@@ -1,5 +1,19 @@
 import { safeBrandUrl, readBranding } from "./branding.js";
-import type { Locale } from "@pluhub/ui-sdk";
+import { isLocale, type Locale } from "@pluhub/ui-sdk";
+
+export const portalTextFields = [
+  "eyebrow",
+  "title",
+  "description",
+  "announcement",
+  "primaryLabel",
+  "primaryUrl",
+  "docsUrl",
+  "features",
+  "faqs",
+  "pages",
+] as const;
+type PortalText = Pick<PortalContent, (typeof portalTextFields)[number]>;
 
 export interface PortalContent {
   enabled: boolean;
@@ -16,6 +30,7 @@ export interface PortalContent {
   features: { title: string; description: string }[];
   faqs: { question: string; answer: string }[];
   pages: { slug: string; title: string; body: string }[];
+  translations?: Partial<Record<Locale, Partial<PortalText>>>;
 }
 export const defaultPortal: PortalContent = {
   enabled: true,
@@ -32,6 +47,7 @@ export const defaultPortal: PortalContent = {
   features: [],
   faqs: [],
   pages: [],
+  translations: {},
 };
 export const portalUrl = (value: string) =>
   /^#\/(?:console|login|models|public\/[a-z0-9-]+)$/.test(value) ||
@@ -47,9 +63,8 @@ export function defaultPortalFor(locale: Locale): PortalContent {
   return result;
 }
 
-export function readPortal(config: Record<string, unknown>): PortalContent {
-  const raw = config.portal;
-  const defaults = defaultPortalFor(readBranding(config).defaultLanguage);
+function readContent(raw: unknown, locale: Locale): PortalContent {
+  const defaults = defaultPortalFor(locale);
   if (raw === undefined) return defaults;
   if (!raw || typeof raw !== "object" || Array.isArray(raw))
     throw new Error("门户配置必须为对象");
@@ -124,6 +139,55 @@ export function readPortal(config: Record<string, unknown>): PortalContent {
   )
     throw new Error("公开页面标识必须唯一，并使用小写字母、数字和连字符");
   return result;
+}
+
+export function readPortal(config: Record<string, unknown>): PortalContent {
+  const locale = readBranding(config).defaultLanguage;
+  const result = readContent(config.portal, locale);
+  const translations = result.translations ?? {};
+  if (
+    !translations ||
+    typeof translations !== "object" ||
+    Array.isArray(translations)
+  )
+    throw new Error("无效的门户翻译");
+  result.translations = {};
+  for (const [language, value] of Object.entries(translations)) {
+    if (
+      !isLocale(language) ||
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value)
+    )
+      throw new Error("无效的门户翻译");
+    const keys = Object.keys(value);
+    if (keys.some((key) => !portalTextFields.includes(key as keyof PortalText)))
+      throw new Error("未知的门户翻译字段");
+    const validated = readContent(
+      { ...result, ...value, translations: {} },
+      language,
+    );
+    result.translations[language] = Object.fromEntries(
+      keys.map((key) => [key, validated[key as keyof PortalText]]),
+    );
+  }
+  return result;
+}
+
+export function localizePortal(
+  content: PortalContent,
+  locale: Locale,
+  fallback: Locale,
+): PortalContent {
+  const source = defaultPortalFor(fallback);
+  const target = defaultPortalFor(locale);
+  const defaults = Object.fromEntries(
+    (["title", "primaryLabel"] as const).map((key) => [
+      key,
+      content[key] === source[key] ? target[key] : content[key],
+    ]),
+  );
+  return { ...content, ...defaults, ...content.translations?.[locale] };
 }
 
 export function publicPortal(config: Record<string, unknown>) {

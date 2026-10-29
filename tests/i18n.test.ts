@@ -28,6 +28,7 @@ beforeEach(() => {
     documentElement: { lang: "zh-CN", dataset: {} },
   });
   vi.stubGlobal("window", new EventTarget());
+  vi.stubGlobal("navigator", { languages: [], language: "" });
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => saved.get(key) ?? null,
     setItem: (key: string, value: string) => saved.set(key, value),
@@ -66,6 +67,36 @@ it("uses the site default only without a browser choice and preserves an explici
   setSiteLanguage("zh-CN");
   expect(t("保存")).toBe("保存");
 });
+it("follows browser languages until explicitly changed and isolates guest and account choices", async () => {
+  vi.stubGlobal("navigator", {
+    languages: ["de-DE", "en-GB"],
+    language: "de-DE",
+  });
+  initializeLanguage("zh-CN");
+  expect(getLocale()).toBe("en-US");
+  setLanguagePreference("zh-CN");
+  setAccountLanguage("alice", null);
+  expect(getLocale()).toBe("en-US");
+  const save = vi.fn().mockResolvedValue(undefined);
+  const stop = syncLanguagePreferences(save);
+  setLanguagePreference("zh-CN");
+  await vi.waitFor(() =>
+    expect(save).toHaveBeenCalledWith("zh-CN", expect.any(AbortSignal)),
+  );
+  setLanguagePreference("auto");
+  await vi.waitFor(() =>
+    expect(save).toHaveBeenLastCalledWith(null, expect.any(AbortSignal)),
+  );
+  expect(getLocale()).toBe("en-US");
+  vi.stubGlobal("navigator", { languages: ["zh-Hant-TW"], language: "zh-TW" });
+  window.dispatchEvent(new Event("languagechange"));
+  expect(getLocale()).toBe("zh-CN");
+  setLanguagePreference("en-US");
+  setAccountLanguage();
+  expect(getLocale()).toBe("zh-CN");
+  expect(localStorage.getItem("pluhub.language")).toBe("zh-CN");
+  stop();
+});
 it("resolves account language before browser cache and clears it when the account changes", () => {
   initializeLanguage("zh-CN");
   setLanguagePreference("en-US");
@@ -101,7 +132,7 @@ it("automatically serializes account saves and keeps the last rapid language cho
   await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
   expect(save.mock.calls.map((call) => call[0])).toEqual(["en-US", "en-US"]);
   expect(getLocale()).toBe("en-US");
-  expect(localStorage.getItem("pluhub.language")).toBe("en-US");
+  expect(localStorage.getItem("pluhub.language")).toBeNull();
   stop();
 });
 it("cancels old-account saves on logout and reports genuine save failures", async () => {
@@ -267,11 +298,13 @@ it("has complete English messages and preserves interpolation variables", async 
   await walk(join(root, "lib/ui"));
   await walk(join(root, "plugins"));
   for (const directory of await readdir(join(root, "plugins"))) {
-    const source = await readFile(join(root, "plugins", directory, "manifest.json"), "utf8")
-      .catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return undefined;
-        throw error;
-      });
+    const source = await readFile(
+      join(root, "plugins", directory, "manifest.json"),
+      "utf8",
+    ).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
     if (!source) continue;
     const manifest = JSON.parse(source);
     for (const value of [

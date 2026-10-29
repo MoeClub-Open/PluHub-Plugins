@@ -1,6 +1,7 @@
 import { definePlugin, HostError } from "@pluhub/sdk";
 import { readBranding, escapeHtml } from "./branding.js";
-import { readPortal, publicPortal } from "./portal.js";
+import { readPortal, publicPortal, localizePortal } from "./portal.js";
+import { requestLocale } from "../../lib/ui/locale.js";
 const google =
   "https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/";
 const geetest =
@@ -73,7 +74,12 @@ export default definePlugin({
         pipeline: false,
         handle: (request) => {
           const brand = readBranding(host.config());
-          const portal = publicPortal(host.config());
+          const locale = requestLocale(request, brand.defaultLanguage);
+          const portal = localizePortal(
+            publicPortal(host.config()),
+            locale,
+            brand.defaultLanguage,
+          );
           const bootstrap = JSON.stringify(brand)
             .replace(/</g, "\\u003c")
             .replace(/&/g, "\\u0026");
@@ -81,7 +87,7 @@ export default definePlugin({
             request.method === "HEAD"
               ? null
               : '<!doctype html><html lang="' +
-                  brand.defaultLanguage +
+                  locale +
                   '"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
                   escapeHtml(brand.name) +
                   '</title><meta name="description" content="' +

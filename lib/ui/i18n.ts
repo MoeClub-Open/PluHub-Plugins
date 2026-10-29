@@ -6,6 +6,9 @@ import {
   type MessageValues,
   type UIInternationalization,
 } from "@pluhub/ui-sdk";
+import { matchLocale } from "./locale.js";
+
+export type LanguagePreference = Locale | "auto";
 
 const event = "pluhub:language";
 const storageKey = "pluhub.language";
@@ -33,7 +36,10 @@ export function getLocale(): Locale {
     : "zh-CN";
 }
 export function getLanguagePreference(): Locale | undefined {
-  const value = document.documentElement.dataset.languagePreference;
+  const root = document.documentElement;
+  const value = root.dataset.languageAccount
+    ? root.dataset.accountLanguage
+    : root.dataset.languagePreference;
   return isLocale(value) ? value : undefined;
 }
 export function t(source: string, values?: MessageValues): string {
@@ -48,11 +54,13 @@ export function subscribeLanguage(listener: () => void) {
 function applyLanguage() {
   const root = document.documentElement;
   const preference = getLanguagePreference();
-  const account = root.dataset.accountLanguage;
   const site = root.dataset.siteLanguage;
-  const locale = isLocale(account)
-    ? account
-    : (preference ?? (isLocale(site) ? site : "zh-CN"));
+  const locale =
+    preference ??
+    matchLocale(
+      navigator.languages?.length ? navigator.languages : [navigator.language],
+      isLocale(site) ? site : "zh-CN",
+    );
   root.lang = locale;
   window.dispatchEvent(new Event(event));
 }
@@ -71,19 +79,18 @@ export function setAccountLanguage(id?: string, locale?: unknown) {
   window.dispatchEvent(new Event(accountEvent));
   applyLanguage();
 }
-export function setLanguagePreference(value: Locale) {
-  if (!isLocale(value)) return;
+export function setLanguagePreference(value: LanguagePreference) {
+  if (value !== "auto" && !isLocale(value)) return;
   const root = document.documentElement;
-  root.dataset.languagePreference = value;
   const id = root.dataset.languageAccount;
-  if (id) root.dataset.accountLanguage = value;
+  const language = value === "auto" ? null : value;
+  if (id) root.dataset.accountLanguage = language ?? "";
+  else root.dataset.languagePreference = language ?? "";
   try {
-    localStorage.setItem(storageKey, value);
     if (id)
-      localStorage.setItem(
-        accountStorageKey,
-        JSON.stringify({ id, language: value }),
-      );
+      localStorage.setItem(accountStorageKey, JSON.stringify({ id, language }));
+    else if (language) localStorage.setItem(storageKey, language);
+    else localStorage.removeItem(storageKey);
   } catch {
     /* Language switching still works when browser storage is unavailable. */
   }
@@ -91,7 +98,7 @@ export function setLanguagePreference(value: Locale) {
   if (id)
     window.dispatchEvent(
       new CustomEvent(preferenceEvent, {
-        detail: { id, language: value },
+        detail: { id, language },
       }),
     );
 }
@@ -111,10 +118,10 @@ export function initializeLanguage(site: Locale) {
   applyLanguage();
 }
 export function syncLanguagePreferences(
-  save?: (locale: Locale, signal: AbortSignal) => Promise<unknown>,
+  save?: (locale: Locale | null, signal: AbortSignal) => Promise<unknown>,
   onError?: () => void,
 ) {
-  let queued: { id: string; language: Locale } | undefined;
+  let queued: { id: string; language: Locale | null } | undefined;
   let running = false,
     stopped = false;
   let controller: AbortController | undefined;
@@ -146,7 +153,7 @@ export function syncLanguagePreferences(
     const next = (change as CustomEvent).detail;
     if (
       !next ||
-      !isLocale(next.language) ||
+      (next.language !== null && !isLocale(next.language)) ||
       next.id !== document.documentElement.dataset.languageAccount
     )
       return;
@@ -161,9 +168,10 @@ export function syncLanguagePreferences(
         const next = JSON.parse(change.newValue);
         if (
           next.id === document.documentElement.dataset.languageAccount &&
-          isLocale(next.language)
+          (next.language === null || isLocale(next.language))
         )
-          document.documentElement.dataset.accountLanguage = next.language;
+          document.documentElement.dataset.accountLanguage =
+            next.language ?? "";
       } catch {
         /* Ignore malformed or unrelated browser cache. */
       }
@@ -173,12 +181,14 @@ export function syncLanguagePreferences(
   window.addEventListener("storage", sync);
   window.addEventListener(preferenceEvent, changed);
   window.addEventListener(accountEvent, cancel);
+  window.addEventListener("languagechange", applyLanguage);
   return () => {
     stopped = true;
     cancel();
     window.removeEventListener("storage", sync);
     window.removeEventListener(preferenceEvent, changed);
     window.removeEventListener(accountEvent, cancel);
+    window.removeEventListener("languagechange", applyLanguage);
   };
 }
 export const internationalization: UIInternationalization = {

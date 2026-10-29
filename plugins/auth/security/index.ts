@@ -776,7 +776,6 @@ export function installAuthSecurity(
     const hash = await services.hashPassword(
       requiredString(b.password, "password", 1024),
     );
-    const brand = await mailBranding(host, r.signal);
     consume(proof);
     const user = await host.call<any>("users.manage@1", {
       action: "create",
@@ -784,11 +783,6 @@ export function installAuthSecurity(
       role: "user",
     });
     services.history.tag({ userId: user.id });
-    await host.call("users.manage@1", {
-      action: "preferences",
-      id: user.id,
-      language: mailLanguage(undefined, b.language, brand.defaultLanguage),
-    });
     transaction(db, () => {
       db.prepare("INSERT INTO passwords VALUES(?,?)").run(user.id, hash);
       db.prepare("INSERT INTO email_credentials VALUES(?,?,?)").run(

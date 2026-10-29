@@ -5,7 +5,7 @@
   "name": "控制台",
   "description": "提供站点门户、登录页面及管理界面。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.77",
+  "version": "0.1.0-alpha.78",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -197,6 +197,18 @@
               "minLength": 1,
               "maxLength": 1024
             }
+          },
+          "translations": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "zh-CN": {
+                "$ref": "#/definitions/portalTranslation"
+              },
+              "en-US": {
+                "$ref": "#/definitions/portalTranslation"
+              }
+            }
           }
         }
       },
@@ -222,6 +234,44 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 2
+          }
+        }
+      }
+    },
+    "definitions": {
+      "portalTranslation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eyebrow": {
+            "$ref": "#/properties/portal/properties/eyebrow"
+          },
+          "title": {
+            "$ref": "#/properties/portal/properties/title"
+          },
+          "description": {
+            "$ref": "#/properties/portal/properties/description"
+          },
+          "announcement": {
+            "$ref": "#/properties/portal/properties/announcement"
+          },
+          "primaryLabel": {
+            "$ref": "#/properties/portal/properties/primaryLabel"
+          },
+          "primaryUrl": {
+            "$ref": "#/properties/portal/properties/primaryUrl"
+          },
+          "docsUrl": {
+            "$ref": "#/properties/portal/properties/docsUrl"
+          },
+          "features": {
+            "$ref": "#/properties/portal/properties/features"
+          },
+          "faqs": {
+            "$ref": "#/properties/portal/properties/faqs"
+          },
+          "pages": {
+            "$ref": "#/properties/portal/properties/pages"
           }
         }
       }

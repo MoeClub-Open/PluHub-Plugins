@@ -134,7 +134,7 @@ export default definePlugin({
         const id = requiredString(input.id, "id");
         if (!lookup({ id }))
           throw new HostError("not_found", "User not found", 404);
-        if (!["zh-CN", "en-US"].includes(input.language))
+        if (![null, "zh-CN", "en-US"].includes(input.language))
           throw new HostError("invalid_language", "Unsupported language");
         db.prepare("UPDATE users SET language=? WHERE id=?").run(
           input.language,

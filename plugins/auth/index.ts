@@ -327,7 +327,7 @@ export default definePlugin({
         const body = await readObject(request);
         if (
           Object.keys(body).some((key) => key !== "language") ||
-          !["zh-CN", "en-US"].includes(body.language as string)
+          ![null, "zh-CN", "en-US"].includes(body.language as any)
         )
           throw new HostError("invalid_language", "Unsupported language");
         const user = await host.call<any>("users.manage@1", {

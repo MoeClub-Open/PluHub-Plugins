@@ -1,5 +1,10 @@
 import { it, expect } from "vitest";
-import { readPortal, publicPortal } from "../plugins/console/portal.js";
+import {
+  readPortal,
+  publicPortal,
+  localizePortal,
+} from "../plugins/console/portal.js";
+import { requestLocale } from "../lib/ui/locale.js";
 import {
   onboardingChecks,
   setupRedirect,
@@ -46,6 +51,52 @@ it("validates bounded public content and does not mutate snapshots or publish di
     { title: "x".repeat(161) },
   ])
     expect(() => readPortal({ portal })).toThrow();
+});
+
+it("localizes default and custom public content while sharing layout and hiding disabled translations", () => {
+  const raw = {
+    portal: {
+      title: "中文标题",
+      translations: {
+        "en-US": {
+          title: "English title",
+          docsUrl: "https://docs.example/en",
+          pages: [{ slug: "help", title: "Help", body: "English help" }],
+        },
+      },
+    },
+  };
+  const before = structuredClone(raw);
+  const portal = readPortal(raw);
+  expect(localizePortal(readPortal({}), "en-US", "zh-CN").primaryLabel).toBe(
+    "Browse models",
+  );
+  expect(localizePortal(portal, "en-US", "zh-CN")).toMatchObject({
+    title: "English title",
+    layout: "split",
+    docsUrl: "https://docs.example/en",
+  });
+  expect(localizePortal(portal, "zh-CN", "zh-CN").title).toBe("中文标题");
+  expect(raw).toEqual(before);
+  expect(
+    JSON.stringify(publicPortal({ portal: { ...portal, enabled: false } })),
+  ).not.toContain("English help");
+  for (const value of [
+    { primaryUrl: "javascript:alert(1)" },
+    { enabled: false },
+    { pages: [{ slug: "../bad", title: "Help", body: "body" }] },
+  ])
+    expect(() =>
+      readPortal({ portal: { translations: { "en-US": value } } }),
+    ).toThrow();
+  expect(
+    requestLocale(
+      new Request("https://test/", {
+        headers: { "accept-language": "zh-CN;q=0,en-GB;q=0.9,zh-TW;q=0.5" },
+      }),
+      "zh-CN",
+    ),
+  ).toBe("en-US");
 });
 
 it("requires matching public origin and secure cookies before creating the administrator", () => {
