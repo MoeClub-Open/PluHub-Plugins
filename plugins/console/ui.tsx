@@ -383,14 +383,10 @@ function App() {
   }, []);
   const admin = user?.role === "admin";
   React.useEffect(() => {
-    if (path === "/admin/activity") {
-      client.navigate(hash.replace("/admin/activity", "/activity"));
-      return;
-    }
     const destination = channelSettingsDestination(path!);
     if (admin && destination && (destination === "/settings/traffic" || extensions.some((e) => e.path === "/channels")))
       client.navigate(destination);
-  }, [admin, hash, path, client, extensions]);
+  }, [admin, path, client, extensions]);
   const modelCatalog = extensions.find(
     (e) =>
       e.id === "official.model-catalog" && e.path === "/models" && e.public,
@@ -1002,7 +998,7 @@ function App() {
                 selected?.path === verificationPath ? verificationPath : hash
               }
             >
-              {section && (
+              {section && !selected?.url && (
                 <PageHeading title={selected?.title ?? section.title} />
               )}
               {selected?.path === "/settings/traffic" ? (
@@ -1117,9 +1113,15 @@ export function mount(element: HTMLElement, host?: UIHost) {
   function LocalizedRoot() {
     useLocale();
     return host?.page === "/settings/branding" ? (
-      <BrandingSettings host={host} />
+      <>
+        <PageHeading title={tr("品牌与外观")} />
+        <BrandingSettings host={host} />
+      </>
     ) : host?.page === "/settings/portal" ? (
-      <PortalSettings host={host} />
+      <>
+        <PageHeading title={tr("门户与公开内容")} />
+        <PortalSettings host={host} />
+      </>
     ) : (
       <App />
     );

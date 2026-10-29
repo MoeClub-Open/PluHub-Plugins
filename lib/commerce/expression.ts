@@ -83,17 +83,6 @@ export function bindPricingContext(
     },
   };
 }
-/** Persist only scalar facts explicitly referenced by this pricing program. */
-export function freezePricing(
-  pricing: RequestPricing,
-  at: number,
-  params: unknown = {},
-  headers = new Headers(),
-): RequestPricing {
-  return pricing.mode === "expression"
-    ? bindPricingContext(pricing, capturePricingContext(params, headers, at))
-    : pricing;
-}
 const isFixed = (leaf: Leaf) => {
   const value = asNode(leaf.arguments[1]!);
   return value.type === "CallExpression" && functionName(value) === "fixed";

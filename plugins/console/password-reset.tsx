@@ -37,7 +37,7 @@ export function PasswordReset({
   const emailInput = React.useRef<HTMLInputElement>(null),
     codeInput = React.useRef<HTMLInputElement>(null);
   const captcha = React.useRef<CaptchaHandle>(null);
-  const captchaProvider = options.captchaProvider ?? options.turnstile;
+  const captchaProvider = options.captchaProvider;
   const cooldown = Math.max(0, Math.ceil((resendAt - now) / 1000)),
     action = options.captcha.login ? "login" : "email",
     needsCaptcha = !!options.captcha[action];

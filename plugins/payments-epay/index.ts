@@ -4,7 +4,6 @@ import { epaySign, epayVerify } from "../../lib/commerce/signatures.js";
 import { decimalAmount, minorAmount } from "../../lib/commerce/money.js";
 import { rawBody } from "../../lib/http/body.js";
 import {
-  epayMethods,
   validateEpayConfig,
   type EpayConfig,
   type EpayMethod,
@@ -13,9 +12,10 @@ import { epaySecrets } from "./secrets.js";
 export default definePlugin({
   setup(host) {
     const secrets = epaySecrets(host);
-    host.validateConfig((config) => {
+    host.validateConfig((value) => {
+      const config = value as EpayConfig;
       validateEpayConfig(config);
-      for (const method of epayMethods(config))
+      for (const method of config.methods ?? [])
         for (const kind of method.algorithm === "RSA"
           ? (["privateKeyRef", "platformPublicKeyRef"] as const)
           : (["keyRef"] as const)) {
@@ -25,16 +25,8 @@ export default definePlugin({
     });
     function settings(id: string | undefined, checkout = false) {
       const config = host.config() as EpayConfig;
-      if (checkout && config.methods && !id)
-        throw new HostError("invalid_request", "Select an Epay payment method");
-      const method = id
-        ? epayMethods(config).find((m) => m.id === id)
-        : config.pid
-          ? ({
-              ...config,
-              paymentType: config.paymentType ?? "alipay",
-            } as EpayMethod)
-          : undefined;
+      const methodId = requiredString(id, "paymentMethod", 128);
+      const method = config.methods?.find((m) => m.id === methodId);
       if (!method || (checkout && (!config.enabled || !method.enabled)))
         throw new HostError("payment_disabled", "Epay is disabled", 503);
       return method;
@@ -53,7 +45,7 @@ export default definePlugin({
       async (input: PaymentCheckout & { action: string }, signal) => {
         if (input.action === "status") {
           const config = host.config() as EpayConfig;
-          const methods = epayMethods(config)
+          const methods = (config.methods ?? [])
             .filter((m) => m.enabled)
             .map((m) => ({
               id: m.id,
@@ -85,11 +77,10 @@ export default definePlugin({
           c.publicUrl.replace(/\/$/, "") +
             "/api/plugins/official.payments-epay/notify",
         );
-        if (input.paymentMethod)
-          notifyUrl.searchParams.set("pluhub_method", input.paymentMethod);
+        notifyUrl.searchParams.set("pluhub_method", c.id);
         const fields: Record<string, string> = {
           pid: c.pid,
-          type: c.paymentType ?? "alipay",
+          type: c.paymentType,
           out_trade_no: input.orderId,
           notify_url: notifyUrl.href,
           return_url: input.successUrl,
@@ -105,14 +96,6 @@ export default definePlugin({
           });
         fields.sign = epaySign(fields, c.algorithm, key(c));
         const base = new URL(c.baseUrl);
-        if (
-          !["https:", "http:"].includes(base.protocol) ||
-          base.username ||
-          base.password ||
-          base.search ||
-          base.hash
-        )
-          throw new HostError("invalid_config", "Invalid payment URL");
         if (c.version === "v1") {
           base.pathname = base.pathname.replace(/\/$/, "") + "/submit.php";
           base.search = new URLSearchParams(fields).toString();
@@ -150,8 +133,8 @@ export default definePlugin({
       const url = new URL(request.url);
       if (url.searchParams.getAll("pluhub_method").length > 1)
         throw new HostError("invalid_request", "Duplicate payment method");
-      const paymentMethod = url.searchParams.get("pluhub_method") ?? undefined;
-      const c = settings(paymentMethod);
+      const c = settings(url.searchParams.get("pluhub_method") ?? undefined);
+      const paymentMethod = c.id;
       if (Number(request.headers.get("content-length") ?? 0) > 65536)
         throw new HostError("body_too_large", "Notification too large", 413);
       const params =
@@ -172,7 +155,7 @@ export default definePlugin({
       if (
         !epayVerify(fields, c.algorithm, key(c, true)) ||
         fields.pid !== c.pid ||
-        (paymentMethod && fields.type !== c.paymentType)
+        fields.type !== c.paymentType
       )
         throw new HostError("invalid_signature", "Invalid Epay notification");
       if (fields.trade_status !== "TRADE_SUCCESS")
@@ -181,13 +164,9 @@ export default definePlugin({
       // Epay is a prepaid purchase; no automatic debit is claimed.
       await host.call("commerce.payment@1", {
         provider: "epay",
-        eventId: paymentMethod
-          ? paymentMethod + ":" + fields.trade_no
-          : fields.trade_no,
+        eventId: paymentMethod + ":" + fields.trade_no,
         orderId: fields.out_trade_no,
-        paymentId: paymentMethod
-          ? paymentMethod + ":" + fields.trade_no
-          : fields.trade_no,
+        paymentId: paymentMethod + ":" + fields.trade_no,
         paymentMethod,
         amount: minorAmount(fields.money!),
         currency: "cny",

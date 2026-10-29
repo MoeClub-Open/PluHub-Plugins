@@ -679,9 +679,6 @@ td code {
 tbody tr:hover {
   background: color-mix(in srgb, var(--subtle) 72%, var(--surface));
 }
-tr.clickable {
-  cursor: pointer;
-}
 .badge {
   display: inline-flex;
   align-items: center;
@@ -1167,20 +1164,6 @@ code {
   white-space: pre;
   max-width: 100%;
   font-size: 12px;
-}
-.play-advanced summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 12px;
-  padding: 8px 0;
-}
-.play-advanced-fields {
-  display: grid;
-  gap: 16px;
-  padding: 12px 0;
-}
-.play-advanced {
-  grid-column: 1 / -1;
 }
 .empty {
   padding: 24px 16px;

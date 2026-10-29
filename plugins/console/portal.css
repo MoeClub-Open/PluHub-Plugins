@@ -583,14 +583,6 @@
   background: none;
   border: 0;
 }
-.portal-layout-centered .portal-intro {
-  grid-template-columns: minmax(0, 1fr);
-  text-align: center;
-  justify-items: center;
-}
-.portal-layout-centered .portal-actions {
-  justify-content: center;
-}
 
 [hidden] {
   display: none !important;

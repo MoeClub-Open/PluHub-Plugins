@@ -626,15 +626,4 @@ textarea.code.issued-token {
     font-size: 12px;
     gap: 6px;
   }
-  .main .subscription-page .subscription-tools {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 120px var(--control-height);
-    gap: 6px;
-  }
-  .main .subscription-tools input {
-    min-width: 0;
-  }
-  .main .subscription-tools .select-root {
-    min-width: 0;
-  }
 }

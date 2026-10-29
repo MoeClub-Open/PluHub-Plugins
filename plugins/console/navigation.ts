@@ -78,12 +78,12 @@ export const systemPages: Extension[] = [
 ];
 export function verificationTab(hash: string) {
   const [path, query] = hash.split("?");
-  const legacy: Record<string, string> = {
+  const providerTabs: Record<string, string> = {
     "/settings/auth": "account",
     "/mailer": "email",
     "/turnstile": "captcha",
   };
-  return legacy[path!] ?? new URLSearchParams(query).get("tab") ?? "account";
+  return providerTabs[path!] ?? new URLSearchParams(query).get("tab") ?? "account";
 }
 type SettingsPage = Extension & { searchTerms?: string };
 

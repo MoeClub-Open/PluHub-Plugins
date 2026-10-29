@@ -22,9 +22,7 @@ export const mount = (element: HTMLElement, host: UIHost) =>
       ? KeyAdmin
       : host.page === "/settings/auth"
         ? Settings
-        : host.page === "/account" ||
-            new URLSearchParams(location.hash.split("?")[1]).get("tab") ===
-              "security"
+        : host.page === "/account"
           ? Account
           : Keys,
   );

@@ -86,13 +86,6 @@ export function readBranding(config: Record<string, unknown>): Branding {
       result.defaultLanguage = value;
       continue;
     }
-    // Accept saved legacy configuration without publishing the retired field.
-    if (
-      key === "workspaceName" &&
-      typeof value === "string" &&
-      value.length <= 64
-    )
-      continue;
     if (
       !Object.hasOwn(defaultBranding, key) ||
       typeof value !== "string" ||

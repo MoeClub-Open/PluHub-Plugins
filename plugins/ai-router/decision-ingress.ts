@@ -14,7 +14,7 @@ import {
   parseDecision,
   type DifficultyDecision,
 } from "../../lib/ai/decision-protocol.js";
-import { requestLegacyDecision } from "../../lib/ai/legacy-decision.js";
+import { requestNativeDecision } from "../../lib/ai/native-decision.js";
 import {
   beginObservation,
   observation,
@@ -54,7 +54,7 @@ export function installDecisionIngress(host: Host) {
             "决策渠道仅支持对应的决策请求",
             400,
           );
-        return requestLegacyDecision(
+        return requestNativeDecision(
           host,
           kind,
           input.upstream,
@@ -81,16 +81,10 @@ export function installDecisionIngress(host: Host) {
         signal,
         "official.auto-router",
       );
-      if (
-        !kinds.includes(config.kind) ||
-        !config.model ||
-        config.baseUrl ||
-        config.keyRef
-      )
+      if (!kinds.includes(config.kind) || !config.model)
         throw new HostError(
-          "decision_migration_required",
-          "请先将决策服务配置为有价格的渠道模型",
-          409,
+          "invalid_config",
+          "请选择已配置价格的决策模型",
         );
       if (
         config.channelId &&

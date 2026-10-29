@@ -48,7 +48,7 @@ export function PasswordField({
         <button
           type="button"
           className="auth-password-toggle"
-          aria-label={tr(visible ? tr("隐藏{label}") : tr("显示{label}"), {
+          aria-label={tr(visible ? "隐藏{label}" : "显示{label}", {
             label,
           })}
           aria-pressed={visible}

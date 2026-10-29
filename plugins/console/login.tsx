@@ -77,7 +77,7 @@ export function Login({
     return () => clearInterval(timer);
   }, [resendAt]);
   const c = options.data;
-  const captchaProvider = c?.captchaProvider ?? c?.turnstile;
+  const captchaProvider = c?.captchaProvider;
   const action =
     mode === "register" && c?.captcha.register
       ? "register"

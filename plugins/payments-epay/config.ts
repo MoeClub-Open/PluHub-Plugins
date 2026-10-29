@@ -16,27 +16,14 @@ export type EpayMethod = {
   privateKeyRef?: string;
   platformPublicKeyRef?: string;
 };
-export type EpayConfig = Partial<EpayMethod> & {
+export type EpayConfig = {
+  enabled?: boolean;
   methods?: EpayMethod[];
   secretRefs?: string[];
 };
-export function epayMethods(config: EpayConfig): EpayMethod[] {
-  return (
-    config.methods ??
-    (config.pid || config.enabled
-      ? [
-          {
-            ...config,
-            id: "default",
-            paymentType: config.paymentType ?? "alipay",
-          } as EpayMethod,
-        ]
-      : [])
-  );
-}
 export function validateEpayConfig(config: EpayConfig) {
   const ids = new Set<string>();
-  for (const method of epayMethods(config)) {
+  for (const method of config.methods ?? []) {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(method.id) || ids.has(method.id))
       throw new HostError(
         "invalid_config",

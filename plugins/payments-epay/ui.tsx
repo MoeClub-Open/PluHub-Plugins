@@ -14,18 +14,6 @@ const types: Record<string, string> = {
   wxpay: "微信支付",
   qqpay: "QQ 钱包",
 };
-const fields = [
-  "version",
-  "algorithm",
-  "pid",
-  "baseUrl",
-  "publicUrl",
-  "paymentType",
-  "clientIp",
-  "keyRef",
-  "privateKeyRef",
-  "platformPublicKeyRef",
-] as const;
 const findPlugin = (config: any) =>
   config.plugins.find((p: any) =>
     /\/(?:official\.)?payments-epay$/.test(p.path.replaceAll("\\", "/")),
@@ -34,22 +22,7 @@ const findPlugin = (config: any) =>
 function Page({ host }: { host: UIHost }) {
   const data = useLoad<any>(() => host.request("/api/host/config"));
   const settings = data.data ? (findPlugin(data.data)?.config ?? {}) : {};
-  const methods: EpayMethod[] =
-    settings.methods ??
-    (settings.pid
-      ? [
-          {
-            ...Object.fromEntries(
-              fields
-                .filter((f) => settings[f] !== undefined)
-                .map((f) => [f, settings[f]]),
-            ),
-            id: "default",
-            enabled: settings.enabled === true,
-            paymentType: settings.paymentType ?? "alipay",
-          },
-        ]
-      : []);
+  const methods: EpayMethod[] = settings.methods ?? [];
   const [editor, setEditor] = React.useState<EpayMethod>();
   const [removing, setRemoving] = React.useState<EpayMethod>();
   const [busy, setBusy] = React.useState(false);
@@ -88,10 +61,9 @@ function Page({ host }: { host: UIHost }) {
           plugin.config.nextMethodId,
         ),
       };
-      // Keep legacy references for notifications from orders created before multi-method support.
       next.secretRefs = [
         ...new Set(
-          [next, ...nextMethods].flatMap((m) =>
+          nextMethods.flatMap((m) =>
             [m.keyRef, m.privateKeyRef, m.platformPublicKeyRef].filter(
               (reference) =>
                 typeof reference === "string" &&

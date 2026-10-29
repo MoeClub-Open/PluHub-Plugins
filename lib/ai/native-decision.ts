@@ -9,7 +9,7 @@ import { responseModel } from "./response-model.js";
 /** Execute a native Luna or self-hosted Jev decision on an authorized connection.
  * The caller owns admission, settlement and the response parser.
  */
-export async function requestLegacyDecision<T>(
+export async function requestNativeDecision<T>(
   host: Host,
   kind: "luna" | "jev",
   upstream: Upstream,

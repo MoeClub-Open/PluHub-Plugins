@@ -174,7 +174,6 @@ it("keeps the administrator's personal navigation identical to users with only o
     "/plugins",
     "/settings",
     "/settings/branding",
-    "/admin/activity",
   ])
     expect(admin.searchEntries.some((e) => e.path === path)).toBe(false);
 });

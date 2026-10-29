@@ -108,38 +108,12 @@ export default definePlugin({
             "invalid_config",
             "Effort-only mode cannot switch models on failure",
           );
-        if (p.decision.kind !== "rules" && p.decision.baseUrl) {
-          if (
-            !p.decision.baseUrl ||
-            (!p.decision.model && p.decision.kind !== "jev")
-          )
-            throw new HostError(
-              "invalid_config",
-              "Decision service URL and model are required",
-            );
-          let url: URL;
-          try {
-            url = new URL(p.decision.baseUrl);
-          } catch {
-            throw new HostError("invalid_config", "Invalid decision URL");
-          }
-          if (
-            !["http:", "https:"].includes(url.protocol) ||
-            url.username ||
-            url.password ||
-            url.search ||
-            url.hash
-          )
-            throw new HostError("invalid_config", "Invalid decision URL");
-          if (
-            p.decision.keyRef &&
-            !((c.secretRefs ?? []) as string[]).includes(p.decision.keyRef)
-          )
-            throw new HostError(
-              "invalid_config",
-              "Authorize the decision secret reference",
-            );
-        }
+        if (
+          p.mode !== "manual" &&
+          p.decision.kind !== "rules" &&
+          !p.decision.model
+        )
+          throw new HostError("invalid_config", "请选择已配置价格的决策模型");
       }
     });
     async function resolve(
@@ -154,16 +128,6 @@ export default definePlugin({
           "profile_not_found",
           "Router profile not found",
           404,
-        );
-      if (
-        p.mode !== "manual" &&
-        p.decision.kind !== "rules" &&
-        (p.decision.baseUrl || p.decision.keyRef || !p.decision.model)
-      )
-        throw new HostError(
-          "decision_migration_required",
-          "请先将决策服务配置为有价格的渠道模型",
-          409,
         );
       if (
         !input.request ||
@@ -214,7 +178,6 @@ export default definePlugin({
               "model_not_found",
               "invalid_route",
               "adapter_unavailable",
-              "group_forbidden",
               "subscription_unavailable",
               "protocol_not_allowed",
               "protocol_conversion_forbidden",
@@ -352,17 +315,16 @@ export default definePlugin({
           if (
             p.onFailure === "reject" ||
             [
-              "decision_migration_required",
+              "invalid_config",
               "decision_price_required",
               "insufficient_balance",
               "model_forbidden",
               "channel_forbidden",
-              "group_forbidden",
               "model_not_found",
               "decision_preview_unsupported",
               "forbidden",
-            ].includes((e as HostError).code) ||
-            (e as HostError).code === "decision_rate_limited"
+              "decision_rate_limited",
+            ].includes((e as HostError).code)
           )
             throw new HostError(
               (e as HostError).code ?? "decision_unavailable",

@@ -5,26 +5,16 @@
   "name": "智能路由",
   "description": "根据任务选择模型和思考强度。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.28",
+  "version": "0.1.0-alpha.29",
   "host": ">=0.1.0-alpha.17 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
   "provides": ["ai.auto-routing@1", "ai.decision-profile@1"],
-  "requires": ["ai.targets@1", "http.transport@1"],
-  "optionalRequires": [
-    "ai.workflow-decision@1",
-    "ai.upstream.openai-chat@1",
-    "ai.upstream.openai-responses@1",
-    "ai.upstream.anthropic@1",
-    "ai.upstream.gemini@1",
-    "ai.upstream.codex@1",
-    "ai.upstream.claude-subscription@1",
-    "ai.upstream.antigravity@1",
-    "ai.upstream.grok@1"
-  ],
-  "permissions": ["api.register", "secrets.read"],
+  "requires": ["ai.targets@1"],
+  "optionalRequires": ["ai.workflow-decision@1"],
+  "permissions": ["api.register"],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -133,18 +123,10 @@
                   "minLength": 1,
                   "maxLength": 256
                 },
-                "baseUrl": {
-                  "type": "string",
-                  "maxLength": 2048
-                },
                 "channelId": {
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 128
-                },
-                "keyRef": {
-                  "type": "string",
-                  "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
                 },
                 "timeoutMs": {
                   "type": "integer",
@@ -263,14 +245,6 @@
             }
           }
         }
-      },
-      "secretRefs": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
-        },
-        "uniqueItems": true
       },
       "decisionRpm": {
         "type": "integer",

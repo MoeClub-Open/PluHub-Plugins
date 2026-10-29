@@ -72,7 +72,6 @@ function Page({ host }: { host: UIHost }) {
     uniqueTargets.set(key, previous ? { ...previous, priced: previous.priced && target.priced } : target);
   }
   const decisionTargets = [...uniqueTargets.values()];
-  const legacyDecision = !!draft.decision.baseUrl || !!draft.decision.keyRef;
   React.useEffect(() => {
     if (config.data) {
       const p = find(config.data, "auto-router")?.config.profiles ?? {};
@@ -116,7 +115,7 @@ function Page({ host }: { host: UIHost }) {
       const saved = structuredClone(draft);
       if (!saved.name?.trim()) delete saved.name;
       if (saved.mode !== "manual" && saved.decision.kind !== "rules" &&
-        (!saved.decision.model || saved.decision.baseUrl || saved.decision.keyRef))
+        !saved.decision.model)
         throw new Error(tr("请选择已配置价格的决策模型"));
       if (saved.mode !== "manual" && saved.decision.kind !== "rules") {
         const matched = decisionTargets.filter((item) =>
@@ -129,13 +128,6 @@ function Page({ host }: { host: UIHost }) {
         ...plugin.config,
         profiles: { ...plugin.config.profiles, [selected]: saved },
       };
-      plugin.config.secretRefs = [
-        ...new Set(
-          Object.values(plugin.config.profiles)
-            .map((p: any) => p.decision.keyRef)
-            .filter(Boolean),
-        ),
-      ];
       await host.request("/api/host/config", {
         method: "PUT",
         body: JSON.stringify(c),
@@ -309,12 +301,11 @@ function Page({ host }: { host: UIHost }) {
                 <label>
                   {tr("决策模型")}
                   <Select
-                    value={legacyDecision || !draft.decision.model ? "" : JSON.stringify([draft.decision.model, draft.decision.channelId ?? ""])}
+                    value={!draft.decision.model ? "" : JSON.stringify([draft.decision.model, draft.decision.channelId ?? ""])}
                     onChange={(e) => {
                       if (!e.target.value) return;
                       const [model, channelId] = JSON.parse(e.target.value) as [string, string];
-                      const { baseUrl: _baseUrl, keyRef: _keyRef, ...decision } = draft.decision;
-                      update({ decision: { ...decision, model, channelId } });
+                      update({ decision: { ...draft.decision, model, channelId } });
                     }}
                   >
                     <option value="">{tr("请选择已配置价格的决策模型")}</option>
@@ -324,7 +315,6 @@ function Page({ host }: { host: UIHost }) {
                       </option>
                     ))}
                   </Select>
-                  {legacyDecision && <small>{tr("旧决策服务需要迁移到渠道并配置价格")}</small>}
                 </label>
               )}
               <label>
