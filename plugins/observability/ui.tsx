@@ -44,7 +44,6 @@ const billingStatus = (status: string) =>
   tr(
     (
       {
-        settled: "已扣费",
         reserved: "预留中",
         released: "已释放",
         personal: "不扣余额",
@@ -122,7 +121,7 @@ function WorkflowCall({ host, row }: { host: UIHost; row: any }) {
               状态: names[row.status] ?? row.status,
               错误代码: row.error_code || "—",
               消耗来源: consumptionLabel(row.consumption_source),
-              服务端完成耗时: latency(row.latency_ms),
+              耗时: latency(row.latency_ms),
               "输入 Token": number(row.input_tokens),
               "输出 Token": number(row.output_tokens),
               "TPS（输出 / 总耗时）": number(row.output_tps),
@@ -135,7 +134,9 @@ function WorkflowCall({ host, row }: { host: UIHost; row: any }) {
               "预留金额 (USD)": money(
                 row.held_micro_usd == null ? null : row.held_micro_usd / 1000000,
               ),
-              计费状态: billingStatus(row.billing_status),
+              ...(row.billing_status !== "settled"
+                ? { 计费状态: billingStatus(row.billing_status) }
+                : {}),
               ...(row.billing_note ? { 计费说明: billingNote(row.billing_note) } : {}),
             }).map(([label, value]) => (
               <div key={label}>
@@ -615,10 +616,8 @@ function Page({ host }: { host: UIHost }) {
                 <th>API Key</th>
                 <th>{tr("模型")}</th>
                 <th>{tr("状态")}</th>
-                <th>{tr("服务端耗时 / 首 Token")}</th>
-                <th className="numeric">{tr("输入 Token")}</th>
-                <th className="numeric">{tr("输出 Token")}</th>
-                <th className="numeric" title={tr("输出 Token 数 / 请求总耗时（秒）")}>TPS</th>
+                <th>{tr("耗时")}</th>
+                <th className="numeric">{tr("输入 / 输出")}</th>
                 <th>{tr("估算消耗")}</th>
                 <th>{tr("实际扣费")}</th>
                 <th>{tr("详情")}</th>
@@ -661,9 +660,12 @@ function Page({ host }: { host: UIHost }) {
                       {latency(r.first_token_ms)} {tr("首 Token")}
                     </small>
                   </td>
-                  <td className="numeric">{number(r.input_tokens)}</td>
-                  <td className="numeric">{number(r.output_tokens)}</td>
-                  <td className="numeric">{number(r.output_tps)}</td>
+                  <td className="numeric">
+                    {number(r.input_tokens)} / {number(r.output_tokens)}
+                    <small title={tr("输出 Token 数 / 请求总耗时（秒）")}>
+                      {number(r.output_tps)} TPS
+                    </small>
+                  </td>
                   <td>
                     {money(
                       r.cost_micro_usd == null
@@ -677,7 +679,6 @@ function Page({ host }: { host: UIHost }) {
                         ? null
                         : r.charged_micro_usd / 1000000,
                     )}
-                    <small>{billingStatus(r.billing_status)}</small>
                   </td>
                   <td>
                     <button
@@ -742,8 +743,8 @@ function Page({ host }: { host: UIHost }) {
               入口协议: selected.protocol,
               状态: names[selected.status],
               "HTTP 状态": selected.http_status,
-              服务端完成耗时: latency(selected.latency_ms),
-              "服务端首 Token 延迟": latency(selected.first_token_ms),
+              耗时: latency(selected.latency_ms),
+              "首 Token 延迟": latency(selected.first_token_ms),
               "输入 Token": number(selected.input_tokens),
               "输出 Token": number(selected.output_tokens),
               "TPS（输出 / 总耗时）": number(selected.output_tps),
@@ -762,7 +763,9 @@ function Page({ host }: { host: UIHost }) {
                   ? null
                   : selected.held_micro_usd / 1000000,
               ),
-              计费状态: billingStatus(selected.billing_status),
+              ...(selected.billing_status !== "settled"
+                ? { 计费状态: billingStatus(selected.billing_status) }
+                : {}),
               ...(selected.billing_note
                 ? { 计费说明: billingNote(selected.billing_note) }
                 : {}),
