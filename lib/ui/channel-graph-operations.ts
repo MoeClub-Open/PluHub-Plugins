@@ -1,4 +1,59 @@
-import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
+import type {
+  ChannelWorkflow,
+  WorkflowNode,
+  WorkflowValueType,
+} from "@pluhub/contracts/workflow";
+
+/** The first data connection determines a comparison's operand type. */
+export function comparisonInputNode(
+  node: WorkflowNode,
+  sourceType: WorkflowValueType | undefined,
+  input: string,
+  bindings: NonNullable<ChannelWorkflow["bindings"]>,
+): WorkflowNode {
+  if (
+    node.type !== "compare" ||
+    !["left", "right"].includes(input) ||
+    bindings.some(
+      (binding) => binding.target === node.id && binding.input !== input,
+    )
+  )
+    return node;
+  const valueType =
+    sourceType === "integer"
+      ? "number"
+      : sourceType === "string[]" && input === "right"
+        ? "string"
+        : sourceType;
+  if (
+    valueType !== "number" &&
+    valueType !== "string" &&
+    valueType !== "boolean"
+  )
+    return node;
+  const operator =
+    sourceType === "string[]"
+      ? "matches"
+      : node.valueType === valueType
+        ? node.operator
+        : "eq";
+  const initial =
+    valueType === "number" ? 0 : valueType === "boolean" ? false : "";
+  return {
+    ...node,
+    valueType,
+    operator,
+    left: typeof node.left === valueType ? node.left : initial,
+    right:
+      operator === "matches"
+        ? Array.isArray(node.right)
+          ? node.right
+          : []
+        : typeof node.right === valueType
+          ? node.right
+          : initial,
+  };
+}
 
 export type WorkflowPort = "next" | "yes" | "no" | "fallback";
 export const workflowOutputs = (

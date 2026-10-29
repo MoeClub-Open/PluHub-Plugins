@@ -58,74 +58,6 @@ export function ChannelNodeSettings({
           linked={context.sourceHasBindings}
         />
       )}
-      {node.type === "predicate" && (
-        <>
-          <FlowParameter field="test">
-            <label>
-              {tr("判断")}
-              <Select
-                value={node.test}
-                onChange={(e) =>
-                  change({
-                    test: e.target.value,
-                    protocol:
-                      e.target.value === "protocol" ? "openai-chat" : undefined,
-                    models: e.target.value === "model" ? [""] : undefined,
-                    modelSource:
-                      e.target.value === "model" ? "requested" : undefined,
-                    value:
-                      e.target.value === "textLengthAbove"
-                        ? (node.value ?? 0)
-                        : undefined,
-                  })
-                }
-              >
-                <option value="hasTools">{tr("包含工具")}</option>
-                <option value="stream">{tr("流式请求")}</option>
-                <option value="protocol">{tr("入口协议为")}</option>
-                <option value="model">{tr("模型 ID 匹配")}</option>
-                <option value="textLengthAbove">{tr("任务字符数大于")}</option>
-              </Select>
-            </label>
-          </FlowParameter>
-          {(node.test === "model" ||
-            context.boundInputs.has("test") ||
-            context.boundInputs.has("models") ||
-            context.boundInputs.has("modelSource")) && (
-            <ModelConditionFields node={node} change={change} />
-          )}
-          {(node.test === "protocol" ||
-            context.boundInputs.has("test") ||
-            context.boundInputs.has("protocol")) && (
-            <FlowParameter field="protocol">
-              <Select
-                aria-label={tr("条件入口协议")}
-                value={node.protocol ?? "openai-chat"}
-                onChange={(e) => change({ protocol: e.target.value })}
-              >
-                {ingressOptions.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </Select>
-            </FlowParameter>
-          )}
-          {(node.test === "textLengthAbove" ||
-            context.boundInputs.has("test") ||
-            context.boundInputs.has("value")) && (
-            <FlowParameter field="value">
-              <input
-                aria-label={tr("字符数阈值")}
-                type="number"
-                min="0"
-                value={node.value ?? 0}
-                onChange={(e) => change({ value: Number(e.target.value) })}
-              />
-            </FlowParameter>
-          )}
-        </>
-      )}
       {node.type === "branch" && (
         <FlowParameter field="condition" connectOnly>
           <label>{tr("条件输入")}</label>
@@ -843,56 +775,6 @@ function LogicNodeFields({
           </label>
         </FlowParameter>
       )}
-    </>
-  );
-}
-
-function ModelConditionFields({
-  node,
-  change,
-}: {
-  node: Extract<WorkflowNode, { type: "predicate" }>;
-  change: (patch: any) => void;
-}) {
-  const [text, setText] = React.useState(() => node.models?.join("\n") ?? "");
-  const signature = JSON.stringify(node.models ?? []);
-  const parse = (value: string) =>
-    value
-      .split(/\r?\n/)
-      .map((model) => model.trim())
-      .filter(Boolean);
-  React.useEffect(() => {
-    if (JSON.stringify(parse(text)) !== signature)
-      setText(node.models?.join("\n") ?? "");
-  }, [signature]);
-  return (
-    <>
-      <FlowParameter field="modelSource">
-        <label>
-          {tr("比较对象")}
-          <Select
-            value={node.modelSource ?? "requested"}
-            onChange={(e) => change({ modelSource: e.target.value })}
-          >
-            <option value="requested">{tr("请求模型 ID")}</option>
-            <option value="mapped">{tr("映射后的模型 ID")}</option>
-          </Select>
-        </label>
-      </FlowParameter>
-      <FlowParameter field="models">
-        <label>
-          {tr("模型 ID（每行一个，可用 *）")}
-          <textarea
-            rows={3}
-            value={text}
-            placeholder="gpt-*"
-            onChange={(e) => {
-              setText(e.target.value);
-              change({ models: parse(e.target.value) });
-            }}
-          />
-        </label>
-      </FlowParameter>
     </>
   );
 }

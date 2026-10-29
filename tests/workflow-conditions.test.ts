@@ -53,9 +53,9 @@ describe("workflow conditions", () => {
     expect(migrated.nodes.find((node) => node.id === "choose")).toEqual({
       id: "choose", type: "branch", condition: false, yes: "yes", no: "no",
     });
-    expect(migrated.nodes.find((node) => node.id === "choose-predicate")?.type).toBe("predicate");
+    expect(migrated.nodes.find((node) => node.id === "choose-compare")?.type).toBe("compare");
     expect(migrated.bindings).toContainEqual({
-      source: "choose-predicate", output: "result", target: "choose", input: "condition",
+      source: "choose-compare", output: "result", target: "choose", input: "condition",
     });
     expect(migrateWorkflowConditions(migrated)).toBe(migrated);
     expect(runWorkflow("channel", migrated, input as AIRequest, signal, context).providerId).toBe("yes");
@@ -76,15 +76,15 @@ describe("workflow conditions", () => {
     const flow = legacyFlow({ id: "choose", type: "condition", test: "textLengthAbove", value: 0, yes: "yes", no: "no" });
     flow.nodes.push(
       { id: "limit", type: "value", valueType: "integer", value: 10 },
-      { id: "choose-predicate", type: "value", valueType: "boolean", value: true },
+      { id: "choose-compare", type: "value", valueType: "boolean", value: true },
     );
     flow.bindings = [{ source: "limit", output: "value", target: "choose", input: "value" }];
     flow.layout = { choose: { x: 500, y: 100 } };
     const migrated = migrateWorkflowConditions(flow);
     expect(migrated.bindings).toContainEqual({
-      source: "limit", output: "value", target: "choose-predicate-1", input: "value",
+      source: "limit", output: "value", target: "choose-compare-1", input: "right",
     });
-    expect(migrated.layout?.["choose-predicate-1"]).toEqual({ x: 130, y: 100 });
+    expect(migrated.layout?.["choose-compare-1"]).toEqual({ x: 130, y: 100 });
     expect(flow.bindings[0]?.target).toBe("choose");
     expect(runWorkflow("channel", migrated, request, signal).providerId).toBe("no");
     expect(runWorkflow("channel", migrated, { ...request, messages: [{ role: "user", text: "longer than ten" }] }, signal).providerId).toBe("yes");
@@ -189,11 +189,12 @@ describe("workflow conditions", () => {
       nodes: [
         { id: "start", type: "start", next: "call" },
         { id: "call", type: "provider" },
-        { id: "check", type: "predicate", test: "stream" },
+        { id: "check", type: "compare", valueType: "boolean", operator: "eq", left: false, right: true },
         { id: "not", type: "logic", operator: "not", left: false },
       ],
       bindings: [
-        { source: "check", output: "result", target: "not", input: "left" },
+        { source: "start", output: "stream", target: "check", input: "left" },
+{ source: "check", output: "result", target: "not", input: "left" },
         { source: "not", output: "result", target: "call", input: "recordResponseModel" },
       ],
     };

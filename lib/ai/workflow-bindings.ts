@@ -15,7 +15,7 @@ import {
   workflowParameters,
   compatibleWorkflowTypes,
 } from "./workflow-parameters.js";
-import { evaluateCompare, evaluateLogic, evaluatePredicate } from "./workflow-condition.js";
+import { evaluateCompare, evaluateLogic } from "./workflow-condition.js";
 import { computedWorkflowTypes, validateWorkflowDataNode } from "./workflow-node-validation.js";
 
 type Context = {
@@ -178,7 +178,7 @@ export function resolveWorkflowBindings(
     if (tainted.has(id)) return tainted.get(id)!;
     visiting.add(id);
     const node = nodes.get(id)!;
-    let dynamic = ["start", "predicate", "llm", "jev"].includes(node.type);
+    let dynamic = ["start", "llm", "jev"].includes(node.type);
     for (const binding of incoming.get(id) ?? [])
       if (dependsOnRequest(binding.source)) dynamic = true;
     visiting.delete(id);
@@ -259,7 +259,7 @@ export function resolveWorkflowBindings(
       if (incoming) return getOutput(incoming.source, incoming.output);
       return node.valueType === "secret" ? node.secretRef : node.value;
     }
-    if (node.type === "predicate" || node.type === "compare" || node.type === "logic") {
+    if (node.type === "compare" || node.type === "logic") {
       const effective = structuredClone(node);
       for (const binding of incoming.get(id) ?? []) {
         const field = inputsFor(id).find((item) => item.path === binding.input)!;
@@ -269,8 +269,7 @@ export function resolveWorkflowBindings(
         setPath(effective, binding.input, value, fail);
       }
       if (effective.type === "compare") return evaluateCompare(effective);
-      if (effective.type === "logic") return evaluateLogic(effective);
-      return request ? evaluatePredicate(effective, request, context) : undefined;
+      return evaluateLogic(effective);
     }
     return undefined;
   }

@@ -32,12 +32,13 @@ it("persists personal condition migration without disturbing other channel data"
     expect(row.updated_at).toBe(100);
     expect(result).toMatchObject({ protocol: settings.protocol, baseUrl: settings.baseUrl, models: settings.models });
     expect(result.flow.nodes).toContainEqual({ id: "branch", type: "branch", condition: false, yes: "yes", no: "no" });
-    expect(result.flow.nodes).toContainEqual({ id: "branch-predicate", type: "predicate", test: "model", models: ["claude-*"] });
+    expect(result.flow.nodes).toContainEqual({ id: "branch-compare", type: "compare", valueType: "string", operator: "matches", left: "", right: ["claude-*"] });
     expect(result.flow.bindings).toEqual([
-      { source: "patterns", output: "value", target: "branch-predicate", input: "models" },
-      { source: "branch-predicate", output: "result", target: "branch", input: "condition" },
+      { source: "patterns", output: "value", target: "branch-compare", input: "right" },
+      { source: "branch-compare", output: "result", target: "branch", input: "condition" },
+      { source: "start", output: "requestedModel", target: "branch-compare", input: "left" },
     ]);
-    expect(result.flow.layout).toEqual({ branch: { x: 500, y: 250 }, "branch-predicate": { x: 130, y: 250 } });
+    expect(result.flow.layout).toEqual({ branch: { x: 500, y: 250 }, "branch-compare": { x: 130, y: 250 } });
     migratePersonalConditions(db);
     expect(db.prepare("SELECT revision FROM personal_channels WHERE id='old'").get()).toMatchObject({ revision: 5 });
     expect(db.prepare("SELECT revision FROM personal_channels WHERE id='new'").get()).toMatchObject({ revision: 3 });

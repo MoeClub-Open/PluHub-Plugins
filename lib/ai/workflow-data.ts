@@ -9,7 +9,6 @@ import type { WorkflowBinding, WorkflowNode } from "@pluhub/contracts/workflow";
 import {
   evaluateCompare,
   evaluateLogic,
-  evaluatePredicate,
 } from "./workflow-condition.js";
 import { validateWorkflowDataNode } from "./workflow-node-validation.js";
 import { validValue } from "./workflow-bindings.js";
@@ -111,7 +110,7 @@ export function createWorkflowDataGraph<N extends Node>(options: {
     if (dynamic.has(id)) return dynamic.get(id)!;
     const node = sourceNode(id);
     const result =
-      ["start", "predicate", "llm", "jev"].includes(node.type) ||
+      ["start", "llm", "jev"].includes(node.type) ||
       (bindings.get(id) ?? []).some((item) => dynamicSource(item.source));
     dynamic.set(id, result);
     return result;
@@ -303,14 +302,6 @@ export function createWorkflowDataGraph<N extends Node>(options: {
       case "value":
         return {
           value: data.valueType === "secret" ? data.secretRef : data.value,
-        };
-      case "predicate":
-        return {
-          result: evaluatePredicate(
-            node as unknown as Extract<WorkflowNode, { type: "predicate" }>,
-            request,
-            options.context,
-          ),
         };
       case "compare":
         return {

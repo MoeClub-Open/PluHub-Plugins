@@ -54,7 +54,7 @@ it("routes a provided model through each node's mapping while retaining its exte
           entry: "start",
           nodes: [
             { id: "start", type: "start", next: "branch" },
-            { id: "has-tools", type: "predicate", test: "hasTools" },
+            { id: "has-tools", type: "compare", valueType: "boolean", operator: "eq", left: false, right: true },
             {
               id: "branch",
               type: "branch",
@@ -72,7 +72,8 @@ it("routes a provided model through each node's mapping while retaining its exte
             })),
           ],
           bindings: [
-            {
+            { source: "start", output: "hasTools", target: "has-tools", input: "left" },
+{
               source: "has-tools",
               output: "result",
               target: "branch",

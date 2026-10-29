@@ -95,39 +95,6 @@ export function validateWorkflowNode(
   )
     bad("协议准入需要有效且不重复的入口协议及转换策略", [node.id]);
   if (
-    node.type === "predicate" &&
-    node.test === "protocol" &&
-    !ingressProtocols.includes(node.protocol as Protocol)
-  )
-    bad("协议分支需要指定有效的入口协议", [node.id]);
-  if (
-    node.type === "predicate" &&
-    !["hasTools", "stream", "textLengthAbove", "protocol", "model"].includes(
-      node.test,
-    )
-  )
-    bad("无效的分支条件", [node.id]);
-  if (
-    node.type === "predicate" &&
-    node.value !== undefined &&
-    (!Number.isSafeInteger(node.value) ||
-      node.value < 0 ||
-      node.value > 10_000_000)
-  )
-    bad("字符数阈值无效", [node.id]);
-  if (
-    node.type === "predicate" &&
-    node.modelSource !== undefined &&
-    !["requested", "mapped"].includes(node.modelSource)
-  )
-    bad("无效的模型比较对象", [node.id]);
-  if (
-    node.type === "predicate" &&
-    node.protocol !== undefined &&
-    !ingressProtocols.includes(node.protocol)
-  )
-    bad("协议分支需要指定有效的入口协议", [node.id]);
-  if (
     node.type === "reasoning" &&
     !["none", "minimal", "low", "medium", "high", "xhigh", "max"].includes(
       node.effort,
@@ -251,16 +218,6 @@ export function validateWorkflowNode(
     }
     if (node.interfaces !== undefined) validateInterfaces(node.interfaces);
   }
-  if (
-    node.type === "predicate" &&
-    node.test === "model" &&
-    (!Array.isArray(node.models) ||
-      !node.models.length ||
-      node.models.some((model) => typeof model !== "string" || !model.trim()) ||
-      (node.modelSource !== undefined &&
-        !["requested", "mapped"].includes(node.modelSource)))
-  )
-    bad("模型条件需要填写模型 ID 或匹配规则", [node.id]);
   if (node.type === "branch") {
     if (typeof node.condition !== "boolean") bad("分支需要布尔条件", [node.id]);
     if (
@@ -338,7 +295,6 @@ export function compileWorkflow(
     if (
       [
         "value",
-        "predicate",
         "compare",
         "logic",
         "text",
@@ -378,7 +334,6 @@ export function compileWorkflow(
       (node) =>
         ![
           "value",
-          "predicate",
           "compare",
           "logic",
           "text",
@@ -397,7 +352,6 @@ export function compileWorkflow(
           (node) =>
             ![
               "value",
-              "predicate",
               "compare",
               "logic",
               "text",

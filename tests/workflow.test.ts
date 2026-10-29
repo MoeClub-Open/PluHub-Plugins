@@ -13,8 +13,21 @@ const flow: ChannelWorkflow = {
   entry: "start",
   nodes: [
     { id: "start", type: "start", next: "condition" },
-    { id: "condition", type: "branch", condition: false, yes: "prompt", no: "plain" },
-{ id: "condition-predicate", type: "predicate", test: "stream" },
+    {
+      id: "condition",
+      type: "branch",
+      condition: false,
+      yes: "prompt",
+      no: "plain",
+    },
+    {
+      id: "condition-predicate",
+      type: "compare",
+      valueType: "boolean",
+      operator: "eq",
+      left: false,
+      right: true,
+    },
     { id: "prompt", type: "prompt", text: "system", next: "budget" },
     { id: "budget", type: "maxTokens", limit: 8, next: "tps" },
     {
@@ -28,7 +41,21 @@ const flow: ChannelWorkflow = {
     { id: "rich", type: "upstream", target: "smart", mode: "explicit" },
     { id: "plain", type: "upstream", target: "fast", mode: "implicit" },
   ],
-bindings: [{ source: "condition-predicate", output: "result", target: "condition", input: "condition" }]};
+  bindings: [
+    {
+      source: "start",
+      output: "stream",
+      target: "condition-predicate",
+      input: "left",
+    },
+    {
+      source: "condition-predicate",
+      output: "result",
+      target: "condition",
+      input: "condition",
+    },
+  ],
+};
 it("executes channel branches, bounded transforms and traces without modifying input", () => {
   const signal = new AbortController().signal;
   expect(runWorkflow("p", flow, request, signal).target).toBe("fast");
@@ -92,17 +119,38 @@ it("branches by requested or mapped model ID with exact and wildcard rules", () 
     nodes: [
       { id: "s", type: "start", next: "c" },
       { id: "c", type: "branch", condition: false, yes: "match", no: "other" },
-{ id: "c-predicate", type: "predicate", test: "model", models: ["gpt-*", "claude-*-sonnet*"] },
+      {
+        id: "c-predicate",
+        type: "compare",
+        valueType: "string",
+        operator: "matches",
+        left: "",
+        right: ["gpt-*", "claude-*-sonnet*"],
+      },
       { id: "match", type: "provider" },
       { id: "other", type: "provider" },
     ],
-  bindings: [{ source: "c-predicate", output: "result", target: "c", input: "condition" }]};
+    bindings: [
+      {
+        source: "s",
+        output: "requestedModel",
+        target: "c-predicate",
+        input: "left",
+      },
+      {
+        source: "c-predicate",
+        output: "result",
+        target: "c",
+        input: "condition",
+      },
+    ],
+  };
   const signal = new AbortController().signal;
   const context = { requestedModel: "public", mappedModel: "gpt-5" };
   expect(runWorkflow("p", flow, request, signal, context).providerId).toBe(
     "other",
   );
-  (flow.nodes.find((node) => node.type === "predicate") as any).modelSource = "mapped";
+  flow.bindings![0]!.output = "mappedModel";
   expect(runWorkflow("p", flow, request, signal, context).providerId).toBe(
     "match",
   );
@@ -111,13 +159,15 @@ it("branches by requested or mapped model ID with exact and wildcard rules", () 
       mappedModel: "claude-4-sonnet-latest",
     }).providerId,
   ).toBe("match");
-  (flow.nodes.find((node) => node.type === "predicate") as any).models = ["gpt-5"];
+  (flow.nodes.find((node) => node.type === "compare") as any).right = ["gpt-5"];
   expect(
     runWorkflow("p", flow, request, signal, { mappedModel: "gpt-5-mini" })
       .providerId,
   ).toBe("other");
-  (flow.nodes.find((node) => node.type === "predicate") as any).models = [];
-  expect(() => compileWorkflow(flow)).toThrow(/模型条件/);
+  (flow.nodes.find((node) => node.type === "compare") as any).right = [];
+  expect(runWorkflow("p", flow, request, signal, context).providerId).toBe(
+    "other",
+  );
 });
 it("validates protocol gates and maps subscription providers to their wire protocols", () => {
   const policy = { conversion: "disabled" as const };

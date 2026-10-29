@@ -65,7 +65,7 @@ export function needsDeferredWorkflow(flow: ChannelWorkflow): boolean {
     if (dynamic.has(id)) return dynamic.get(id)!;
     if (visiting.has(id)) return false;
     visiting.add(id);
-    const result = ["start", "predicate", "llm", "jev"].includes(nodes.get(id)?.type ?? "") ||
+    const result = ["start", "llm", "jev"].includes(nodes.get(id)?.type ?? "") ||
       (flow.bindings ?? []).some((binding) => binding.target === id && dynamicSource(binding.source));
     visiting.delete(id);
     dynamic.set(id, result);
@@ -79,18 +79,12 @@ export function needsDeferredWorkflow(flow: ChannelWorkflow): boolean {
 }
 
 function quoteNeedsRequest(flow: ChannelWorkflow): boolean {
-  const { nodes, execution, data } = workflowDependencies(flow);
-  if ([...execution, ...data].some((id) => {
-    const node = nodes.get(id);
-    return node?.type === "predicate" && node.test !== "model";
-  })) return true;
+  const { execution, data } = workflowDependencies(flow);
   const relevant = new Set([...execution, ...data]);
   return (flow.bindings ?? []).some((binding) =>
     relevant.has(binding.target) &&
-    ((binding.source === flow.entry &&
-      !["requestedModel", "mappedModel"].includes(binding.output)) ||
-      (binding.input === "test" &&
-        nodes.get(binding.target)?.type === "predicate")));
+    binding.source === flow.entry &&
+    !["requestedModel", "mappedModel"].includes(binding.output));
 }
 
 function mergeOutputPolicy(

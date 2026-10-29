@@ -29,14 +29,29 @@ it("reevaluates a reused request predicate after preceding request transformatio
       { id: "second", type: "branch", condition: false, yes: "yes", no: "no" },
       { id: "yes", type: "provider" },
       { id: "no", type: "provider" },
-      { id: "length", type: "predicate", test: "textLengthAbove", value: 10 },
+      {
+        id: "length",
+        type: "compare",
+        valueType: "number",
+        operator: "gt",
+        left: 0,
+        right: 10,
+      },
     ],
-    bindings: ["first", "second"].map((target) => ({
-      source: "length",
-      output: "result",
-      target,
-      input: "condition",
-    })),
+    bindings: [
+      {
+        source: "start",
+        output: "textLength",
+        target: "length",
+        input: "left",
+      },
+      ...["first", "second"].map((target) => ({
+        source: "length",
+        output: "result",
+        target,
+        input: "condition",
+      })),
+    ],
   };
   const task = structuredClone(request);
   const unexpected = async (): Promise<never> => {

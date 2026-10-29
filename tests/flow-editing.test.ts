@@ -4,7 +4,10 @@ import {
   copyFlowSelection,
   pasteFlowSelection,
   removeFlowNodes,
+  comparisonInputNode,
 } from "../lib/ui/channel-graph-operations.js";
+import { runWorkflow } from "../lib/ai/channel-graph.js";
+import { canBindWorkflowPorts } from "../lib/ai/workflow-parameters.js";
 
 const flow: ChannelWorkflow = {
   entry: "start",
@@ -19,6 +22,80 @@ const flow: ChannelWorkflow = {
     call: { x: 800, y: 100 },
   },
 };
+
+it("connects task length to a numeric comparison and branches on its boolean output", () => {
+  const start = { id: "start", type: "start", next: "branch" } as const;
+  const compare = comparisonInputNode(
+    {
+      id: "compare",
+      type: "compare",
+      valueType: "string",
+      operator: "matches",
+      left: "",
+      right: ["old"],
+    },
+    "integer",
+    "left",
+    [],
+  );
+  expect(compare).toMatchObject({
+    valueType: "number",
+    operator: "eq",
+    left: 0,
+    right: 0,
+  });
+  expect(canBindWorkflowPorts(start, "textLength", compare, "left")).toBe(true);
+  if (compare.type !== "compare") throw Error("Expected comparison");
+  compare.operator = "gt";
+  compare.right = 5;
+  const graph: ChannelWorkflow = {
+    entry: "start",
+    nodes: [
+      start,
+      compare,
+      {
+        id: "branch",
+        type: "branch",
+        condition: false,
+        yes: "long",
+        no: "short",
+      },
+      { id: "long", type: "provider" },
+      { id: "short", type: "provider" },
+    ],
+    bindings: [
+      {
+        source: "start",
+        output: "textLength",
+        target: "compare",
+        input: "left",
+      },
+      {
+        source: "compare",
+        output: "result",
+        target: "branch",
+        input: "condition",
+      },
+    ],
+  };
+  const run = (text: string) =>
+    runWorkflow(
+      "test",
+      graph,
+      {
+        model: "model",
+        stream: false,
+        tools: [],
+        messages: [{ role: "user", text }],
+      },
+      new AbortController().signal,
+    ).providerId;
+  expect(run("hello")).toBe("short");
+  expect(run("longer")).toBe("long");
+  expect(comparisonInputNode(compare, "string", "right", graph.bindings!)).toBe(
+    compare,
+  );
+});
 
 it("copies a subgraph with only internal edges and never attaches it to the old path", () => {
   const selection = copyFlowSelection(flow, ["start", "prompt", "call"]);

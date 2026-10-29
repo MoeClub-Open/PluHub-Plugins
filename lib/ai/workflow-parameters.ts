@@ -99,14 +99,6 @@ export function workflowParameters(
           node.valueType === "secret",
         ),
       ];
-    case "predicate":
-      return [
-        param("test", "string", "判断", false),
-        param("modelSource", "string", "比较对象", false),
-        param("models", "string[]", "模型 ID", false),
-        param("protocol", "string", "入口协议", false),
-        param("value", "integer", "字符数阈值", false),
-      ];
     case "branch":
       return [param("condition", "boolean", "条件", false)];
     case "compare":
@@ -199,7 +191,7 @@ export function workflowDataOutputs(node: WorkflowNode): WorkflowParameter[] {
     return [param("answers", "object", "答案", false), param("choice", "string", "选项", false), param("score", "number", "评分", false), param("noul", "number", "Noul", false), param("box", "object", "边界框", false), param("confidence", "number", "置信度", false)];
   if (node.type === "value")
     return [param("value", node.valueType, "值", false)];
-  if (node.type === "predicate" || node.type === "compare" || node.type === "logic")
+  if (node.type === "compare" || node.type === "logic")
     return [param("result", "boolean", "结果", false)];
   if (node.type === "start")
     return [
@@ -240,6 +232,6 @@ export function canBindWorkflowPorts(
     !!out &&
     !!into &&
     compatibleWorkflowTypes(out.type, into.type) &&
-    !( (source.type === "start" || source.type === "predicate" || source.type === "llm" || source.type === "jev") && into.sensitive)
+    !( (source.type === "start" || source.type === "llm" || source.type === "jev") && into.sensitive)
   );
 }

@@ -175,7 +175,6 @@ export function installPersonalChannels(
         case "logic":
         case "text":
         case "format":
-        case "predicate":
         case "prompt":
         case "reasoning":
         case "maxTokens":

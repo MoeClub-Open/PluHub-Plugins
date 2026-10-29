@@ -60,10 +60,11 @@ it("tries another matching channel when a static mixed graph resolves to the wro
       mixed: { priority: 5, flow: { entry: "start", nodes: [
         { id: "start", type: "start", next: "choice" },
         { id: "choice", type: "branch", condition: false, yes: "chat", no: "jev" },
-{ id: "choice-predicate", type: "predicate", test: "hasTools" },
+{ id: "choice-predicate", type: "compare", valueType: "boolean", operator: "eq", left: false, right: true },
         { id: "chat", type: "provider", upstream: { protocol: "openai-chat", baseUrl: "https://chat.example" } },
         { id: "jev", type: "provider", upstream: { protocol: "systemone", baseUrl: "https://jev.example" } },
-      ] ,bindings: [{ source: "choice-predicate", output: "result", target: "choice", input: "condition" }]} },
+      ] ,bindings: [{ source: "start", output: "hasTools", target: "choice-predicate", input: "left" },
+{ source: "choice-predicate", output: "result", target: "choice", input: "condition" }]} },
       chat: { protocol: "openai-chat", baseUrl: "https://chat.example" },
     },
     models: {
@@ -107,9 +108,10 @@ it("rejects request-dependent conditions during a request-free quotation", async
       { id: "branch", type: "branch", condition: false, yes: "yes", no: "no" },
       { id: "yes", type: "provider" },
       { id: "no", type: "provider" },
-      { id: "predicate", type: "predicate", test: "hasTools" },
+      { id: "predicate", type: "compare", valueType: "boolean", operator: "eq", left: false, right: true },
     ],
-    bindings: [{ source: "predicate", output: "result", target: "branch", input: "condition" }],
+    bindings: [{ source: "start", output: "hasTools", target: "predicate", input: "left" },
+{ source: "predicate", output: "result", target: "branch", input: "condition" }],
   };
   const config = { upstreams: { channel: { flow } }, models: { public: { upstream: "channel", model: "remote" } } };
   const host = { config: () => config, hasCapability: () => true } as any;

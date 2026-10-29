@@ -33,6 +33,7 @@ import {
   workflowOutputs as outputs,
   workflowNodePositions,
   removeFlowNodes,
+  comparisonInputNode,
 } from "./channel-graph-operations.js";
 import { isFlowTextInput, useFlowClipboard } from "./use-flow-clipboard.js";
 import {
@@ -81,9 +82,6 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
   },
   get routing() {
     return tr("自动路由");
-  },
-  get predicate() {
-    return tr("请求条件");
   },
   get branch() {
     return tr("分支");
@@ -154,7 +152,7 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
   const context = React.useContext(NodeContext),
     { node } = data;
   const expanded = context.expanded.has(id);
-  const expandable = node.type !== "start" || !context.personal;
+  const expandable = node.type !== "start";
   const updateNodeInternals = useUpdateNodeInternals();
   const nodeElement = React.useRef<HTMLDivElement>(null);
   const [visibleFields, setVisibleFields] =
@@ -170,7 +168,7 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
   );
   const namedOutputs = executionOutputs.filter((port) => port.field !== "next");
   const visibleInputs = parameters.filter((p) =>
-    context.bindings.some(
+    ["compare", "logic", "branch"].includes(node.type) || context.bindings.some(
       (edge) => edge.target === id && edge.input === p.path,
     ),
   );
@@ -248,7 +246,7 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
         }
       >
         {![
-          "start", "value", "predicate", "compare", "logic", "text",
+          "start", "value", "compare", "logic", "text",
           "template", "replace", "format", "llm", "jev",
         ].includes(node.type) && (
           <Handle type="target" position={Position.Left} id="in" />
@@ -425,23 +423,6 @@ function summary(node: WorkflowNode, channel?: Upstream) {
         .join(" · ");
     case "prompt":
       return node.text.slice(0, 60) || tr("系统提示词");
-    case "predicate":
-      if (node.test === "model")
-        return (
-          tr(
-            node.modelSource === "mapped" ? "映射后的模型 ID" : "请求模型 ID",
-          ) +
-          " · " +
-          (node.models?.join(", ") || tr("尚未设置"))
-        );
-      return tr(
-        {
-          hasTools: "包含工具",
-          stream: "流式请求",
-          textLengthAbove: "任务字符数大于",
-          protocol: "入口协议为",
-        }[node.test],
-      );
     case "branch":
       return tr("条件输入");
     case "compare":
@@ -540,11 +521,16 @@ function Canvas(props: CanvasProps) {
     () =>
       new Set(
         flow.nodes
-          .filter((n) => n.type === "provider")
-          .slice(0, 1)
+          .filter((n) => ["provider", "compare", "logic", "branch"].includes(n.type))
           .map((n) => n.id),
       ),
   );
+  const knownNodes = React.useRef(new Set(flow.nodes.map(node => node.id)));
+  React.useEffect(() => {
+    const added = flow.nodes.filter(node => node.type !== "start" && !knownNodes.current.has(node.id));
+    knownNodes.current = new Set(flow.nodes.map(node => node.id));
+    if (added.length) setExpanded(previous => new Set([...previous, ...added.map(node => node.id)]));
+  }, [flow.nodes]);
   React.useEffect(() => {
     if (initialized && !fitted.current) {
       fitted.current = true;
@@ -606,6 +592,12 @@ function Canvas(props: CanvasProps) {
       update({
         ...flow,
         layout: Object.fromEntries(positions),
+        nodes: flow.nodes.map(node => node.id === connection.target
+          ? comparisonInputNode(node,
+              workflowDataOutputs(flow.nodes.find(item => item.id === connection.source)!)
+                .find(port => port.path === connection.sourceHandle!.slice(5))?.type,
+              connection.targetHandle!.slice(6), bindings)
+          : node),
         bindings: [
           ...bindings,
           {
@@ -662,17 +654,6 @@ function Canvas(props: CanvasProps) {
         return false;
       const output = connection.sourceHandle.slice(5),
         input = connection.targetHandle.slice(6);
-      if (
-        !canBindWorkflowPorts(
-          source,
-          output,
-          target,
-          input,
-          props.personalInterfaces,
-          props.personal,
-        )
-      )
-        return false;
       const other = (flow.bindings ?? []).filter(
         (edge) =>
           !reconnecting.current ||
@@ -681,6 +662,20 @@ function Canvas(props: CanvasProps) {
           edge.target !== reconnecting.current.target ||
           edge.input !== reconnecting.current.targetHandle?.slice(6),
       );
+      const candidate = comparisonInputNode(target,
+        workflowDataOutputs(source).find(port => port.path === output)?.type,
+        input, other);
+      if (
+        !canBindWorkflowPorts(
+          source,
+          output,
+          candidate,
+          input,
+          props.personalInterfaces,
+          props.personal,
+        )
+      )
+        return false;
       if (
         other.some((edge) => edge.target === target.id && edge.input === input)
       )
@@ -708,7 +703,6 @@ function Canvas(props: CanvasProps) {
         const node = flow.nodes.find((item) => item.id === id);
         return (
           node?.type === "start" ||
-          node?.type === "predicate" ||
           node?.type === "llm" ||
           node?.type === "jev" ||
           bindings.some(

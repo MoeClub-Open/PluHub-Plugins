@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.56",
+  "version": "0.1.0-alpha.57",
   "host": ">=0.1.0-alpha.17 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -304,20 +304,6 @@
                           "condition": { "type": "boolean" },
                           "yes": { "type": "string", "minLength": 1, "maxLength": 128 },
                           "no": { "type": "string", "minLength": 1, "maxLength": 128 }
-                        }
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": ["id", "type", "test"],
-                        "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "predicate" },
-                          "test": { "type": "string" },
-                          "value": { "type": "integer" },
-                          "models": { "type": "array", "items": { "type": "string" } },
-                          "modelSource": { "type": "string" },
-                          "protocol": { "type": "string" }
                         }
                       },
                       {
