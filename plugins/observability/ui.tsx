@@ -12,22 +12,17 @@ import { fixedPricing } from "../../lib/commerce/expression.js";
 import { PriceReceiptView } from "../../lib/ui/price-receipt.js";
 import { RoutingDetails } from "./routing-details.js";
 import {
-  ConsumptionBreakdown,
   consumptionLabel,
   consumptionSources,
-  walletNote,
-  TokenStat,
 } from "../../lib/ui/consumption.js";
 import {
   PageHeading,
   Icon,
   Empty,
   Dialog,
-  Stat,
   number,
   latency,
   money,
-  type Summary,
 } from "../../lib/ui/components.js";
 const names: Record<string, string> = {
   get success() {
@@ -232,9 +227,6 @@ function Page({ host }: { host: UIHost }) {
     ...(queryModel ? { model: queryModel } : {}),
     ...(queryRequestId ? { requestId: queryRequestId } : {}),
   });
-  const matchingCalls =
-    !queryRequestId &&
-    !!(queryModel || status || filters.protocol || filters.source || filters.upstream || filters.errorCode);
   React.useEffect(() => {
     const next = new URL(location.href);
     next.hash = "/activity?" + query.toString();
@@ -282,20 +274,12 @@ function Page({ host }: { host: UIHost }) {
       ),
     [hours, status, queryModel, queryRequestId, filters, selfOnly, offset],
   );
-  const stats = useLoad<Summary>(
-    () => host.request("/api/plugins/official.observability/summary?" + query),
-    [hours, status, queryModel, queryRequestId, filters, selfOnly],
-  );
   React.useEffect(() => {
     if (queryRequestId) {
       const row = data.data?.data.find((row) => row.id === queryRequestId);
       if (row) setSelected(row);
     }
   }, [data.data, queryRequestId]);
-  const reload = () => {
-    data.reload();
-    stats.reload();
-  };
   return (
     <>
       <PageHeading title={tr("调用记录")}>
@@ -329,51 +313,12 @@ function Page({ host }: { host: UIHost }) {
           <option value="168">{tr("最近 7 天")}</option>
           <option value="720">{tr("最近 30 天")}</option>
         </Select>
-        <button className="secondary" onClick={reload}>
+        <button className="secondary" onClick={data.reload}>
           <Icon name="refresh" size={16} />
           {tr("刷新")}
         </button>
       </PageHeading>
-      <Notice message={message || data.error || stats.error || scope.error} />
-      <div className="stats four">
-        <Stat
-          title={tr("请求数")}
-          value={number(stats.data?.requests)}
-          note={tr(
-            queryRequestId
-              ? "所选请求；用量和扣费包含其内部调用"
-              : matchingCalls
-                ? "按匹配调用统计，包含流程内部调用"
-                : "外部请求及父记录缺失的内部调用",
-          )}
-          icon="activity"
-        />
-        <Stat
-          title={tr("成功率")}
-          value={
-            stats.data && stats.data.successes + stats.data.errors > 0
-              ? (
-                  (100 * stats.data.successes) /
-                  (stats.data.successes + stats.data.errors)
-                ).toFixed(1) + "%"
-              : "—"
-          }
-          note={tr("取消请求不计入失败")}
-          icon="check"
-        />
-        <TokenStat
-          input={stats.data?.inputTokens}
-          output={stats.data?.outputTokens}
-          note={tr("含流程内部调用")}
-        />
-        <Stat
-          title={tr("消耗金额")}
-          value={money(stats.data?.wallet.chargedUSD)}
-          note={walletNote(stats.data?.wallet)}
-          icon="money"
-        />
-      </div>
-      <ConsumptionBreakdown value={stats.data?.consumption} />
+      <Notice message={message || data.error || scope.error} />
       <form
         className="list-toolbar runtime-log-filters"
         onSubmit={(e) => {
@@ -615,7 +560,6 @@ function Page({ host }: { host: UIHost }) {
                 <th>{tr("状态")}</th>
                 <th>{tr("耗时")}</th>
                 <th className="numeric">{tr("输入 / 输出")}</th>
-                <th>{tr("估算消耗")}</th>
                 <th>{tr("实际扣费")}</th>
                 <th>{tr("详情")}</th>
               </tr>
@@ -633,9 +577,6 @@ function Page({ host }: { host: UIHost }) {
                   <td>
                     <strong>{r.model || "—"}</strong>
                     <small>{consumptionLabel(r.consumption_source)}</small>
-                    <small>
-                      {tr("思考强度")}: {r.effort || "—"}
-                    </small>
                   </td>
                   <td>
                     <span
@@ -653,21 +594,16 @@ function Page({ host }: { host: UIHost }) {
                   </td>
                   <td>
                     {latency(r.latency_ms)}
-                    <small>
-                      {latency(r.first_token_ms)} {tr("首 Token")}
-                    </small>
+                    {r.first_token_ms != null && (
+                      <small>{latency(r.first_token_ms)} {tr("首 Token")}</small>
+                    )}
                   </td>
                   <td className="numeric">
                     {number(r.input_tokens)} / {number(r.output_tokens)}
-                    <small title={tr("输出 Token 数 / 请求总耗时（秒）")}>
-                      {number(r.output_tps)} TPS
-                    </small>
-                  </td>
-                  <td>
-                    {money(
-                      r.cost_micro_usd == null
-                        ? null
-                        : r.cost_micro_usd / 1000000,
+                    {r.output_tps != null && (
+                      <small title={tr("输出 Token 数 / 请求总耗时（秒）")}>
+                        {number(r.output_tps)} TPS
+                      </small>
                     )}
                   </td>
                   <td>
