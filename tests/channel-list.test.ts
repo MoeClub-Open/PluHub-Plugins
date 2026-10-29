@@ -26,32 +26,30 @@ const models: Record<string, ModelRoute> = {
   other: { upstream: "second", model: "another-model", enabled: false },
 };
 
-it("finds channel IDs, URLs and mapped model aliases while combining status and protocol filters", () => {
+it("finds channel IDs, URLs, protocols and mapped model aliases while filtering status", () => {
   expect(
     filterChannels(
       channels,
       models,
-      "PRIMARY private-model-id",
+      "PRIMARY private-model-id openai-chat",
       "enabled",
-      "openai-chat",
     ).map(([id]) => id),
   ).toEqual(["first"]);
   expect(
-    filterChannels(channels, models, "PUBLIC/CODING", "", "").map(([id]) => id),
+    filterChannels(channels, models, "PUBLIC/CODING", "").map(([id]) => id),
   ).toEqual(["first"]);
   expect(
     filterChannels(
       channels,
       models,
-      "second.example",
+      "second.example anthropic",
       "disabled",
-      "anthropic",
     ).map(([id]) => id),
   ).toEqual(["second"]);
   expect(
-    filterChannels(channels, models, "", "disabled", "openai-chat"),
+    filterChannels(channels, models, "openai-chat", "disabled"),
   ).toEqual([]);
-  expect(filterChannels(channels, models, "env:FIRST", "", "")).toEqual([]);
+  expect(filterChannels(channels, models, "env:FIRST", "")).toEqual([]);
 });
 
 it("updates exactly the explicit selection and rejects stale IDs before changing any channel", () => {

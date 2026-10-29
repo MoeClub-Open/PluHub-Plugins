@@ -3,7 +3,7 @@ import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
-import { Empty, Icon, Dialog } from "../../lib/ui/components.js";
+import { Empty, Icon, Dialog, ListPagination } from "../../lib/ui/components.js";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 import { filterChannels } from "../../lib/ai/channel-list.js";
@@ -62,7 +62,7 @@ export function ChannelTable({
   const [selection, setSelection] = React.useState<string[]>([]);
   const [confirmStop, setConfirmStop] = React.useState(false);
   const ids = Object.keys(upstreams);
-  const filtered = filterChannels(upstreams, models, query, status, "");
+  const filtered = filterChannels(upstreams, models, query, status);
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rows = filtered.slice(
@@ -96,27 +96,6 @@ export function ChannelTable({
   }
   return (
     <>
-      <div className="channel-summary">
-        <span>
-          <strong>{ids.length}</strong> {tr("全部渠道")}
-        </span>
-        <span>
-          <i className="status-dot" />
-          <strong>
-            {ids.filter((id) => upstreams[id]!.enabled !== false).length}
-          </strong>{" "}
-          {tr("已启用")}
-        </span>
-        <span>
-          <strong>
-            {ids.filter((id) => upstreams[id]!.enabled === false).length}
-          </strong>{" "}
-          {tr("已停用")}
-        </span>
-        <span>
-          <strong>{Object.keys(models).length}</strong> {tr("模型映射")}
-        </span>
-      </div>
       <div className="data-toolbar" role="search" aria-label={tr("筛选渠道")}>
         <label className="data-search">
           <Icon name="search" size={17} />
@@ -363,49 +342,13 @@ export function ChannelTable({
           </Empty>
         )}
       </div>
-      <div className="data-pagination">
-        <span>
-          {tr("共 {0} 个结果 {1}", {
-            "0": textValue(filtered.length),
-            "1": textValue(
-              filtered.length !== ids.length ? ` / ${ids.length} 个渠道` : "",
-            ),
-          })}
-        </span>
-        <div className="actions">
-          <label>
-            {tr("每页")}
-            <Select
-              aria-label={tr("每页渠道数")}
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-            >
-              {[10, 20, 50].map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <button
-            className="secondary"
-            disabled={currentPage <= 1}
-            onClick={() => setPage(currentPage - 1)}
-          >
-            {tr("上一页")}
-          </button>
-          <span>
-            {currentPage} / {totalPages}
-          </span>
-          <button
-            className="secondary"
-            disabled={currentPage >= totalPages}
-            onClick={() => setPage(currentPage + 1)}
-          >
-            {tr("下一页")}
-          </button>
-        </div>
-      </div>
+      <ListPagination
+        total={filtered.length}
+        page={currentPage}
+        size={pageSize}
+        setPage={setPage}
+        setSize={setPageSize}
+      />
       {confirmStop && (
         <Dialog
           title={tr("停用所选渠道")}

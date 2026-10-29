@@ -746,8 +746,6 @@ export const en: Record<string, string> = {
   删除: "Delete",
   没有匹配的渠道: "No matching channels",
   清除筛选: "Clear filters",
-  "共 {0} 个结果 {1}": "{0} results {1}",
-  每页渠道数: "Channels per page",
   停用所选渠道: "Disable selected channels",
   "将停用 {0} 个渠道，包括当前筛选之外的选择。依赖这些渠道的 {1} 个模型映射将无法通过这些渠道接收新请求。":
     "Disable {0} channels, including selections outside the current filter? Their {1} model mappings will stop accepting new requests through these channels.",

@@ -1519,11 +1519,6 @@ code {
 .settings-content > .page-heading {
   margin-bottom: var(--space-section);
 }
-/* Extensions with their own heading keep their actions and description together.
-   The host heading remains as a fallback for extensions without one. */
-.main main:has(> .settings-content .page-heading h1) > .page-heading {
-  display: none;
-}
 .plan-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));

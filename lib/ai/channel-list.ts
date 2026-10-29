@@ -7,21 +7,12 @@ export function filterChannels(
   models: Record<string, ModelRoute>,
   query: string,
   status: string,
-  protocol: string,
 ) {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   return Object.entries(upstreams)
     .filter(([id, channel]) => {
       if (status === "enabled" && channel.enabled === false) return false;
       if (status === "disabled" && channel.enabled !== false) return false;
-      if (
-        protocol &&
-        !channelConnections(channel)
-          .flatMap(connectionInterfaces)
-          .some((u) => u.protocol === protocol) &&
-        channel.protocol !== protocol
-      )
-        return false;
       const routes = Object.entries(models).filter(
         ([, model]) => model.upstream === id,
       );
