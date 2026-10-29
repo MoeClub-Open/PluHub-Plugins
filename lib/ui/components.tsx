@@ -261,7 +261,7 @@ export function Stat({
 }: {
   title: string;
   value: React.ReactNode;
-  note: string;
+  note?: string;
   icon: string;
 }) {
   return (
@@ -271,7 +271,7 @@ export function Stat({
         <Icon name={icon} />
       </div>
       <strong>{value}</strong>
-      <small>{note}</small>
+      {note && <small>{note}</small>}
     </article>
   );
 }

@@ -16,7 +16,7 @@ export function TokenStat({
       icon="models"
       note={note}
       value={
-        <span className="stat-token-values">
+        <span className="stat-pair-values">
           <span>
             <small>{tr("输入")}</small>
             {number(input)}
@@ -98,14 +98,6 @@ export function ConsumptionBreakdown({
                 </td>
                 <td className="numeric">
                   {money(row ? row.estimatedCostUSD : 0)}
-                  {row && row.pricedRequests < row.requests && (
-                    <small>
-                      {tr("已计价 {0}/{1} 笔", {
-                        "0": String(row.pricedRequests),
-                        "1": String(row.requests),
-                      })}
-                    </small>
-                  )}
                 </td>
               </tr>
             );

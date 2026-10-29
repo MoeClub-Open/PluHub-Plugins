@@ -434,14 +434,14 @@ p {
   color: var(--muted);
   line-height: 1.45;
 }
-.stat-token-values {
+.stat-pair-values {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   font-size: clamp(16px, 1.65vw, 24px);
   letter-spacing: -0.3px;
 }
-.stat-token-values small {
+.stat-pair-values small {
   display: block;
   margin-bottom: 3px;
   color: var(--muted);

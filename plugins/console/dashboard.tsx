@@ -137,7 +137,7 @@ export function Dashboard({
                   "0": textValue(d.successes),
                   "1": textValue(d.errors),
                   "2": textValue(d.cancelled),
-                }) + " · " + tr("外部请求及父记录缺失的内部调用")
+                })
               : tr("等待调用数据")
           }
           icon="activity"
@@ -145,38 +145,31 @@ export function Dashboard({
         <TokenStat
           input={d?.inputTokens}
           output={d?.outputTokens}
-          note={
-            d
-              ? tr("{0}/{1} 次模型调用返回用量", {
-                  "0": textValue(d.usageKnownRequests),
-                  "1": textValue(d.usageTotalRequests),
-                }) + " · " + tr("含流程内部调用")
-              : ""
-          }
         />
         <Stat
-          title={tr("平均首 Token 延迟")}
-          value={latency(d?.avgFirstTokenMs)}
-          note={
-            d
-              ? tr("成功流式请求 · 平均完成耗时 {0}", {
-                  "0": textValue(latency(d.avgLatencyMs)),
-                })
-              : tr("文本或工具首次输出")
+          title={tr("耗时")}
+          value={
+            <span className="stat-pair-values" title={tr("平均耗时")}>
+              <span>
+                <small>{tr("首字")}</small>
+                {latency(d?.avgFirstTokenMs)}
+              </span>
+              <span>
+                <small>{tr("总用时")}</small>
+                {latency(d?.avgLatencyMs)}
+              </span>
+            </span>
           }
           icon="clock"
         />
         <Stat
-          title={tr("余额扣费")}
+          title={tr("消耗金额")}
           value={money(d?.wallet.chargedUSD)}
           note={walletNote(d?.wallet)}
           icon="money"
         />
       </div>
       <ConsumptionBreakdown value={d?.consumption} />
-      {d?.consumption && (
-        <p className="field-note">{tr("消耗分类按实际调用统计，包含流程内部调用。")}</p>
-      )}
       <div className="dashboard-grid">
         <section className="panel chart-panel">
           <div className="panel-heading">

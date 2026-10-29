@@ -1,5 +1,9 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  消耗金额: "Usage cost",
+  首字: "First token",
+  总用时: "Total time",
+  平均耗时: "Average duration",
   跟随浏览器: "Browser language",
   内容语言: "Content language",
   "按预扣金额结算，未将估算用量记为实际用量。": "Settled at the reserved amount; estimated usage is not reported as actual usage.",

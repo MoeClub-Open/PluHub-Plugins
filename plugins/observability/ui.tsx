@@ -367,16 +367,13 @@ function Page({ host }: { host: UIHost }) {
           note={tr("含流程内部调用")}
         />
         <Stat
-          title={tr("余额扣费")}
+          title={tr("消耗金额")}
           value={money(stats.data?.wallet.chargedUSD)}
           note={walletNote(stats.data?.wallet)}
           icon="money"
         />
       </div>
       <ConsumptionBreakdown value={stats.data?.consumption} />
-      {stats.data?.consumption && (
-        <p className="field-note">{tr("消耗分类按实际调用统计，包含流程内部调用。")}</p>
-      )}
       <form
         className="list-toolbar runtime-log-filters"
         onSubmit={(e) => {
