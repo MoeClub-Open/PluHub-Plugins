@@ -7,7 +7,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
-    uses: MoeClub-Open/PluHub/.github/workflows/verify.yml@67b5df29a473e1a3aefa0bd7d49431af9eb6bf3d
+    uses: MoeClub-Open/PluHub/.github/workflows/verify.yml@cdf4d83bb2513f866e148e726eb38a96a20aafcc
     with:
-      host_ref: 67b5df29a473e1a3aefa0bd7d49431af9eb6bf3d
+      host_ref: cdf4d83bb2513f866e148e726eb38a96a20aafcc
       plugins_ref: ${{ github.sha }}
