@@ -448,7 +448,7 @@ it("maps thinking settings across protocols and rejects lossy conversions", () =
 async function* source(events: AIEvent[]) {
   yield* events;
 }
-it("paces actual tokenizer counts, preserves Unicode and tool payloads and accounts hidden usage", async () => {
+it("paces delivered tokenizer counts and preserves provider usage without delaying completion", async () => {
   const encoding = getEncoding("o200k_base");
   const count = (s: string) => encoding.encode(s, [], []).length;
   let time = 0;
@@ -494,8 +494,56 @@ it("paces actual tokenizer counts, preserves Unicode and tool payloads and accou
   expect(
     output.filter((e) => e.type === "tool" && e.name).map((e) => e.name),
   ).toEqual(["get_weather"]);
-  expect(time).toBe(10000);
+  expect(time).toBe(
+    (count("Hello 世界🙂") + count("get_weather") + count('{"city":"北京"}')) * 100,
+  );
+  expect(output.slice(-2)).toEqual(events.slice(-2));
   expect(count("Hello 世界🙂")).not.toBe(Array.from("Hello 世界🙂").length);
+});
+it("completes a Chat tool turn at 4.9 TPS without waiting for hidden reasoning usage", async () => {
+  let time = 0;
+  const pacer = new TokenPacer(
+    () => 4.9,
+    () => time,
+    async (ms) => {
+      time += ms;
+    },
+  );
+  const events: AIEvent[] = [
+    {
+      type: "tool",
+      index: 0,
+      id: "call_1",
+      name: "run",
+      arguments: "{}",
+      done: true,
+    },
+    { type: "usage", usage: { input: 49025, output: 1129, reasoning: 1125 } },
+    { type: "finish", reason: "tool_calls" },
+  ];
+  const stream = encodeStream(
+    "openai-chat",
+    paceEvents(
+      source(events),
+      (s) => s.length,
+      (cost) => pacer.take(cost, signal()),
+      signal(),
+    ),
+    "gpt-6-luna",
+    signal(),
+  );
+  const body = await new Response(stream).text();
+  expect(body).toContain('"finish_reason":"tool_calls"');
+  expect(body).toContain('"reasoning_tokens":1125');
+  expect(body).toContain("data: [DONE]");
+  expect(time).toBeCloseTo((5 * 1000) / 4.9);
+  const decoded: AIEvent[] = [];
+  for await (const event of upstreamEvents("openai-chat", new Response(body).body!))
+    decoded.push(event);
+  expect(decoded).toContainEqual(
+    expect.objectContaining({ type: "tool", name: "run" }),
+  );
+  expect(decoded.at(-1)).toMatchObject({ type: "finish", reason: "tool_calls" });
 });
 it.each(["anthropic", "openai-responses"] as const)(
   "keeps complete tool names in paced %s start frames",

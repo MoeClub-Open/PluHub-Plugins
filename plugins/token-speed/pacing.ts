@@ -86,8 +86,6 @@ export async function* paceEvents(
 ): AsyncGenerator<AIEvent> {
   const prefixes = new Map<string, { text: string; high: number }>();
   let tracked = 0;
-  let charged = 0;
-  let knownOutput: number | undefined;
   async function* fragments(
     key: string,
     value: string,
@@ -132,7 +130,6 @@ export async function* paceEvents(
       const cost = Math.max(0, n - state.high);
       await take(cost);
       signal.throwIfAborted();
-      charged += cost;
       tracked += text.length;
       state.text += text;
       state.high = Math.max(state.high, n);
@@ -200,21 +197,7 @@ export async function* paceEvents(
             : {}),
         };
     } else {
-      if (
-        event.type === "usage" &&
-        Number.isSafeInteger(event.usage.output) &&
-        event.usage.output >= 0
-      )
-        knownOutput = Math.max(knownOutput ?? 0, event.usage.output);
-      // Reconcile hidden reasoning/output tokens before making the terminal event visible.
-      if (
-        event.type === "finish" &&
-        knownOutput !== undefined &&
-        knownOutput > charged
-      ) {
-        await take(knownOutput - charged);
-        charged = knownOutput;
-      }
+      // Provider usage includes hidden work; delaying completion blocks tool turns.
       yield event;
     }
   }
