@@ -66,7 +66,7 @@ export function Portal({
         </a>
         <nav aria-label={tr("门户导航")}>
           {children && content.enabled && <a href="#/">{tr("首页")}</a>}
-          {modelCatalog && (
+          {modelCatalog && (path !== "/" || content.primaryUrl !== "#/models") && (
             <a
               href="#/models"
               aria-current={path === "/models" ? "page" : undefined}
