@@ -96,7 +96,7 @@ export function createWorkflowTemplate(
     return {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "branch" },
+        { id: "start", type: "start", next: ["branch"] },
         decision,
         { id: "compare", type: "compare", valueType: "string", operator: "matches", left: "", right: ["*complex*"] },
         { id: "branch", type: "branch", condition: false, yes: "complex", no: "simple" },
@@ -124,7 +124,7 @@ export function createWorkflowTemplate(
     return {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "response" },
+        { id: "start", type: "start", next: ["response"] },
         { id: "first", type: "llm", model: model("primary"), promptMode: "append" },
         ...(discussion ? [{ id: "second", type: "llm", model: model("secondary"), promptMode: "append" }] : []),
         {
@@ -158,7 +158,7 @@ export function createWorkflowTemplate(
   return {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "pace" },
+      { id: "start", type: "start", next: ["pace"] },
       { id: "pace", type: "tps", rate: 30, tokenizer: "o200k_base", next: "response" },
       { id: "answer", type: "llm", model: model("primary"), system: "请准确、有条理地回答用户的问题。", promptMode: "append" },
       { id: "replace", type: "replace", text: "", find: options.find ?? "", replacement: options.replacement ?? "", all: true },

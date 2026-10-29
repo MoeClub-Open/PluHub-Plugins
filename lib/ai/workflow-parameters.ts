@@ -201,8 +201,8 @@ export function workflowDataOutputs(node: WorkflowNode): WorkflowParameter[] {
       param("stream", "boolean", "流式请求", false),
       param("hasTools", "boolean", "包含工具", false),
       param("textLength", "integer", "任务字符数", false),
-      param("text", "string", "最近用户消息", false),
-      param("messages", "object", "完整消息", false),
+      param("text", "string", "最后一条用户文本", false),
+      param("messages", "object", "会话消息", false),
     ];
   return [];
 }

@@ -6,6 +6,7 @@ import type {
   WorkflowResult,
 } from "@pluhub/contracts/workflow";
 import { requireIngressProtocol } from "./workflow-protocol.js";
+import { workflowEntryCandidates } from "./workflow-entry.js";
 
 export type WorkflowPathResult = WorkflowResult & { responseText?: string };
 type Step =
@@ -18,7 +19,14 @@ export function* traverseWorkflow(
   flow: ChannelWorkflow,
   request: AIRequest,
   signal: AbortSignal,
-  context: { ingressProtocol?: Protocol } = {},
+  context: {
+    ingressProtocol?: Protocol;
+    requestedModel?: string;
+    mappedModel?: string;
+    personal?: boolean;
+    personalInterfaces?: import("@pluhub/contracts/ai").UpstreamInterface[];
+    chooseEntry?: (candidates: readonly string[]) => string;
+  } = {},
 ): Generator<Step, WorkflowPathResult, WorkflowNode | undefined> {
   if (
     flow.nodes.some((node) => node.type === "response") &&
@@ -62,6 +70,16 @@ export function* traverseWorkflow(
       outputPolicies,
       protocolPolicy,
     };
+    if (node.type === "start") {
+      const candidates =
+        node.next.length > 1
+          ? workflowEntryCandidates(flow, request, context)
+          : node.next;
+      if (!candidates.length)
+        throw new HostError("model_not_found", "已连接的上游未提供该模型", 404);
+      id = context.chooseEntry?.(candidates) ?? candidates[0]!;
+      continue;
+    }
     if (
       request.operation &&
       [

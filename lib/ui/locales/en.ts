@@ -1,5 +1,9 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  "完整请求": "Complete request",
+  "已连接的上游未提供该模型": "The connected providers do not offer this model",
+  "请求入口需要有效且不重复的请求连线": "The request entry needs valid, unique request connections",
+
   "展示模型用量、平台价格和用户用量排行。": "Shows model usage, platform pricing and user usage rankings.",
   "API 接入示意": "API routing overview",
   "已复制模型 ID": "Model ID copied",
@@ -545,7 +549,8 @@ export const en: Record<string, string> = {
   答案: "Answers",
   选项: "Choice",
   置信度: "Confidence",
-  最近用户消息: "Latest user message",
+  最后一条用户文本: "Last user message text",
+  会话消息: "Conversation messages",
   完整消息: "All messages",
   附件: "Assets",
   "答案 ID": "Answer ID",

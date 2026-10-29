@@ -12,7 +12,7 @@ import { canBindWorkflowPorts } from "../lib/ai/workflow-parameters.js";
 const flow: ChannelWorkflow = {
   entry: "start",
   nodes: [
-    { id: "start", type: "start", next: "prompt" },
+    { id: "start", type: "start", next: ["prompt"] },
     { id: "prompt", type: "prompt", text: "policy", next: "call" },
     { id: "call", type: "provider" },
   ],
@@ -24,7 +24,7 @@ const flow: ChannelWorkflow = {
 };
 
 it("connects task length to a numeric comparison and branches on its boolean output", () => {
-  const start = { id: "start", type: "start", next: "branch" } as const;
+  const start = { id: "start", type: "start", next: ["branch"] } as const;
   const compare = comparisonInputNode(
     {
       id: "compare",
@@ -114,7 +114,7 @@ it("copies a subgraph with only internal edges and never attaches it to the old 
 it("deletes a selection without bypassing removed policy nodes or removing the entry", () => {
   const next = removeFlowNodes(flow, ["start", "prompt"]);
   expect(next.nodes).toEqual([
-    { id: "start", type: "start", next: "" },
+    { id: "start", type: "start", next: [] },
     { id: "call", type: "provider" },
   ]);
   expect(next.layout?.prompt).toBeUndefined();

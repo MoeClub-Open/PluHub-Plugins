@@ -7,7 +7,7 @@ import { HostError } from "@pluhub/sdk";
 export const defaultChannelFlow = (): ChannelWorkflow => ({
   entry: "start",
   nodes: [
-    { id: "start", type: "start", next: "provider" },
+    { id: "start", type: "start", next: ["provider"] },
     { id: "provider", type: "provider" },
   ],
 });

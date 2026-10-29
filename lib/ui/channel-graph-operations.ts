@@ -59,16 +59,70 @@ export type WorkflowPort = "next" | "yes" | "no" | "fallback";
 export const workflowOutputs = (
   node: WorkflowNode,
 ): { field: WorkflowPort; target: string }[] =>
-  node.type === "provider"
-    ? [{ field: "fallback", target: node.fallback ?? "" }]
-    : node.type === "branch"
-      ? [
-          { field: "yes", target: node.yes },
-          { field: "no", target: node.no },
-        ]
-      : "next" in node
-        ? [{ field: "next", target: node.next }]
-        : [];
+  node.type === "start"
+    ? (node.next.length ? node.next : [""]).map((target) => ({
+        field: "next",
+        target,
+      }))
+    : node.type === "provider"
+      ? [{ field: "fallback", target: node.fallback ?? "" }]
+      : node.type === "branch"
+        ? [
+            { field: "yes", target: node.yes },
+            { field: "no", target: node.no },
+          ]
+        : "next" in node
+          ? [{ field: "next", target: node.next }]
+          : [];
+
+/** Change one edge without replacing other connections from the same entry port. */
+export function changeWorkflowConnection(
+  node: WorkflowNode,
+  field: WorkflowPort,
+  previous?: string,
+  target?: string,
+): WorkflowNode {
+  if (node.type === "start" && field === "next") {
+    const next = node.next.filter((id) => id !== previous);
+    if (target && !next.includes(target)) next.push(target);
+    return { ...node, next };
+  }
+  return {
+    ...node,
+    [field]: target ?? (field === "fallback" ? undefined : ""),
+  } as WorkflowNode;
+}
+
+function mapWorkflowConnections(
+  node: WorkflowNode,
+  map: (target: string) => string | undefined,
+): WorkflowNode {
+  if (node.type === "start")
+    return {
+      ...node,
+      next: node.next.flatMap((id) => {
+        const target = map(id);
+        return target ? [target] : [];
+      }),
+    };
+  return {
+    ...node,
+    ...Object.fromEntries(
+      workflowOutputs(node).flatMap((edge) => {
+        if (!edge.target) return [];
+        const target = map(edge.target);
+        return target === edge.target
+          ? []
+          : [
+              [
+                edge.field,
+                target ?? (edge.field === "fallback" ? undefined : ""),
+              ],
+            ];
+      }),
+    ),
+  } as WorkflowNode;
+}
 
 export function workflowNodePositions(
   flow: ChannelWorkflow,
@@ -110,17 +164,11 @@ export function removeFlowNodes(
     ),
     nodes: flow.nodes
       .filter((node) => !removed.has(node.id))
-      .map((node) => ({
-        ...node,
-        ...Object.fromEntries(
-          workflowOutputs(node)
-            .filter((port) => removed.has(port.target))
-            .map((port) => [
-              port.field,
-              port.field === "fallback" ? undefined : "",
-            ]),
+      .map((node) =>
+        mapWorkflowConnections(node, (target) =>
+          removed.has(target) ? undefined : target,
         ),
-      })) as WorkflowNode[],
+      ),
   };
 }
 
@@ -136,19 +184,10 @@ export function copyFlowSelection(
     ),
     nodes: structuredClone(
       flow.nodes.filter((node) => selected.has(node.id)),
-    ).map(
-      (node) =>
-        ({
-          ...node,
-          ...Object.fromEntries(
-            workflowOutputs(node)
-              .filter((port) => !selected.has(port.target))
-              .map((port) => [
-                port.field,
-                port.field === "fallback" ? undefined : "",
-              ]),
-          ),
-        }) as WorkflowNode,
+    ).map((node) =>
+      mapWorkflowConnections(node, (target) =>
+        selected.has(target) ? target : undefined,
+      ),
     ),
     layout: Object.fromEntries(
       [...positions].filter(([id]) => selected.has(id)),
@@ -199,15 +238,8 @@ export function pasteFlowSelection(
         ...structuredClone(selection.nodes).map(
           (node) =>
             ({
-              ...node,
+              ...mapWorkflowConnections(node, (target) => ids.get(target)),
               id: ids.get(node.id)!,
-              ...Object.fromEntries(
-                workflowOutputs(node).map((port) => [
-                  port.field,
-                  ids.get(port.target) ??
-                    (port.field === "fallback" ? undefined : ""),
-                ]),
-              ),
             }) as WorkflowNode,
         ),
       ],

@@ -27,6 +27,9 @@ export async function runWorkflowPath(
     ingressProtocol?: Protocol;
     requestedModel?: string;
     mappedModel?: string;
+    personal?: boolean;
+    personalInterfaces?: import("@pluhub/contracts/ai").UpstreamInterface[];
+    chooseEntry?: (candidates: readonly string[]) => string;
   } = {},
   onLimit?: (
     policy: NonNullable<WorkflowResult["requestLimits"]>[number],

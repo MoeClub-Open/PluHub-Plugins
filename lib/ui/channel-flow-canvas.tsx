@@ -34,6 +34,8 @@ import {
   workflowNodePositions,
   removeFlowNodes,
   comparisonInputNode,
+  changeWorkflowConnection,
+  type WorkflowPort,
 } from "./channel-graph-operations.js";
 import { isFlowTextInput, useFlowClipboard } from "./use-flow-clipboard.js";
 import {
@@ -167,10 +169,12 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
     (port) => port.field !== "fallback" || context.personal,
   );
   const namedOutputs = executionOutputs.filter((port) => port.field !== "next");
-  const visibleInputs = parameters.filter((p) =>
-    ["compare", "logic", "branch"].includes(node.type) || context.bindings.some(
-      (edge) => edge.target === id && edge.input === p.path,
-    ),
+  const visibleInputs = parameters.filter(
+    (p) =>
+      ["compare", "logic", "branch"].includes(node.type) ||
+      context.bindings.some(
+        (edge) => edge.target === id && edge.input === p.path,
+      ),
   );
   const hiddenInputs = visibleInputs.filter(
     (p) => !expanded || (visibleFields && !visibleFields.has(p.path)),
@@ -246,10 +250,23 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
         }
       >
         {![
-          "start", "value", "compare", "logic", "text",
-          "template", "replace", "format", "llm", "jev",
+          "start",
+          "value",
+          "compare",
+          "logic",
+          "text",
+          "template",
+          "replace",
+          "format",
+          "llm",
+          "jev",
         ].includes(node.type) && (
-          <Handle type="target" position={Position.Left} id="in" />
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="in"
+            title={tr("完整请求")}
+          />
         )}
         <div
           className="flow-node-header"
@@ -300,7 +317,13 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
             {namedOutputs.map((port) => (
               <div className="flow-execution-port" key={port.field}>
                 <span>
-                  {tr(port.field === "fallback" ? "失败后" : port.field === "yes" ? "是" : "否")}
+                  {tr(
+                    port.field === "fallback"
+                      ? "失败后"
+                      : port.field === "yes"
+                        ? "是"
+                        : "否",
+                  )}
                 </span>
                 <Handle
                   type="source"
@@ -373,17 +396,20 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
             ))}
           </div>
         )}
-        {executionOutputs
-          .filter((port) => port.field === "next")
-          .map((port) => (
+        {executionOutputs.some((port) => port.field === "next") && (
+          <>
+            {node.type === "start" && (
+              <span className="flow-request-output">{tr("请求")}</span>
+            )}
             <Handle
-              key={port.field}
               type="source"
               position={Position.Right}
-              id={port.field}
+              id="next"
+              title={tr("完整请求")}
               style={{ top: 34 }}
             />
-          ))}
+          </>
+        )}
       </div>
     </FlowParameterContext.Provider>
   );
@@ -426,10 +452,17 @@ function summary(node: WorkflowNode, channel?: Upstream) {
     case "branch":
       return tr("条件输入");
     case "compare":
-      return tr({
-        eq: "等于", ne: "不等于", gt: "大于", gte: "大于或等于",
-        lt: "小于", lte: "小于或等于", matches: "匹配",
-      }[node.operator]);
+      return tr(
+        {
+          eq: "等于",
+          ne: "不等于",
+          gt: "大于",
+          gte: "大于或等于",
+          lt: "小于",
+          lte: "小于或等于",
+          matches: "匹配",
+        }[node.operator],
+      );
     case "logic":
       return tr({ and: "且", or: "或", not: "非" }[node.operator]);
     default:
@@ -441,7 +474,7 @@ function graphEdges(flow: ChannelWorkflow): Edge[] {
     outputs(node)
       .filter((port) => flow.nodes.some((item) => item.id === port.target))
       .map((port) => ({
-        id: node.id + ":" + port.field,
+        id: node.id + ":" + port.field + ":" + port.target,
         source: node.id,
         target: port.target,
         sourceHandle: port.field,
@@ -521,15 +554,22 @@ function Canvas(props: CanvasProps) {
     () =>
       new Set(
         flow.nodes
-          .filter((n) => ["provider", "compare", "logic", "branch"].includes(n.type))
+          .filter((n) =>
+            ["provider", "compare", "logic", "branch"].includes(n.type),
+          )
           .map((n) => n.id),
       ),
   );
-  const knownNodes = React.useRef(new Set(flow.nodes.map(node => node.id)));
+  const knownNodes = React.useRef(new Set(flow.nodes.map((node) => node.id)));
   React.useEffect(() => {
-    const added = flow.nodes.filter(node => node.type !== "start" && !knownNodes.current.has(node.id));
-    knownNodes.current = new Set(flow.nodes.map(node => node.id));
-    if (added.length) setExpanded(previous => new Set([...previous, ...added.map(node => node.id)]));
+    const added = flow.nodes.filter(
+      (node) => node.type !== "start" && !knownNodes.current.has(node.id),
+    );
+    knownNodes.current = new Set(flow.nodes.map((node) => node.id));
+    if (added.length)
+      setExpanded(
+        (previous) => new Set([...previous, ...added.map((node) => node.id)]),
+      );
   }, [flow.nodes]);
   React.useEffect(() => {
     if (initialized && !fitted.current) {
@@ -592,12 +632,20 @@ function Canvas(props: CanvasProps) {
       update({
         ...flow,
         layout: Object.fromEntries(positions),
-        nodes: flow.nodes.map(node => node.id === connection.target
-          ? comparisonInputNode(node,
-              workflowDataOutputs(flow.nodes.find(item => item.id === connection.source)!)
-                .find(port => port.path === connection.sourceHandle!.slice(5))?.type,
-              connection.targetHandle!.slice(6), bindings)
-          : node),
+        nodes: flow.nodes.map((node) =>
+          node.id === connection.target
+            ? comparisonInputNode(
+                node,
+                workflowDataOutputs(
+                  flow.nodes.find((item) => item.id === connection.source)!,
+                ).find(
+                  (port) => port.path === connection.sourceHandle!.slice(5),
+                )?.type,
+                connection.targetHandle!.slice(6),
+                bindings,
+              )
+            : node,
+        ),
         bindings: [
           ...bindings,
           {
@@ -616,16 +664,18 @@ function Canvas(props: CanvasProps) {
       nodes: flow.nodes.map((node) => {
         let next = node;
         if (old?.source === next.id)
-          next = {
-            ...next,
-            [old.sourceHandle!]:
-              old.sourceHandle === "fallback" ? undefined : "",
-          } as WorkflowNode;
+          next = changeWorkflowConnection(
+            next,
+            old.sourceHandle as WorkflowPort,
+            old.target,
+          );
         if (connection.source === next.id)
-          next = {
-            ...next,
-            [connection.sourceHandle!]: connection.target,
-          } as WorkflowNode;
+          next = changeWorkflowConnection(
+            next,
+            connection.sourceHandle as WorkflowPort,
+            undefined,
+            connection.target,
+          );
         return next;
       }),
     });
@@ -662,9 +712,12 @@ function Canvas(props: CanvasProps) {
           edge.target !== reconnecting.current.target ||
           edge.input !== reconnecting.current.targetHandle?.slice(6),
       );
-      const candidate = comparisonInputNode(target,
-        workflowDataOutputs(source).find(port => port.path === output)?.type,
-        input, other);
+      const candidate = comparisonInputNode(
+        target,
+        workflowDataOutputs(source).find((port) => port.path === output)?.type,
+        input,
+        other,
+      );
       if (
         !canBindWorkflowPorts(
           source,
@@ -707,8 +760,7 @@ function Canvas(props: CanvasProps) {
           node?.type === "jev" ||
           bindings.some(
             (edge) =>
-              edge.target === id &&
-              requestDerived(edge.source, new Set(seen)),
+              edge.target === id && requestDerived(edge.source, new Set(seen)),
           )
         );
       };
@@ -741,11 +793,18 @@ function Canvas(props: CanvasProps) {
       return false;
     // Replacing an occupied outlet is explicit: reconnect or remove its existing edge.
     if (
+      source.type !== "start" &&
       port.target &&
       !(
         reconnecting.current?.source === connection.source &&
         reconnecting.current.sourceHandle === connection.sourceHandle
       )
+    )
+      return false;
+    if (
+      source.type === "start" &&
+      source.next.includes(connection.target) &&
+      !(reconnecting.current?.source === source.id && reconnecting.current.target === connection.target)
     )
       return false;
     const seen = new Set<string>();
@@ -915,19 +974,21 @@ function Canvas(props: CanvasProps) {
                   ),
               ),
               nodes: next.nodes.map((node) => {
-                const patch = Object.fromEntries(
-                  disconnected
-                    .filter(
-                      (edge) =>
-                        edge.source === node.id &&
-                        !edge.sourceHandle?.startsWith("data:"),
-                    )
-                    .map((edge) => [
-                      edge.sourceHandle!,
-                      edge.sourceHandle === "fallback" ? undefined : "",
-                    ]),
-                );
-                return { ...node, ...patch } as WorkflowNode;
+                return disconnected
+                  .filter(
+                    (edge) =>
+                      edge.source === node.id &&
+                      !edge.sourceHandle?.startsWith("data:"),
+                  )
+                  .reduce(
+                    (result, edge) =>
+                      changeWorkflowConnection(
+                        result,
+                        edge.sourceHandle as WorkflowPort,
+                        edge.target,
+                      ),
+                    node,
+                  );
               }),
             });
             select(flow.entry);

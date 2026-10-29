@@ -15,7 +15,7 @@ it("fans out a typed value into real limit and budget parameters without changin
   const flow: ChannelWorkflow = {
     entry: "s",
     nodes: [
-      { id: "s", type: "start", next: "rate" },
+      { id: "s", type: "start", next: ["rate"] },
       { id: "rate", type: "rateLimit", rule: { rpm: 60 }, next: "budget" },
       { id: "budget", type: "maxTokens", limit: 1024, next: "call" },
       { id: "call", type: "provider" },
@@ -40,7 +40,7 @@ it("rejects incompatible types, duplicate inputs, cycles and request-derived sen
   const flow: ChannelWorkflow = {
     entry: "s",
     nodes: [
-      { id: "s", type: "start", next: "budget" },
+      { id: "s", type: "start", next: ["budget"] },
       { id: "budget", type: "maxTokens", limit: 1024, next: "call" },
       { id: "call", type: "provider" },
       { id: "a", type: "value", valueType: "integer", value: 10 },
@@ -92,7 +92,7 @@ it("uses resolved personal interfaces and fallback group while retaining the own
   const flow: ChannelWorkflow = {
     entry: "s",
     nodes: [
-      { id: "s", type: "start", next: "call" },
+      { id: "s", type: "start", next: ["call"] },
       { id: "call", type: "provider", fallback: "backup" },
       { id: "backup", type: "platform", groupId: "old" },
       { id: "path", type: "value", valueType: "string", value: "/v1/selected" },

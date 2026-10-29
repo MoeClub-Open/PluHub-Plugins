@@ -12,7 +12,7 @@ const request = {
 const flow: ChannelWorkflow = {
   entry: "start",
   nodes: [
-    { id: "start", type: "start", next: "condition" },
+    { id: "start", type: "start", next: ["condition"] },
     {
       id: "condition",
       type: "branch",
@@ -88,7 +88,7 @@ it("rejects graph cycles, missing edges, unreachable and duplicate nodes", () =>
     compileWorkflow({
       ...flow,
       nodes: flow.nodes.map((n) =>
-        n.id === "start" ? { id: "start", type: "start", next: "start" } : n,
+        n.id === "start" ? { id: "start", type: "start", next: ["start"] } : n,
       ),
     }),
   ).toThrow(/循环/);
@@ -117,7 +117,7 @@ it("branches by requested or mapped model ID with exact and wildcard rules", () 
   const flow: ChannelWorkflow = {
     entry: "s",
     nodes: [
-      { id: "s", type: "start", next: "c" },
+      { id: "s", type: "start", next: ["c"] },
       { id: "c", type: "branch", condition: false, yes: "match", no: "other" },
       {
         id: "c-predicate",
@@ -188,7 +188,7 @@ it("validates protocol gates and maps subscription providers to their wire proto
       compileWorkflow({
         entry: "s",
         nodes: [
-          { id: "s", type: "start", next: "gate" },
+          { id: "s", type: "start", next: ["gate"] },
           {
             id: "gate",
             type: "protocol",

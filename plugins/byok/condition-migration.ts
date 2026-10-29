@@ -3,7 +3,7 @@ import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
 import { transaction } from "../../lib/storage/sqlite.js";
 
-/** Persist the condition split without changing unrelated personal channel settings. */
+/** Persist graph migrations without changing unrelated personal channel settings. */
 export function migratePersonalConditions(db: DatabaseSync) {
   transaction(db, () => {
     const rows = db.prepare("SELECT id,settings_json FROM personal_channels").all() as {

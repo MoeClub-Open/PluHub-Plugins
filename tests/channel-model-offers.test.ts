@@ -15,7 +15,7 @@ it("does not inherit another provider's offered models when assigning a target",
         flow: {
           entry: "start",
           nodes: [
-            { id: "start", type: "start", next: "agy" },
+            { id: "start", type: "start", next: ["agy"] },
             {
               id: "agy",
               type: "provider",
@@ -45,7 +45,7 @@ it("checks changed subscription targets against that node's catalog only", async
         flow: {
           entry: "start",
           nodes: [
-            { id: "start", type: "start", next: "agy" },
+            { id: "start", type: "start", next: ["agy"] },
             {
               id: "agy",
               type: "provider",
@@ -95,7 +95,7 @@ it("keeps same-name model directories scoped to the selected provider node", asy
         flow: {
           entry: "start",
           nodes: [
-            { id: "start", type: "start", next: "a" },
+            { id: "start", type: "start", next: ["a"] },
             ...["a", "b"].map((id) => ({
               id,
               type: "provider",
@@ -136,7 +136,7 @@ it("routes a provided model through each node's mapping while retaining its exte
         flow: {
           entry: "start",
           nodes: [
-            { id: "start", type: "start", next: "branch" },
+            { id: "start", type: "start", next: ["branch"] },
             {
               id: "has-tools",
               type: "compare",

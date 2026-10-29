@@ -91,7 +91,7 @@ it("fails closed for disabled, missing, restricted groups and out-of-group chann
   c.upstreams.a.flow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "jump" },
+      { id: "start", type: "start", next: ["jump"] },
       { id: "jump", type: "upstream", target: "other", mode: "implicit" },
     ],
   };

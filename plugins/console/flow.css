@@ -251,3 +251,12 @@
   .react-flow__edge-path {
   stroke-width: 4px !important;
 }
+
+.flow-request-output {
+  position: absolute;
+  top: 27px;
+  right: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+}

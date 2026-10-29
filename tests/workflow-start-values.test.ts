@@ -20,7 +20,7 @@ describe("workflow request data", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "prompt" },
+        { id: "start", type: "start", next: ["prompt"] },
         { id: "prompt", type: "prompt", text: "default", next: "provider" },
         { id: "provider", type: "provider" },
       ],
@@ -34,7 +34,7 @@ describe("workflow request data", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "provider" },
+        { id: "start", type: "start", next: ["provider"] },
         { id: "provider", type: "provider" },
         { id: "model", type: "llm", model: "example", promptMode: "append" },
       ],

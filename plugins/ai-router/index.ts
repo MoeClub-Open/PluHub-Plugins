@@ -457,7 +457,7 @@ export default definePlugin({
           upstream.flow ?? {
             entry: "start",
             nodes: [
-              { id: "start", type: "start" as const, next: "provider" },
+              { id: "start", type: "start" as const, next: ["provider"] },
               { id: "provider", type: "provider" as const },
             ],
           };

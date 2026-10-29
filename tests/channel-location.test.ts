@@ -7,7 +7,7 @@ const channels: Record<string, Upstream> = {
     flow: {
       entry: "s",
       nodes: [
-        { id: "s", type: "start", next: "p" },
+        { id: "s", type: "start", next: ["p"] },
         { id: "p", type: "provider" },
       ],
     },
@@ -16,7 +16,7 @@ const channels: Record<string, Upstream> = {
     flow: {
       entry: "s",
       nodes: [
-        { id: "s", type: "start", next: "r" },
+        { id: "s", type: "start", next: ["r"] },
         { id: "r", type: "routing", profile: "balanced" },
       ],
     },

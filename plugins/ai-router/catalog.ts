@@ -25,9 +25,11 @@ export interface CatalogScope {
   routeKind?: "chat" | "systemone" | "luna" | "jev";
 }
 
-function supportsKind(channel: Upstream, kind: NonNullable<CatalogScope["routeKind"]>) {
-  if (!channel.flow)
-    return kind === routeKindForProtocol(channel.protocol);
+function supportsKind(
+  channel: Upstream,
+  kind: NonNullable<CatalogScope["routeKind"]>,
+) {
+  if (!channel.flow) return kind === routeKindForProtocol(channel.protocol);
   const flow = channel.flow;
   const nodes = new Map(flow.nodes.map((node) => [node.id, node]));
   const seen = new Set<string>();
@@ -37,16 +39,29 @@ function supportsKind(channel: Upstream, kind: NonNullable<CatalogScope["routeKi
     const node = nodes.get(id);
     if (!node) return false;
     if (node.type === "provider") {
-      if (flow.bindings?.some((binding) => binding.target === id && binding.input === "upstream.protocol")) return true;
+      if (
+        flow.bindings?.some(
+          (binding) =>
+            binding.target === id && binding.input === "upstream.protocol",
+        )
+      )
+        return true;
       const protocol = node.upstream?.protocol ?? channel.protocol;
-      return (kind === routeKindForProtocol(protocol)) ||
-        (!!node.fallback && visit(node.fallback));
+      return (
+        kind === routeKindForProtocol(protocol) ||
+        (!!node.fallback && visit(node.fallback))
+      );
     }
     if (node.type === "response") return kind === "chat";
     // Delegated targets are resolved and checked after selection.
-    if (node.type === "upstream" || node.type === "routing" || node.type === "platform") return true;
-    if (node.type === "branch")
-      return visit(node.yes) || visit(node.no);
+    if (
+      node.type === "upstream" ||
+      node.type === "routing" ||
+      node.type === "platform"
+    )
+      return true;
+    if (node.type === "branch") return visit(node.yes) || visit(node.no);
+    if (node.type === "start") return node.next.some(visit);
     return "next" in node ? visit(node.next) : false;
   }
   return visit(flow.entry);
@@ -116,17 +131,28 @@ export async function readCatalog(
   if (group && input.channelId && !group.channelIds.includes(input.channelId))
     throw new HostError("channel_forbidden", "渠道不在使用分组内", 403);
   const routes = (host.config().models ?? {}) as Record<string, ModelRoute>;
-  const status = !input.forRouting && input.principalId &&
-    Object.values(routes).some((model) => ["paid", "consumed"].includes(model.visibility ?? "")) &&
+  const status =
+    !input.forRouting &&
+    input.principalId &&
+    Object.values(routes).some((model) =>
+      ["paid", "consumed"].includes(model.visibility ?? ""),
+    ) &&
     host.hasCapability("billing.customer-status@1")
-    ? await host.call<BillingCustomerStatus>("billing.customer-status@1", { userId: input.principalId }, signal)
-    : undefined;
+      ? await host.call<BillingCustomerStatus>(
+          "billing.customer-status@1",
+          { userId: input.principalId },
+          signal,
+        )
+      : undefined;
   const models: CatalogModel[] = (
-    input.personalOnly ? [] : catalog(host.config(), input.channelId, input.routeKind)
+    input.personalOnly
+      ? []
+      : catalog(host.config(), input.channelId, input.routeKind)
   )
     .filter(
       (model) =>
-        (input.forRouting || modelVisible(routes[model.routeId!]!, input.principalId, status)) &&
+        (input.forRouting ||
+          modelVisible(routes[model.routeId!]!, input.principalId, status)) &&
         (!allowed || allowed.includes(model.channelId!)) &&
         (!group || group.channelIds.includes(model.channelId!)),
     )

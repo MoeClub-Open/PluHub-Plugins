@@ -29,7 +29,7 @@ describe("workflow conditions", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "branch" },
+        { id: "start", type: "start", next: ["branch"] },
         { id: "branch", type: "branch", condition: false, yes: "yes", no: "no" },
         { id: "yes", type: "provider" },
         { id: "no", type: "provider" },
@@ -109,7 +109,7 @@ describe("workflow conditions", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "branch" },
+        { id: "start", type: "start", next: ["branch"] },
         { id: "branch", type: "branch", condition: false, yes: "yes", no: "no" },
         { id: "yes", type: "provider" },
         { id: "no", type: "provider" },
@@ -153,7 +153,7 @@ describe("workflow conditions", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "redirect" },
+        { id: "start", type: "start", next: ["redirect"] },
         { id: "redirect", type: "upstream", target: "default", allowedTargets: ["claude-sonnet"], mode: "implicit" },
       ],
       bindings: [{ source: "start", output: "requestedModel", target: "redirect", input: "target" }],
@@ -170,7 +170,7 @@ describe("workflow conditions", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "redirect" },
+        { id: "start", type: "start", next: ["redirect"] },
         { id: "redirect", type: "upstream", target: "default", mode: "implicit" },
         { id: "allowed", type: "value", valueType: "string[]", value: ["claude-sonnet"] },
       ],
@@ -187,7 +187,7 @@ describe("workflow conditions", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "call" },
+        { id: "start", type: "start", next: ["call"] },
         { id: "call", type: "provider" },
         { id: "check", type: "compare", valueType: "boolean", operator: "eq", left: false, right: true },
         { id: "not", type: "logic", operator: "not", left: false },

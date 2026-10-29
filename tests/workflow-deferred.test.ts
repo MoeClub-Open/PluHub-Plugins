@@ -8,7 +8,7 @@ const signal = new AbortController().signal;
 
 it("defers a formatted value connected directly to an execution node", () => {
   const flow: ChannelWorkflow = { entry: "start", nodes: [
-    { id: "start", type: "start", next: "prompt" },
+    { id: "start", type: "start", next: ["prompt"] },
     { id: "prompt", type: "prompt", text: "default", next: "provider" },
     { id: "provider", type: "provider" },
     { id: "format", type: "format", value: { label: "test" } },
@@ -20,7 +20,7 @@ it("defers only data needed by a reachable execution node", () => {
   const flow: ChannelWorkflow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "provider" },
+      { id: "start", type: "start", next: ["provider"] },
       { id: "provider", type: "provider" },
       { id: "answer", type: "llm", model: "other", promptMode: "append" },
       { id: "template", type: "template", template: "{{answer}}", values: { answer: "" } },
@@ -29,7 +29,7 @@ it("defers only data needed by a reachable execution node", () => {
   };
   expect(needsDeferredWorkflow(flow)).toBe(false);
   flow.nodes.splice(1, 0, { id: "prompt", type: "prompt", text: "text", next: "provider" });
-  (flow.nodes[0] as Extract<ChannelWorkflow["nodes"][number], { type: "start" }>).next = "prompt";
+  (flow.nodes[0] as Extract<ChannelWorkflow["nodes"][number], { type: "start" }>).next = ["prompt"];
   flow.bindings!.push({ source: "template", output: "text", target: "prompt", input: "text" });
   expect(needsDeferredWorkflow(flow)).toBe(true);
 });
@@ -39,7 +39,7 @@ it("selects the matching Jev or chat provider when both expose the same public m
     upstreams: {
       chat: { protocol: "openai-chat", baseUrl: "https://chat.example" },
       jev: { flow: { entry: "start", nodes: [
-        { id: "start", type: "start", next: "provider" },
+        { id: "start", type: "start", next: ["provider"] },
         { id: "provider", type: "provider", upstream: { protocol: "systemone", baseUrl: "https://jev.example" } },
       ] } },
     },
@@ -58,7 +58,7 @@ it("tries another matching channel when a static mixed graph resolves to the wro
   const config = {
     upstreams: {
       mixed: { priority: 5, flow: { entry: "start", nodes: [
-        { id: "start", type: "start", next: "choice" },
+        { id: "start", type: "start", next: ["choice"] },
         { id: "choice", type: "branch", condition: false, yes: "chat", no: "jev" },
 { id: "choice-predicate", type: "compare", valueType: "boolean", operator: "eq", left: false, right: true },
         { id: "chat", type: "provider", upstream: { protocol: "openai-chat", baseUrl: "https://chat.example" } },
@@ -81,7 +81,7 @@ it("does not execute a dynamic workflow during planning or price quotation", asy
   const flow: ChannelWorkflow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "response" },
+      { id: "start", type: "start", next: ["response"] },
       { id: "response", type: "response", text: "" },
       { id: "answer", type: "llm", model: "other", promptMode: "append" },
     ],
@@ -104,7 +104,7 @@ it("rejects request-dependent conditions during a request-free quotation", async
   const flow: ChannelWorkflow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "branch" },
+      { id: "start", type: "start", next: ["branch"] },
       { id: "branch", type: "branch", condition: false, yes: "yes", no: "no" },
       { id: "yes", type: "provider" },
       { id: "no", type: "provider" },
@@ -121,11 +121,11 @@ it("rejects request-dependent conditions during a request-free quotation", async
 
 it("retains deferred execution through a personal channel's platform delegation", async () => {
   const inner: ChannelWorkflow = { entry: "start", nodes: [
-    { id: "start", type: "start", next: "response" },
+    { id: "start", type: "start", next: ["response"] },
     { id: "response", type: "response", text: "done" },
   ] };
   const outer: ChannelWorkflow = { entry: "start", nodes: [
-    { id: "start", type: "start", next: "platform" },
+    { id: "start", type: "start", next: ["platform"] },
     { id: "platform", type: "platform", groupId: "default", model: "target" },
   ] };
   const config = { upstreams: { platform: { flow: inner } }, models: { target: { upstream: "platform", model: "remote" } } };

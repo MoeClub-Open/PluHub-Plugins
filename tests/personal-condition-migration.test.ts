@@ -13,7 +13,7 @@ it("persists personal condition migration without disturbing other channel data"
       flow: {
         entry: "start",
         nodes: [
-          { id: "start", type: "start", next: "branch" },
+          { id: "start", type: "start", next: ["branch"] },
           { id: "branch", type: "condition", test: "model", models: ["claude-*"], yes: "yes", no: "no" },
           { id: "yes", type: "provider" },
           { id: "no", type: "provider" },

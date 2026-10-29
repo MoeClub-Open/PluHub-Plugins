@@ -322,6 +322,14 @@ export function compileWorkflow(
       if (node!.type === "branch") {
         visit(node!.yes, id);
         visit(node!.no, id);
+      } else if (node!.type === "start") {
+        if (
+          !Array.isArray(node.next) ||
+          !node.next.length ||
+          new Set(node.next).size !== node.next.length
+        )
+          bad("请求入口需要有效且不重复的请求连线", [id]);
+        for (const target of node.next) visit(target, id);
       } else if ("next" in node!) visit(node.next, id);
       else bad("数据节点不能连接到请求路径", [id]);
     }
@@ -377,6 +385,7 @@ export function runWorkflow(
     mappedModel?: string;
     personalInterfaces?: import("@pluhub/contracts/ai").UpstreamInterface[];
     personal?: boolean;
+    chooseEntry?: (candidates: readonly string[]) => string;
   } = {},
 ): WorkflowResult {
   compileWorkflow(flow, context.personalInterfaces, context.personal);

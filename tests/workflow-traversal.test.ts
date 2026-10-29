@@ -17,7 +17,7 @@ it("reevaluates a reused request predicate after preceding request transformatio
   const flow: ChannelWorkflow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "first" },
+      { id: "start", type: "start", next: ["first"] },
       {
         id: "first",
         type: "branch",
@@ -73,7 +73,7 @@ it("applies the same transforms, limits and bound fallback in both execution mod
   const flow: ChannelWorkflow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "prompt" },
+      { id: "start", type: "start", next: ["prompt"] },
       { id: "prompt", type: "prompt", text: "system", next: "limit" },
       { id: "limit", type: "rateLimit", rule: { rpm: 4 }, next: "budget" },
       { id: "budget", type: "maxTokens", limit: 5, next: "provider" },
@@ -123,7 +123,7 @@ it("rejects invalid computed limits before reaching the provider", async () => {
   const flow: ChannelWorkflow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "limit" },
+      { id: "start", type: "start", next: ["limit"] },
       { id: "limit", type: "rateLimit", rule: { rpm: 1 }, next: "provider" },
       { id: "provider", type: "provider" },
       { id: "zero", type: "value", valueType: "integer", value: 0 },

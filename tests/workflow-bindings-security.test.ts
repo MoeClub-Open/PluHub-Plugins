@@ -9,7 +9,7 @@ describe("workflow binding paths", () => {
       const flow: ChannelWorkflow = {
         entry: "start",
         nodes: [
-          { id: "start", type: "start", next: "provider" },
+          { id: "start", type: "start", next: ["provider"] },
           { id: "provider", type: "provider" },
           { id: "input", type: "value", valueType: "string", value: "unsafe" },
           { id: "template", type: "template", template: "", values: { [name]: "" } },
@@ -25,7 +25,7 @@ describe("workflow binding paths", () => {
     const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "provider" },
+        { id: "start", type: "start", next: ["provider"] },
         { id: "provider", type: "provider" },
         { id: "input", type: "value", valueType: "string", value: "unsafe" },
       ],
