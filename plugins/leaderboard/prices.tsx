@@ -6,7 +6,7 @@ import { Select } from "../../lib/ui/select.js";
 import { t, getLocale } from "../../lib/ui/i18n.js";
 
 function tokenPrice(model: CatalogModel, kind: "input" | "output") {
-  if (model.pricing?.mode === "request" || model.pricing?.mode === "expression")
+  if (model.pricing?.mode === "request" || model.pricing?.mode === "expression" || model.pricing?.tiers?.length)
     return undefined;
   const base =
     model.billing?.[kind] ??
