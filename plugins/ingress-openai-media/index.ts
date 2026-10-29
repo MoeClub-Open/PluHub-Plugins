@@ -56,7 +56,7 @@ export default definePlugin({
             ctx.signal,
           );
           const plan = await host.call<AIPlan>(
-            "ai.routing@2",
+            "ai.routing@3",
             {
               model: decoded.model,
               request: decoded,
@@ -66,7 +66,6 @@ export default definePlugin({
               ...channelScope(
                 ctx.principal,
                 request.headers.get("x-pluhub-channel") ?? undefined,
-                request.headers.get("x-pluhub-group") ?? undefined,
               ),
               pricingContext: capturePricingContext(
                 decoded.operation!.input,

@@ -26,15 +26,11 @@ export function installPriceQuote(host: Host) {
       const selectedChannel = body.channelId
         ? requiredString(body.channelId, "channelId", 256)
         : undefined;
-      const channels = channelScope(
-        ctx.principal,
-        selectedChannel,
-        body.groupId ? requiredString(body.groupId, "groupId") : undefined,
-      );
+      const channels = channelScope(ctx.principal, selectedChannel);
       const allowed = ctx.principal?.attributes?.models as string[] | undefined;
       if (allowed?.length && !allowed.includes(model))
         throw new HostError("forbidden", "Model is not allowed", 403);
-      const models = await host.call<CatalogModel[]>("ai.catalog@2", {
+      const models = await host.call<CatalogModel[]>("ai.catalog@3", {
         forRouting: true,
         principalId: ctx.principal!.id,
         ...channels,
@@ -77,7 +73,7 @@ export function installPriceQuote(host: Host) {
       )
         throw new HostError("invalid_request", "Invalid billing headers");
       const plan = await host.call<AIPlan>(
-        "ai.routing@2",
+        "ai.routing@3",
         {
           purpose: "quote",
           operation,
@@ -97,7 +93,10 @@ export function installPriceQuote(host: Host) {
         },
         ctx.signal,
       );
-      const pricing = consumptionSource(plan) === "platform" ? plan.pricing : personalRequestPricing(host.config());
+      const pricing =
+        consumptionSource(plan) === "platform"
+          ? plan.pricing
+          : personalRequestPricing(host.config());
       if (!pricing)
         throw new HostError(
           "price_unavailable",

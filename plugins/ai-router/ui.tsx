@@ -1,13 +1,8 @@
-import { Groups } from "./groups-ui.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import { Select } from "../../lib/ui/select.js";
 import type { UIHost } from "@pluhub/ui-sdk";
-import type {
-  Upstream,
-  ModelRoute,
-  ServiceGroup,
-} from "@pluhub/contracts/ai";
+import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
 import { ChannelTable } from "./channel-table.js";
 import { ChannelModels, type ChannelModel } from "./channel-models.js";
 import { ModelEditor } from "./model-editor.js";
@@ -18,7 +13,10 @@ import {
 } from "./model-config.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { channelEditorTarget } from "../../lib/ui/channel-location.js";
-import { defaultChannelFlow, channelProviderNodes } from "../../lib/ai/channel-config.js";
+import {
+  defaultChannelFlow,
+  channelProviderNodes,
+} from "../../lib/ai/channel-config.js";
 import { setChannelState } from "../../lib/ai/channel-list.js";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, Icon, Empty, Dialog } from "../../lib/ui/components.js";
@@ -26,7 +24,6 @@ type Router = {
   upstreams: Record<string, Upstream>;
   models: Record<string, ModelRoute>;
   nextChannelId?: string;
-  groups?: Record<string, ServiceGroup>;
 };
 function Page({ host }: { host: UIHost }) {
   const loaded = useLoad<any>(() =>
@@ -35,9 +32,7 @@ function Page({ host }: { host: UIHost }) {
   const [page, setPage] = React.useState(location.hash);
   const requestedTab = new URLSearchParams(page.split("?")[1]).get("tab");
   const [tab, setTab] = React.useState(
-    requestedTab === "groups" ||
-      requestedTab === "models" ||
-      requestedTab === "advanced"
+    requestedTab === "models" || requestedTab === "advanced"
       ? requestedTab
       : "channels",
   );
@@ -130,11 +125,7 @@ function Page({ host }: { host: UIHost }) {
           model.id,
         );
         if (existing) continue;
-        const alias = availableModelId(
-          Object.keys(r.models),
-          id,
-          model.id,
-        );
+        const alias = availableModelId(Object.keys(r.models), id, model.id);
         r.models[alias] = discoveredModelRoute(id, model);
       }
     });
@@ -148,11 +139,7 @@ function Page({ host }: { host: UIHost }) {
       mode: "offer",
       nodeId,
       suggestedId: model
-        ? availableModelId(
-            Object.keys(models),
-            channelId,
-            model.id,
-          )
+        ? availableModelId(Object.keys(models), channelId, model.id)
         : "",
       model: model
         ? discoveredModelRoute(channelId, model)
@@ -275,11 +262,17 @@ function Page({ host }: { host: UIHost }) {
           }
           {...modelDialog}
           upstreams={upstreams}
-          provider={modelDialog.nodeId ? {
-            id: modelDialog.nodeId,
-            catalogOnly: !!channelProviderNodes(upstreams[modelDialog.model.upstream]!)
-              .find((item) => item.id === modelDialog.nodeId)?.connection.subscriptionAccountIds,
-          } : undefined}
+          provider={
+            modelDialog.nodeId
+              ? {
+                  id: modelDialog.nodeId,
+                  catalogOnly: !!channelProviderNodes(
+                    upstreams[modelDialog.model.upstream]!,
+                  ).find((item) => item.id === modelDialog.nodeId)?.connection
+                    .subscriptionAccountIds,
+                }
+              : undefined
+          }
           providerModel={
             modelDialog.nodeId
               ? (() => {
@@ -303,10 +296,7 @@ function Page({ host }: { host: UIHost }) {
                   model.upstream,
                   model.model,
                 );
-              if (
-                !modelDialog.id &&
-                Object.hasOwn(r.models, alias)
-              )
+              if (!modelDialog.id && Object.hasOwn(r.models, alias))
                 throw new Error(tr("该 ID 已存在，请使用不同的 ID。"));
               if (modelDialog.id && !r.models[modelDialog.id])
                 throw new Error(tr("模型已被删除，请刷新。"));
@@ -328,22 +318,6 @@ function Page({ host }: { host: UIHost }) {
       )}
     </>
   );
-  if (host.page === "/settings/service-groups" || requestedTab === "groups")
-    return (
-      <>
-        <PageHeading title={tr("使用分组")} />
-        <Notice message={message || loaded.error} />
-        {loaded.data && (
-          <Groups
-            host={host}
-            groups={router.groups}
-            upstreams={upstreams}
-            save={save}
-            busy={busy}
-          />
-        )}
-      </>
-    );
   if (graph)
     return (
       <>

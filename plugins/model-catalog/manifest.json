@@ -5,14 +5,14 @@
   "name": "模型目录",
   "description": "展示模型、价格和调用示例。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.29",
+  "version": "0.1.0-alpha.30",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "entry": "dist/index.js",
     "kind": "native"
   },
   "provides": [],
-  "requires": ["ai.catalog@2"],
+  "requires": ["ai.catalog@3"],
   "permissions": ["api.register"],
   "configReload": "restart",
   "configSchema": {

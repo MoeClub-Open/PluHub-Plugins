@@ -5,14 +5,14 @@
   "name": "模型试用",
   "description": "提供多轮对话、图片和视频模型试用。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.26",
+  "version": "0.1.0-alpha.27",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "entry": "dist/index.js",
     "kind": "native"
   },
   "provides": [],
-  "requires": ["ai.catalog@2"],
+  "requires": ["ai.catalog@3"],
   "permissions": ["api.register"],
   "configReload": "restart",
   "configSchema": {

@@ -7,14 +7,12 @@ export function PriceQuote({
   host,
   model,
   channelId,
-  groupId,
   requestPriced = false,
   expression,
 }: {
   host: UIHost;
   model: string;
   channelId?: string;
-  groupId?: string;
   requestPriced?: boolean;
   expression?: string;
 }) {
@@ -48,7 +46,6 @@ export function PriceQuote({
                 body: JSON.stringify({
                   model,
                   channelId,
-                  groupId,
                   usage,
                   ...(expression
                     ? {

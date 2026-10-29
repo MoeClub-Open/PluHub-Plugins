@@ -25,7 +25,6 @@ export async function planRoute(
       principalId: input.principalId,
       channelId: input.channelId,
       channelIds: input.channelIds,
-      groupId: input.groupId,
       routeKind: input.routeKind ?? "chat",
     },
     signal,
@@ -57,7 +56,7 @@ export async function planRoute(
       );
     if (input.requestedModel !== undefined)
       throw new HostError("model_not_found", "当前使用范围内没有此模型", 404);
-    if (input.channelIds?.length || input.groupId)
+    if (input.channelIds?.length)
       throw new HostError("model_not_found", "绑定渠道中没有此模型", 404);
     return (await resolveRoute(host, input, signal, requestedModel)).plan;
   }
@@ -98,7 +97,11 @@ export async function planRoute(
         ));
       } catch (error) {
         if ((error as HostError).code !== "route_kind_mismatch") throw error;
-        unavailable = new HostError("operation_not_supported", "所选渠道不支持此请求类型", 400);
+        unavailable = new HostError(
+          "operation_not_supported",
+          "所选渠道不支持此请求类型",
+          400,
+        );
         continue;
       }
       if (

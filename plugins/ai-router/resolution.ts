@@ -1,6 +1,5 @@
 import { providerModel as resolveProviderModel } from "../../lib/ai/channel-config.js";
 import { computedWorkflowTypes } from "../../lib/ai/workflow-node-validation.js";
-import { resolveGroup, groupPricing } from "./groups.js";
 import { withDecisionScope } from "./decision-scope.js";
 import { SelectionPool } from "../../lib/ai/selection.js";
 import type {
@@ -161,10 +160,15 @@ export async function resolveRoute(
     ) => Promise<WorkflowResult & { responseText?: string }>;
   } = {},
 ): Promise<{ plan: AIPlan; route: ModelRoute }> {
-  // Deferred routing re-enters here without re-reading the catalog; apply the
-  // same group/personal-channel boundary as the ordinary selection path.
-  if (input.groupId && input.channelId?.startsWith("personal:"))
-    throw new HostError("channel_forbidden", "分组密钥不能调用个人渠道", 403);
+  const allowedChannels =
+    options.allowedChannelIds ??
+    (input.channelIds?.length ? input.channelIds : undefined);
+  if (
+    input.channelId &&
+    allowedChannels &&
+    !allowedChannels.includes(input.channelId)
+  )
+    throw new HostError("channel_forbidden", "渠道不在密钥授权范围内", 403);
   let config = host.config();
   let credentialId: string | undefined;
   if (input.channelId?.startsWith("personal:")) {
@@ -185,11 +189,6 @@ export async function resolveRoute(
       models: channel.models,
     };
   }
-  const group =
-    input.channelId?.startsWith("personal:") ||
-    (!input.groupId && input.channelIds?.length)
-      ? undefined
-      : resolveGroup(host.config(), input.groupId, input.principalId);
   const models = (config.models ?? {}) as Record<string, ModelRoute>;
   const upstreams = (config.upstreams ?? {}) as Record<string, Upstream>;
   const operation =
@@ -238,13 +237,12 @@ export async function resolveRoute(
     const route = Object.hasOwn(models, model) ? models[model] : undefined;
     if (!route || route.enabled === false)
       throw new HostError("model_not_found", "Unknown model", 404);
-    if (group && !group.channelIds.includes(route.upstream))
-      throw new HostError("group_forbidden", "目标渠道不在使用分组内", 403);
-    if (
-      options.allowedChannelIds &&
-      !options.allowedChannelIds.includes(route.upstream)
-    )
-      throw new HostError("group_forbidden", "目标渠道不在使用分组内", 403);
+    if (allowedChannels && !allowedChannels.includes(route.upstream))
+      throw new HostError(
+        "channel_forbidden",
+        "目标渠道不在密钥授权范围内",
+        403,
+      );
     validateOperations(route.operations);
     if (!(route.operations ?? ["chat"]).includes(operation))
       throw new HostError(
@@ -422,22 +420,30 @@ export async function resolveRoute(
           },
         };
       }
-      if (result.platformGroup || result.fallback) {
+      if (result.platformChannel || result.fallback) {
         if (!input.channelId?.startsWith("personal:") || !input.principalId)
           throw new HostError(
             "invalid_route",
-            "平台分组节点仅用于个人渠道",
+            "平台渠道委托仅用于个人渠道",
             400,
           );
-        const target = (result.platformGroup ?? result.fallback)!;
-        if (result.platformGroup)
-          resolveGroup(host.config(), target.groupId, input.principalId);
+        const target = (result.platformChannel ?? result.fallback)!;
+        const channel = (
+          host.config().upstreams as Record<string, Upstream> | undefined
+        )?.[target.channelId];
+        if (
+          target.channelId.startsWith("personal:") ||
+          !channel ||
+          channel.enabled === false
+        )
+          throw new HostError("channel_not_found", "平台渠道不可用", 404);
         const delegated: RoutingRequest = {
           purpose: input.purpose,
           routeKind: input.routeKind,
           operation: input.operation,
           model: target.model ?? route.model,
-          groupId: target.groupId,
+          channelId: target.channelId,
+          channelIds: [target.channelId],
           principalId: input.principalId,
           request: prepared,
           ingressProtocol: input.ingressProtocol,
@@ -445,8 +451,8 @@ export async function resolveRoute(
           pricingContext: input.pricingContext,
           protocolPolicy,
         };
-        if (result.platformGroup) {
-          resolved = await host.call<AIPlan>("ai.routing@2", delegated, signal);
+        if (result.platformChannel) {
+          resolved = await host.call<AIPlan>("ai.routing@3", delegated, signal);
           if (resolved.workflowDeferred) {
             if (!options.runWorkflow)
               return {
@@ -607,9 +613,8 @@ export async function resolveRoute(
           request: prepared,
           entryModel: requestedModel,
           principalId: input.principalId,
-          groupId: group?.id,
           channelId: route.upstream,
-          allowedChannelIds: group?.channelIds,
+          allowedChannelIds: allowedChannels,
           requestLimits,
         },
         (decisionToken) =>
@@ -620,8 +625,7 @@ export async function resolveRoute(
               request: prepared,
               decisionToken,
               principalId: input.principalId,
-              groupId: group?.id,
-              allowedChannelIds: group?.channelIds,
+              allowedChannelIds: allowedChannels,
               consumptionMultiplier,
               ingressProtocol: input.ingressProtocol,
               protocolPolicy,
@@ -813,7 +817,7 @@ export async function resolveRoute(
       ...(resolved.pricing
         ? {
             pricing: bindPricingContext(
-              groupPricing(resolved.pricing, group)!,
+              resolved.pricing,
               input.pricingContext ?? capturePricingContext(input.request),
             ),
           }

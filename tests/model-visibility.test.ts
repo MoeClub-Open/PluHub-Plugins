@@ -62,7 +62,6 @@ it("filters directory audiences without changing direct routing or owner-provide
     host,
     {
       model: "gpt-test",
-      groupId: "default",
       principalId: "free",
       features: ["text"],
       request: { model: "gpt-test", messages: [], tools: [], stream: false },

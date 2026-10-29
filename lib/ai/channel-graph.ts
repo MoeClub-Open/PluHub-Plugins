@@ -48,9 +48,9 @@ export function validateWorkflowNode(
   );
   if (
     node.type === "platform" &&
-    (!node.groupId || (node.model !== undefined && !node.model.trim()))
+    (!node.channelId || (node.model !== undefined && !node.model.trim()))
   )
-    bad("平台分组节点需要选择分组和有效模型", [node.id]);
+    bad("平台渠道节点需要选择渠道和有效模型", [node.id]);
   if (node.type === "rateLimit") {
     const keys = ["rpm", "tpm", "concurrency", "bytesPerSecond"];
     if (
@@ -309,7 +309,7 @@ export function compileWorkflow(
     visiting.add(id);
     if (node!.type === "provider" && node!.fallback) {
       if (nodes.get(node!.fallback)?.type !== "platform")
-        bad("备用出口需要连接平台分组节点", [id]);
+        bad("备用出口需要连接平台渠道节点", [id]);
       visit(node!.fallback, id);
     }
     if (

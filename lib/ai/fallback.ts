@@ -27,7 +27,7 @@ export async function switchFallback(
     !(failure.retryable || recoverable.has(failure.code ?? ""))
   )
     return false;
-  const next = await host.call<AIPlan>("ai.routing@2", plan.fallback, signal);
+  const next = await host.call<AIPlan>("ai.routing@3", plan.fallback, signal);
   validate?.(next);
   next.attempts = [
     ...(plan.attempts ?? []),

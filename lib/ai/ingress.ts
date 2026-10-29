@@ -5,11 +5,7 @@ import { clientSession } from "./session.js";
 import { channelScope } from "./channel-scope.js";
 import { capturePricingContext } from "../commerce/expression.js";
 import { executeIngress } from "./ingress-response.js";
-import {
-  beginObservation,
-  planObservation,
-  observation,
-} from "./telemetry.js";
+import { beginObservation, planObservation, observation } from "./telemetry.js";
 export function createIngress(protocol: Protocol) {
   return definePlugin({
     setup(host) {
@@ -57,7 +53,9 @@ export function createIngress(protocol: Protocol) {
           );
           const allowed = ctx.principal?.attributes?.models as
             string[] | undefined;
-          const delegated = !!ctx.parent && ctx.state.get("internal.delegatedModel") === decoded.model;
+          const delegated =
+            !!ctx.parent &&
+            ctx.state.get("internal.delegatedModel") === decoded.model;
           if (!delegated && allowed?.length && !allowed.includes(decoded.model))
             throw new HostError(
               "model_forbidden",
@@ -69,11 +67,7 @@ export function createIngress(protocol: Protocol) {
             throw new HostError("unsupported_credential", "平台渠道凭证已移除");
           const channelHeader =
             request.headers.get("x-pluhub-channel") ?? undefined;
-          const channels = channelScope(
-            ctx.principal,
-            channelHeader,
-            request.headers.get("x-pluhub-group") ?? undefined,
-          );
+          const channels = channelScope(ctx.principal, channelHeader);
           if (!delegated && host.hasCapability("auth.admit@1")) {
             await host.call(
               "auth.admit@1",
@@ -93,7 +87,7 @@ export function createIngress(protocol: Protocol) {
           ctx.state.set(
             "ai.plan",
             await host.call<AIPlan>(
-              "ai.routing@2",
+              "ai.routing@3",
               {
                 model: decoded.model,
                 ingressProtocol: protocol,
@@ -130,7 +124,11 @@ export function createIngress(protocol: Protocol) {
           const plan = ctx.state.get("ai.plan") as AIPlan;
           if (plan.workflowDeferred) {
             if (!host.hasCapability("ai.workflow-execution@1"))
-              throw new HostError("workflow_unavailable", "流程执行能力不可用", 503);
+              throw new HostError(
+                "workflow_unavailable",
+                "流程执行能力不可用",
+                503,
+              );
             ctx.state.set("workflow.ready", true);
             return host.call<Response>(
               "ai.workflow-execution@1",

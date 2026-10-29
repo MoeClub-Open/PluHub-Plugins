@@ -14,7 +14,6 @@ import {
   priceUsage,
 } from "../../lib/commerce/pricing.js";
 import { fixedPricing } from "../../lib/commerce/expression.js";
-import { retirePricingFactors } from "../../lib/commerce/migrations.js";
 export default definePlugin({
   setup(host) {
     const db = openDatabase(join(host.dataDir, "requests.sqlite"), [
@@ -28,7 +27,6 @@ export default definePlugin({
       rankingMigration,
       "ALTER TABLE requests ADD COLUMN usage_json TEXT; ALTER TABLE requests ADD COLUMN pricing_json TEXT;",
       "ALTER TABLE requests ADD COLUMN generation_ms INTEGER; CREATE INDEX requests_model_upstream_time ON requests(model,upstream,created_at);",
-      retirePricingFactors("requests", "pricing_json"),
       "ALTER TABLE requests ADD COLUMN billing_mode TEXT;",
       `ALTER TABLE requests ADD COLUMN consumption_source TEXT;
        UPDATE requests SET consumption_source=CASE
@@ -145,8 +143,10 @@ export default definePlugin({
         if (!state) return;
         const workflow =
           ctx.state.get("billing.mode") === "workflow" ||
-          !!(ctx.state.get("ai.plan") as { workflowDeferred?: unknown } | undefined)
-            ?.workflowDeferred;
+          !!(
+            ctx.state.get("ai.plan") as
+              { workflowDeferred?: unknown } | undefined
+          )?.workflowDeferred;
         const cancelled =
           ctx.signal.aborted || ctx.state.get("http.cancelled") === true;
         const code =
@@ -201,7 +201,6 @@ export default definePlugin({
                 "tiers",
                 "expression",
                 "context",
-                "serviceGroup",
               ].flatMap((key) => {
                 const value = (state.pricing as any)[key];
                 return value === undefined ? [] : [[key, value]];
@@ -332,10 +331,12 @@ export default definePlugin({
     }
     // Call-specific filters match individual calls, including internal calls.
     function matchesCalls(f: { query: URLSearchParams }) {
-      return !f.query.get("requestId") &&
+      return (
+        !f.query.get("requestId") &&
         ["model", "upstream", "errorCode", "status", "protocol", "source"].some(
           (key) => !!f.query.get(key),
-        );
+        )
+      );
     }
     // An orphan remains visible if its parent could not be logged or was pruned.
     function rootFilter(f: { sql: string; query: URLSearchParams }) {
@@ -623,10 +624,12 @@ export default definePlugin({
           )
           .get(...f.params);
         const usage = db
-          .prepare(`SELECT COALESCE(SUM(input_tokens),0) inputTokens,
+          .prepare(
+            `SELECT COALESCE(SUM(input_tokens),0) inputTokens,
           COALESCE(SUM(output_tokens),0) outputTokens,
           COUNT(input_tokens) usageKnownRequests, COUNT(*) usageTotalRequests
-          FROM requests WHERE ${providerCallFilter(f)}`)
+          FROM requests WHERE ${providerCallFilter(f)}`,
+          )
           .get(...f.params);
         const bucketMs = f.hours <= 48 ? 3600000 : 86400000;
         const buckets = db

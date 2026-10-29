@@ -17,10 +17,9 @@ export type ChatMeta = {
   tokens?: number;
 };
 export type ChatSession = {
-  version: 1;
+  version: 2;
   sessionId: string;
   channel: string;
-  group?: string;
   model: string;
   modelChannel: string;
   prompt: string;
@@ -52,25 +51,22 @@ export function readChat(key: string): ChatSession {
   if (!saved) {
     try {
       const value = JSON.parse(sessionStorage.getItem(key) ?? "null");
-      if (value?.version === 1 && Array.isArray(value.messages)) saved = value;
+      if (value?.version === 2 && Array.isArray(value.messages)) saved = value;
     } catch {}
   }
   const params = new URLSearchParams(location.hash.split("?")[1]);
   const channel = params.get("channel"),
-    model = params.get("model"),
-    group = params.get("group");
+    model = params.get("model");
   if (
     saved &&
     (channel === null || channel === saved.channel) &&
-    (model === null || model === saved.model) &&
-    (group === null || group === saved.group)
+    (model === null || model === saved.model)
   )
     return saved;
   return {
-    version: 1,
+    version: 2,
     sessionId: crypto.randomUUID(),
     channel: channel ?? "",
-    group: group ?? (channel?.startsWith("personal:") ? "personal" : "default"),
     model: model ?? "",
     modelChannel: channel ?? "",
     prompt: "",

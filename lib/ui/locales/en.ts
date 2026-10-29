@@ -1,10 +1,12 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
-  "完整请求": "Complete request",
-  "已连接的上游未提供该模型": "The connected providers do not offer this model",
-  "请求入口需要有效且不重复的请求连线": "The request entry needs valid, unique request connections",
+  完整请求: "Complete request",
+  已连接的上游未提供该模型: "The connected providers do not offer this model",
+  请求入口需要有效且不重复的请求连线:
+    "The request entry needs valid, unique request connections",
 
-  "展示模型用量、平台价格和用户用量排行。": "Shows model usage, platform pricing and user usage rankings.",
+  "展示模型用量、平台价格和用户用量排行。":
+    "Shows model usage, platform pricing and user usage rankings.",
   "API 接入示意": "API routing overview",
   "已复制模型 ID": "Model ID copied",
   "复制模型 ID：": "Copy model ID: ",
@@ -25,59 +27,73 @@ export const en: Record<string, string> = {
   "仅比较可见平台模型的固定 Token 单价；按次与阶梯计价模型请在模型目录查看。":
     "Compares fixed token prices for visible platform models. See the model catalog for per-request and tiered pricing.",
 
-
-  "由参数连线提供": "Supplied by a parameter connection",
-  "当前目标不在可用模型目录中，请重新选择。": "The current target is not in the available model directory. Select another model.",
-  "重新获取模型": "Reload models",
+  由参数连线提供: "Supplied by a parameter connection",
+  "当前目标不在可用模型目录中，请重新选择。":
+    "The current target is not in the available model directory. Select another model.",
+  重新获取模型: "Reload models",
 
   "平台手续费：{0} USD / 次": "Platform fee: {0} USD / request",
-  "请求手续费": "Request fee",
-  "请求计费": "Request billing",
-  "个人渠道请求手续费（USD / 次）": "Personal channel request fee (USD / request)",
-  "设为 0 不收取；上游模型费用仍由用户自行结算。": "Set to 0 for no fee. Users pay their provider separately.",
+  请求手续费: "Request fee",
+  请求计费: "Request billing",
+  "个人渠道请求手续费（USD / 次）":
+    "Personal channel request fee (USD / request)",
+  "设为 0 不收取；上游模型费用仍由用户自行结算。":
+    "Set to 0 for no fee. Users pay their provider separately.",
   "平台请求手续费 · USD / 次": "Platform request fee · USD / request",
-  "模型可见范围": "Model visibility",
-  "所有人": "Everyone",
-  "已登录用户": "Signed-in users",
-  "已消费用户": "Users with billed usage",
-  "已付款用户": "Paying users",
+  模型可见范围: "Model visibility",
+  所有人: "Everyone",
+  已登录用户: "Signed-in users",
+  已消费用户: "Users with billed usage",
+  已付款用户: "Paying users",
 
-  "提供模型": "Provided models",
-  "从上游导入": "Import from upstream",
-  "上游节点": "Provider node",
-  "选择上游节点": "Select provider node",
-  "获取模型": "Fetch models",
+  提供模型: "Provided models",
+  从上游导入: "Import from upstream",
+  上游节点: "Provider node",
+  选择上游节点: "Select provider node",
+  获取模型: "Fetch models",
   "上游模型 ID": "Upstream model ID",
-  "未映射": "Not mapped",
-  "暂无模型": "No models",
-  "添加所选模型": "Add selected models",
-  "编辑提供模型": "Edit provided model",
+  未映射: "Not mapped",
+  暂无模型: "No models",
+  添加所选模型: "Add selected models",
+  编辑提供模型: "Edit provided model",
   "渠道模型 ID": "Channel model ID",
-  "按模型分别映射": "Map each model",
-  "添加映射": "Add mapping",
-  "定价": "Pricing",
-  "请选择获取模型的上游节点": "Select a provider node to fetch models.",
-  "上游节点不存在或尚未配置连接": "The provider node is missing or has no connection.",
-  "上游节点未提供该模型": "This provider node does not offer the model.",
-  "上游模型映射无效": "Invalid upstream model mapping.",
-  "请先断开上游节点的模型参数连线": "Disconnect the provider model parameter before editing its mapping.",
+  按模型分别映射: "Map each model",
+  添加映射: "Add mapping",
+  定价: "Pricing",
+  请选择获取模型的上游节点: "Select a provider node to fetch models.",
+  上游节点不存在或尚未配置连接:
+    "The provider node is missing or has no connection.",
+  上游节点未提供该模型: "This provider node does not offer the model.",
+  上游模型映射无效: "Invalid upstream model mapping.",
+  请先断开上游节点的模型参数连线:
+    "Disconnect the provider model parameter before editing its mapping.",
   消耗金额: "Usage cost",
   首字: "First token",
   总用时: "Total time",
   平均耗时: "Average duration",
   跟随浏览器: "Browser language",
   内容语言: "Content language",
-  "按预扣金额结算，未将估算用量记为实际用量。": "Settled at the reserved amount; estimated usage is not reported as actual usage.",
-  "上游未提供有效用量，已按预扣金额结算。": "Valid usage was unavailable; the reserved amount was charged.",
-  "上游用量无效，已按预扣金额结算。": "The reported usage was invalid; the reserved amount was charged.",
-  "实际费用无法计算，已按预扣金额结算。": "The actual cost could not be calculated; the reserved amount was charged.",
-  "上游超过输出上限，已按预扣金额结算。": "The provider exceeded the output limit; the reserved amount was charged.",
-  "历史未结算请求已按预扣金额结算。": "The outstanding request was settled at its reserved amount.",
-  "历史未结算请求已按有效用量结算。": "The outstanding request was settled using valid usage.",
-  "上游在生成前拒绝请求，预扣已释放。": "The provider rejected the request before generation; the reservation was released.",
+  "按预扣金额结算，未将估算用量记为实际用量。":
+    "Settled at the reserved amount; estimated usage is not reported as actual usage.",
+  "上游未提供有效用量，已按预扣金额结算。":
+    "Valid usage was unavailable; the reserved amount was charged.",
+  "上游用量无效，已按预扣金额结算。":
+    "The reported usage was invalid; the reserved amount was charged.",
+  "实际费用无法计算，已按预扣金额结算。":
+    "The actual cost could not be calculated; the reserved amount was charged.",
+  "上游超过输出上限，已按预扣金额结算。":
+    "The provider exceeded the output limit; the reserved amount was charged.",
+  "历史未结算请求已按预扣金额结算。":
+    "The outstanding request was settled at its reserved amount.",
+  "历史未结算请求已按有效用量结算。":
+    "The outstanding request was settled using valid usage.",
+  "上游在生成前拒绝请求，预扣已释放。":
+    "The provider rejected the request before generation; the reservation was released.",
   "TPS（输出 / 总耗时）": "TPS (output / total time)",
-  "输出 Token 数 / 请求总耗时（秒）": "Output tokens / total request time in seconds",
-  "成功请求输出 Token 总数 / 请求总耗时；{0} 个样本": "Successful requests: total output tokens / total request time; {0} samples",
+  "输出 Token 数 / 请求总耗时（秒）":
+    "Output tokens / total request time in seconds",
+  "成功请求输出 Token 总数 / 请求总耗时；{0} 个样本":
+    "Successful requests: total output tokens / total request time; {0} samples",
 
   待转换内容: "Value to format",
   自动: "Automatic",
@@ -90,7 +106,8 @@ export const en: Record<string, string> = {
   启用模型: "Enable model",
   代码: "Code",
   "图片、视频、向量和音频接口。": "Image, video, embedding, and audio APIs.",
-  "管理用户自带密钥、订阅与个人渠道。": "Manage user-provided keys, subscriptions, and personal channels.",
+  "管理用户自带密钥、订阅与个人渠道。":
+    "Manage user-provided keys, subscriptions, and personal channels.",
   路由编辑方式: "Route editor mode",
   规则: "Rules",
   路由规则: "Routing rules",
@@ -526,7 +543,8 @@ export const en: Record<string, string> = {
   "附件 JSON": "Assets JSON",
   流程模板: "Workflow templates",
   模板: "Template",
-  "应用模板会替换当前流程，可使用撤销恢复。": "Applying a template replaces the current workflow. You can undo this change.",
+  "应用模板会替换当前流程，可使用撤销恢复。":
+    "Applying a template replaces the current workflow. You can undo this change.",
   应用模板: "Apply template",
   "LLM 智能路由": "LLM routing",
   "Jev 智能路由": "Jev routing",
@@ -576,7 +594,8 @@ export const en: Record<string, string> = {
   检查更新: "Check for updates",
   "正在检查插件更新…": "Checking for plugin updates…",
   "部分注册源检查失败：{0}": "Some plugin sources could not be checked: {0}",
-  "当前仅有内置插件目录，配置在线注册源后可检查新版本。": "Only the bundled catalog is configured. Add an online source to check for new versions.",
+  "当前仅有内置插件目录，配置在线注册源后可检查新版本。":
+    "Only the bundled catalog is configured. Add an online source to check for new versions.",
   "{0} 个插件有可用更新": "Updates are available for {0} plugins",
   已检查插件更新: "Plugin updates checked",
   "插件更新检查失败：{0}": "Could not check plugin updates: {0}",
@@ -600,7 +619,8 @@ export const en: Record<string, string> = {
   匹配规则: "Matching rules",
   左值: "Left value",
   右值: "Right value",
-  "匹配规则（每行一个，可用 *）": "Matching rules (one per line; * is supported)",
+  "匹配规则（每行一个，可用 *）":
+    "Matching rules (one per line; * is supported)",
   协议准入: "Protocol access",
   思考强度: "Reasoning effort",
   输出预算: "Output budget",
@@ -1063,8 +1083,10 @@ export const en: Record<string, string> = {
   决策模型: "Decision model",
   请选择已配置价格的决策模型: "Choose a decision model with pricing",
   未配置价格: "Pricing not configured",
-  旧决策服务需要迁移到渠道并配置价格: "Move the old decision service to a channel and configure its pricing",
-  远程决策请通过渠道测试请求: "Test remote decisions with a channel test request",
+  旧决策服务需要迁移到渠道并配置价格:
+    "Move the old decision service to a channel and configure its pricing",
+  远程决策请通过渠道测试请求:
+    "Test remote decisions with a channel test request",
   "密钥引用（可选）": "Secret reference (optional)",
   失败或低置信度: "On failure or low confidence",
   使用指定保底候选: "Use fallback candidate",
@@ -2619,30 +2641,19 @@ export const en: Record<string, string> = {
   "发送验证码后可填写。": "Available after sending a verification code.",
   不扣平台余额: "No platform balance deduction",
   "个人渠道 · 不扣平台余额": "Personal channels \u00b7 No platform charge",
-  使用分组: "Service group",
   使用范围: "Usage scope",
   保存并离开: "Save and leave",
   允许使用的用户: "Allowed users",
   全部平台渠道: "All platform channels",
-  分组倍率: "Group multiplier",
-  分组名称: "Group name",
-  启用分组: "Enable group",
-  "实际消耗按模型价格、渠道倍率和分组倍率计算。停用分组后，绑定密钥将停止调用。":
-    "Usage is calculated from model prices, channel and group multipliers. Disabling a group stops its bound keys.",
   密钥使用范围: "Key usage scope",
-  "平台调用按所选分组计费，从平台余额扣除。":
-    "Platform calls are billed at the selected group rates and deducted from your platform balance.",
   "成功流式请求 · 平均完成耗时 {0}":
     "Successful streams \u00b7 Average completion time {0}",
   指定用户: "Selected users",
   放弃更改并离开: "Discard and leave",
   无可用渠道: "No available channels",
-  添加分组: "Add group",
   继续编辑: "Continue editing",
-  编辑使用分组: "Edit service group",
   "请先添加个人渠道。": "Add a personal channel first.",
   预览模型: "Preview model",
-  默认分组: "Default group",
   未进入计费: "Billing not started",
   未进入渠道: "Routing not completed",
   "流程需要 1–64 个节点": "A flow needs 1\u201364 nodes",
@@ -2660,18 +2671,12 @@ export const en: Record<string, string> = {
     "Protocol branches need a valid ingress protocol",
   "订阅账号当前无法使用。请检查授权、额度和模型支持情况，或选择其他可用渠道。":
     "The subscription account is unavailable. Check authorization, quota and model support, or choose another channel.",
-  "使用分组已停用或无权访问，请检查密钥分组。":
-    "The group is disabled or access is denied. Check the key binding.",
-  "目标渠道不在使用分组内，请调整分组渠道或路由目标。":
-    "The target channel is outside this group. Adjust its channels or routing target.",
   "当前密钥无权使用此渠道，请检查绑定范围。":
     "This key cannot access the channel. Check its scope.",
   "平台余额不足，请充值后重试。":
     "Insufficient platform balance. Top up and retry.",
   "模型尚未配置有效价格，请联系管理员。":
     "The model has no valid price. Contact an administrator.",
-  "当前使用范围内没有此模型，请重新选择模型或分组。":
-    "This model is outside your usage scope. Choose another model or group.",
   "当前没有可用渠道，请稍后重试或联系管理员。":
     "No channel is available. Retry later or contact an administrator.",
   "同名模型存在多个路由，请选择渠道后试算":
@@ -2680,7 +2685,6 @@ export const en: Record<string, string> = {
     "This channel selects its billing model from the request. Provide the request to calculate the cost.",
   "自动路由尚未确定计费模型，无法提供固定费用试算":
     "Automatic routing has not selected a billing model, so a fixed cost cannot be calculated.",
-  添加使用分组: "Add service group",
   查看图表: "View diagram",
   查看代码: "View source",
   "图表语法无效，已显示原始代码。":
@@ -2692,13 +2696,9 @@ export const en: Record<string, string> = {
   很高: "Extra high",
   最高: "Maximum",
   对话记录: "Conversation",
-  平台分组: "Platform group",
   失败后切换: "Fallback on rejection",
   不切换: "No fallback",
   使用模型映射: "Use model mapping",
-  请选择分组: "Select a group",
-  "调用此节点会按平台分组价格扣除余额。":
-    "Calls through this node are charged at the platform group rate.",
   备用切换: "Fallback",
   计费说明: "Billing details",
   "上游未提供完整用量，费用尚未确认。":
@@ -2758,8 +2758,6 @@ export const en: Record<string, string> = {
   视频: "Video",
   "参考图片（用于编辑）": "Reference images (for editing)",
   参考图片: "Reference image",
-  当前分组暂无图片模型: "No image models in this group",
-  当前分组暂无视频模型: "No video models in this group",
   "描述要生成的图片…": "Describe the image…",
   "描述画面、动作和镜头…": "Describe the scene, motion and camera…",
   "正在生成图片…": "Generating image…",
@@ -2787,4 +2785,11 @@ export const en: Record<string, string> = {
   含流程内部调用: "Includes workflow calls",
   "消耗分类按实际调用统计，包含流程内部调用。":
     "Consumption counts actual calls, including workflow calls.",
+  渠道范围: "Channel scope",
+  "未选择时使用全部平台渠道。": "Leave empty to use all platform channels.",
+  请选择渠道: "Select a channel",
+  当前渠道暂无图片模型: "No image models in this channel",
+  当前渠道暂无视频模型: "No video models in this channel",
+  "当前使用范围内没有此模型，请重新选择模型或渠道。":
+    "This model is outside your scope. Select another model or channel.",
 };

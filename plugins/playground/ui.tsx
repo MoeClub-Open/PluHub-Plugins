@@ -1,8 +1,4 @@
 import { requestErrorHint } from "../../lib/ui/request-error.js";
-import {
-  useServiceGroups,
-  ServiceGroupSelect,
-} from "../../lib/ui/service-groups.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
@@ -113,11 +109,6 @@ function ChatPage({
   const [storageKey] = React.useState(chatStorageKey);
   const [initial] = React.useState(() => readChat(storageKey));
   const [channel, setChannel] = React.useState(initial.channel);
-  const [group, setGroup] = React.useState(
-    initial.group ??
-      (initial.channel.startsWith("personal:") ? "personal" : "default"),
-  );
-  const serviceGroups = useServiceGroups(host);
   const channels = useLoad<any[]>(() =>
     host.request("/api/plugins/official.ai-router/channels").catch(() => []),
   );
@@ -125,11 +116,9 @@ function ChatPage({
     () =>
       host.request(
         "/api/plugins/official.playground/models?channel=" +
-          encodeURIComponent(channel) +
-          "&group=" +
-          encodeURIComponent(group),
+          encodeURIComponent(channel),
       ),
-    [channel, group],
+    [channel],
   );
   const [model, setModel] = React.useState(initial.model);
   const [modelChannel, setModelChannel] = React.useState(initial.modelChannel);
@@ -156,10 +145,9 @@ function ChatPage({
   const transcript = React.useRef<HTMLDivElement>(null);
   const latest = React.useRef<ChatSession>(initial);
   latest.current = {
-    version: 1,
+    version: 2,
     sessionId: session.current,
     channel,
-    group,
     model,
     modelChannel,
     prompt,
@@ -181,7 +169,6 @@ function ChatPage({
     return () => clearTimeout(timer);
   }, [
     channel,
-    group,
     model,
     modelChannel,
     prompt,
@@ -271,7 +258,7 @@ function ChatPage({
         headers: {
           "content-type": "application/json",
           "x-pluhub-session-id": session.current,
-          ...(group !== "personal" ? { "x-pluhub-group": group } : {}),
+
           ...(modelChannel ? { "x-pluhub-channel": modelChannel } : {}),
         },
         body: JSON.stringify({
@@ -377,7 +364,7 @@ function ChatPage({
   }
   return (
     <div className="chat-page">
-      <Notice message={error || serviceGroups.error || models.error} />
+      <Notice message={error || models.error} />
       {!models.error && models.data && model && !selectedModel && (
         <Notice
           message={tr(
@@ -386,19 +373,6 @@ function ChatPage({
         />
       )}
       <div className="chat-toolbar">
-        <ServiceGroupSelect
-          value={group}
-          groups={serviceGroups.data}
-          disabled={busy}
-          onChange={(value) => {
-            setGroup(value);
-            setChannel("");
-            setModel("");
-            setModelChannel("");
-            setMeta({});
-            setError("");
-          }}
-        />
         <label>
           {tr("模型来源")}
           <Select
@@ -414,21 +388,12 @@ function ChatPage({
             }}
           >
             <option value="">{tr("全部渠道")}</option>
-            {channels.data
-              ?.filter((c) =>
-                group === "personal"
-                  ? c.scope === "personal"
-                  : c.scope === "platform" &&
-                    serviceGroups.data
-                      ?.find((g) => g.id === group)
-                      ?.channelIds.includes(c.id),
-              )
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
-                  {c.name}
-                </option>
-              ))}
+            {channels.data?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.scope === "personal" ? tr("个人 · ") : tr("平台 · ")}
+                {c.name}
+              </option>
+            ))}
           </Select>
         </label>
         <div className="actions">
@@ -452,7 +417,11 @@ function ChatPage({
         </div>
       </div>
       {!!selectedModel?.requestFee && (
-        <p className="field-note">{tr("平台手续费：{0} USD / 次", { "0": textValue(selectedModel.requestFee) })}</p>
+        <p className="field-note">
+          {tr("平台手续费：{0} USD / 次", {
+            "0": textValue(selectedModel.requestFee),
+          })}
+        </p>
       )}
       <div className="playground-grid">
         <section className="chat-panel">

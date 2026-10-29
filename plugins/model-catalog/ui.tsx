@@ -1,7 +1,3 @@
-import {
-  useServiceGroups,
-  ServiceGroupSelect,
-} from "../../lib/ui/service-groups.js";
 import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
@@ -71,12 +67,6 @@ function Page({ host }: { host: UIHost }) {
   const [channel, setChannel] = React.useState(
     new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "",
   );
-  const [group, setGroup] = React.useState(
-    () =>
-      new URLSearchParams(location.hash.split("?")[1]).get("group") ??
-      (channel.startsWith("personal:") ? "personal" : "default"),
-  );
-  const serviceGroups = useServiceGroups(host, guest);
   const channels = useLoad<any[]>(
     () =>
       guest
@@ -92,11 +82,9 @@ function Page({ host }: { host: UIHost }) {
         guest
           ? "/api/plugins/official.model-catalog/public"
           : "/api/plugins/official.model-catalog/models?channel=" +
-              encodeURIComponent(channel) +
-              "&group=" +
-              encodeURIComponent(group),
+              encodeURIComponent(channel),
       ),
-    [channel, group, guest],
+    [channel, guest],
   );
   const [search, setSearch] = React.useState(
     () => new URLSearchParams(location.hash.split("?")[1]).get("q") ?? "",
@@ -147,15 +135,8 @@ function Page({ host }: { host: UIHost }) {
             ]),
         ).values(),
       ]
-    : (channels.data ?? []).filter((c) =>
-        group === "personal"
-          ? c.scope === "personal"
-          : c.scope === "platform" &&
-            serviceGroups.data
-              ?.find((g) => g.id === group)
-              ?.channelIds.includes(c.id),
-      );
-  const groups = [
+    : (channels.data ?? []);
+  const sections = [
     ...new Set(models.map((model) => model.channel?.id ?? "")),
   ].map((id) => ({
     id,
@@ -163,10 +144,6 @@ function Page({ host }: { host: UIHost }) {
   }));
   const playPath = (model?: CatalogModel) => {
     const params = new URLSearchParams();
-    params.set(
-      "group",
-      model?.channel?.scope === "personal" ? "personal" : group,
-    );
     if (model) {
       params.set("model", model.id);
       params.set("mode", playgroundMode(model) ?? "chat");
@@ -214,18 +191,6 @@ function Page({ host }: { host: UIHost }) {
       </PageHeading>
 
       <div className="toolbar catalog-toolbar">
-        {!guest && (
-          <ServiceGroupSelect
-            value={group}
-            groups={serviceGroups.data}
-            onChange={(value) => {
-              setGroup(value);
-              setChannel("");
-              setProvider("");
-              setSelected(undefined);
-            }}
-          />
-        )}
         <Select
           aria-label={tr("模型目录渠道")}
           value={channel}
@@ -271,7 +236,7 @@ function Page({ host }: { host: UIHost }) {
           <option value="price">{tr("输入价格从低到高")}</option>
         </Select>
       </div>
-      {(loaded.error || serviceGroups.error) && (
+      {loaded.error && (
         <div className="notice" role="alert">
           {tr("模型目录暂时无法加载。")}
           <button className="ghost" onClick={loaded.reload}>
@@ -283,7 +248,7 @@ function Page({ host }: { host: UIHost }) {
         <span role="status">
           {loaded.data
             ? tr("{0} 个模型", { "0": textValue(models.length) })
-            : loaded.error || serviceGroups.error
+            : loaded.error
               ? tr("加载失败")
               : tr("正在加载模型…")}
         </span>
@@ -310,16 +275,16 @@ function Page({ host }: { host: UIHost }) {
         </Empty>
       ) : (
         <div className="catalog-channel-list">
-          {groups.map((group) => (
-            <section className="catalog-channel" key={group.id}>
+          {sections.map((section) => (
+            <section className="catalog-channel" key={section.id}>
               <div className="section-heading catalog-channel-heading">
-                <h2>{group.models[0]?.channel?.name ?? tr("平台模型")}</h2>
+                <h2>{section.models[0]?.channel?.name ?? tr("平台模型")}</h2>
                 <span className="feature-pill">
                   {tr("渠道消耗倍率")} ×
-                  {group.models[0]?.consumptionMultiplier ?? 1}
+                  {section.models[0]?.consumptionMultiplier ?? 1}
                 </span>
                 <span className="muted">
-                  {tr("{0} 个模型", { "0": textValue(group.models.length) })}
+                  {tr("{0} 个模型", { "0": textValue(section.models.length) })}
                 </span>
               </div>
               <div className="catalog-list">
@@ -329,7 +294,7 @@ function Page({ host }: { host: UIHost }) {
                   <span>{tr("扣费价格")}</span>
                   <span>{tr("操作")}</span>
                 </div>
-                {group.models.map((model) => (
+                {section.models.map((model) => (
                   <article
                     className="model-row"
                     key={model.channel?.id + ":" + model.id}
@@ -546,20 +511,27 @@ function Page({ host }: { host: UIHost }) {
               </dl>
             )}
             {!guest &&
-              (selected.channel?.scope === "personal" ? (selected.requestFee ?? 0) > 0 :
-              (["request", "expression"].includes(
-                selected.pricing?.mode ?? "tokens",
-              ) ||
-                (selected.inputPrice !== undefined &&
-                  selected.outputPrice !== undefined))) && (
+              (selected.channel?.scope === "personal"
+                ? (selected.requestFee ?? 0) > 0
+                : ["request", "expression"].includes(
+                    selected.pricing?.mode ?? "tokens",
+                  ) ||
+                  (selected.inputPrice !== undefined &&
+                    selected.outputPrice !== undefined)) && (
                 <PriceQuote
                   key={selected.channel?.id + ":" + selected.id}
                   host={host}
                   model={selected.id}
-                  groupId={selected.serviceGroup?.id}
                   channelId={selected.channel?.id ?? (channel || undefined)}
-                  requestPriced={selected.channel?.scope === "personal" || selected.pricing?.mode === "request"}
-                  expression={selected.channel?.scope === "personal" ? undefined : selected.pricing?.expression}
+                  requestPriced={
+                    selected.channel?.scope === "personal" ||
+                    selected.pricing?.mode === "request"
+                  }
+                  expression={
+                    selected.channel?.scope === "personal"
+                      ? undefined
+                      : selected.pricing?.expression
+                  }
                 />
               )}
             <details className="catalog-api-example">

@@ -15,8 +15,8 @@ import type {
 export default definePlugin({
   setup(host) {
     async function visibleModels(ctx: RequestContext) {
-      if (!host.hasCapability("ai.catalog@2")) return [];
-      const models = await host.call<CatalogModel[]>("ai.catalog@2", {
+      if (!host.hasCapability("ai.catalog@3")) return [];
+      const models = await host.call<CatalogModel[]>("ai.catalog@3", {
         principalId: ctx.principal!.id,
         ...channelScope(ctx.principal),
       });

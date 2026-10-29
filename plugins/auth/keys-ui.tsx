@@ -4,7 +4,6 @@ import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { ChannelBinding, type KeyChannel } from "./channel-binding-ui.js";
-import { useServiceGroups } from "../../lib/ui/service-groups.js";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
 import {
   PageHeading,
@@ -24,7 +23,6 @@ type Key = {
   expires_at?: number | null;
   last_used_at?: number;
   channelIds: string[];
-  groupId?: string | null;
 };
 export function Keys({ host }: { host: UIHost }) {
   const keys = useLoad<Key[]>(() => host.request(api));
@@ -44,13 +42,6 @@ export function Keys({ host }: { host: UIHost }) {
   const channelNames = useLoad<KeyChannel[]>(() =>
     host.request("/api/plugins/official.ai-router/channels"),
   );
-  const groups = useServiceGroups(host);
-  const groupLabel = (id: string) => {
-    const group = groups.data?.find((g) => g.id === id);
-    return group
-      ? `${group.name} · ×${group.multiplier}`
-      : id + " · " + tr("不可用");
-  };
   const initialChannel =
     new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "";
   const channelLabel = (id?: string) => {
@@ -58,7 +49,7 @@ export function Keys({ host }: { host: UIHost }) {
     const channel = channelNames.data?.find((entry) => entry.id === id);
     return channel
       ? channel.scope === "personal"
-        ? channel.name + " · " + tr("不扣平台余额")
+        ? channel.name + " · " + tr("个人渠道")
         : `${channel.name} · ×${channel.consumptionMultiplier ?? 1}`
       : tr("绑定渠道不可用");
   };
@@ -71,7 +62,6 @@ export function Keys({ host }: { host: UIHost }) {
         key.prefix,
         ...(key.models ?? []),
         ...key.channelIds.map(channelLabel),
-        key.groupId ? groupLabel(key.groupId) : "",
       ]
         .join(" ")
         .toLowerCase()
@@ -97,7 +87,6 @@ export function Keys({ host }: { host: UIHost }) {
           onClick={() => {
             keys.reload();
             channelNames.reload();
-            groups.reload();
           }}
         >
           <Icon name="refresh" size={15} />
@@ -175,11 +164,7 @@ export function Keys({ host }: { host: UIHost }) {
                       : tr("全部模型")}
                   </span>
                   <div className="key-bound-channels">
-                    {key.groupId ? (
-                      <span className="feature-pill">
-                        {groupLabel(key.groupId)}
-                      </span>
-                    ) : key.channelIds.length ? (
+                    {key.channelIds.length ? (
                       key.channelIds.map((id) => (
                         <span className="feature-pill" key={id}>
                           {channelLabel(id)}
@@ -325,7 +310,7 @@ export function Keys({ host }: { host: UIHost }) {
           }
           close={close}
         >
-          <Notice message={message || channelNames.error || groups.error} />
+          <Notice message={message || channelNames.error} />
           {token ? (
             <SecretCopy value={token} close={close} onMessage={setMessage} />
           ) : (
@@ -343,7 +328,6 @@ export function Keys({ host }: { host: UIHost }) {
                       ...(editing ? { id: editing.id } : {}),
                       name: fields.get("name"),
                       channelIds: fields.getAll("channelIds").map(String),
-                      groupId: fields.get("groupId") || null,
                       models: String(fields.get("models") ?? "")
                         .split(",")
                         .map((s) => s.trim())
@@ -381,13 +365,9 @@ export function Keys({ host }: { host: UIHost }) {
               </label>
               <ChannelBinding
                 channels={channelNames.data ?? []}
-                groups={groups.data}
-                initialGroup={editing?.groupId}
                 initialChannels={
                   editing?.channelIds ??
-                  (initialChannel.startsWith("personal:") && !editing
-                    ? [initialChannel]
-                    : [])
+                  (initialChannel && !editing ? [initialChannel] : [])
                 }
                 disabled={busy}
               />

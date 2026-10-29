@@ -80,7 +80,7 @@ export const workflowNodeLabels: Record<WorkflowNode["type"], string> = {
     return tr("调用上游");
   },
   get platform() {
-    return tr("平台分组");
+    return tr("平台渠道");
   },
   get routing() {
     return tr("自动路由");
@@ -432,7 +432,7 @@ function summary(node: WorkflowNode, channel?: Upstream) {
         tr(node.conversion === "auto" ? "自动转换" : "仅同协议")
       );
     case "platform":
-      return node.model || tr("平台分组");
+      return node.model || tr("平台渠道");
     case "routing":
       return node.profile;
     case "upstream":
@@ -804,7 +804,10 @@ function Canvas(props: CanvasProps) {
     if (
       source.type === "start" &&
       source.next.includes(connection.target) &&
-      !(reconnecting.current?.source === source.id && reconnecting.current.target === connection.target)
+      !(
+        reconnecting.current?.source === source.id &&
+        reconnecting.current.target === connection.target
+      )
     )
       return false;
     const seen = new Set<string>();

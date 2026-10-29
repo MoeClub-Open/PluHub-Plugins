@@ -5,7 +5,7 @@
   "name": "计费与余额",
   "description": "管理余额预留、结算和资金账本。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.35",
+  "version": "0.1.0-alpha.36",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -25,8 +25,8 @@
   "optionalRequires": [
     "auth.admin@1",
     "users.lookup@1",
-    "ai.catalog@2",
-    "ai.routing@2"
+    "ai.catalog@3",
+    "ai.routing@3"
   ],
   "permissions": ["api.register", "hooks.register"],
   "configReload": "snapshot",

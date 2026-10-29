@@ -88,15 +88,20 @@ it("rejects incompatible types, duplicate inputs, cycles and request-derived sen
   ).toThrow(/静态输入/);
 });
 
-it("uses resolved personal interfaces and fallback group while retaining the owner's connection", () => {
+it("uses resolved personal interfaces and fallback channel while retaining the owner's connection", () => {
   const flow: ChannelWorkflow = {
     entry: "s",
     nodes: [
       { id: "s", type: "start", next: ["call"] },
       { id: "call", type: "provider", fallback: "backup" },
-      { id: "backup", type: "platform", groupId: "old" },
+      { id: "backup", type: "platform", channelId: "old" },
       { id: "path", type: "value", valueType: "string", value: "/v1/selected" },
-      { id: "group", type: "value", valueType: "string", value: "new" },
+      {
+        id: "target-channel",
+        type: "value",
+        valueType: "string",
+        value: "new",
+      },
     ],
     bindings: [
       {
@@ -105,7 +110,12 @@ it("uses resolved personal interfaces and fallback group while retaining the own
         target: "call",
         input: "interfaces.0.path",
       },
-      { source: "group", output: "value", target: "backup", input: "groupId" },
+      {
+        source: "target-channel",
+        output: "value",
+        target: "backup",
+        input: "channelId",
+      },
     ],
   };
   const interfaces = [
@@ -120,7 +130,7 @@ it("uses resolved personal interfaces and fallback group while retaining the own
     personalInterfaces: interfaces,
   });
   expect(result.providerNode?.interfaces?.[0]?.path).toBe("/v1/selected");
-  expect(result.fallback?.groupId).toBe("new");
+  expect(result.fallback?.channelId).toBe("new");
   expect(interfaces[0]?.path).toBe("/v1/original");
   expect(result.providerNode?.upstream).toBeUndefined();
 });

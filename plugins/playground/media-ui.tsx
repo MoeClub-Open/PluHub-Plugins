@@ -5,10 +5,6 @@ import { useLoad, Notice } from "../../lib/ui/mount.js";
 import { Select } from "../../lib/ui/select.js";
 import { Icon, latency } from "../../lib/ui/components.js";
 import { t as tr } from "../../lib/ui/i18n.js";
-import {
-  ServiceGroupSelect,
-  useServiceGroups,
-} from "../../lib/ui/service-groups.js";
 import { chatStorageKey } from "./session.js";
 import {
   mediaResult,
@@ -35,11 +31,6 @@ export function MediaPage({
       return {};
     }
   });
-  const [group, setGroup] = React.useState(
-    params.get("group") ??
-      saved.group ??
-      (params.get("channel")?.startsWith("personal:") ? "personal" : "default"),
-  );
   const [channel, setChannel] = React.useState(
     params.get("channel") ?? saved.channel ?? "",
   );
@@ -74,7 +65,6 @@ export function MediaPage({
   const [error, setError] = React.useState("");
   const [meta, setMeta] = React.useState<{ id?: string; elapsed?: number }>();
   const controller = React.useRef<AbortController | null>(null);
-  const groups = useServiceGroups(host);
   const channels = useLoad<any[]>(() =>
     host.request("/api/plugins/official.ai-router/channels"),
   );
@@ -83,9 +73,9 @@ export function MediaPage({
     () =>
       host.request(
         "/api/plugins/official.playground/models?" +
-          new URLSearchParams({ channel, group, operation }),
+          new URLSearchParams({ channel, operation }),
       ),
-    [channel, group, kind],
+    [channel, kind],
   );
   const selected = models.data?.find(
     (model) =>
@@ -107,7 +97,6 @@ export function MediaPage({
       sessionStorage.setItem(
         storageKey,
         JSON.stringify({
-          group,
           channel,
           selection,
           prompt,
@@ -123,7 +112,6 @@ export function MediaPage({
     } catch {}
   }, [
     storageKey,
-    group,
     channel,
     selection,
     prompt,
@@ -220,7 +208,6 @@ export function MediaPage({
     try {
       let requestBody: BodyInit = JSON.stringify(input);
       const headers = new Headers({
-        ...(group !== "personal" ? { "x-pluhub-group": group } : {}),
         ...(selected.channel?.id
           ? { "x-pluhub-channel": selected.channel.id }
           : {}),
@@ -264,20 +251,8 @@ export function MediaPage({
   }
   return (
     <>
-      <Notice
-        message={error || groups.error || models.error || channels.error}
-      />
+      <Notice message={error || models.error || channels.error} />
       <div className="chat-toolbar">
-        <ServiceGroupSelect
-          value={group}
-          groups={groups.data}
-          disabled={busy}
-          onChange={(value) => {
-            setGroup(value);
-            setChannel("");
-            setSelection("");
-          }}
-        />
         <label>
           {tr("模型来源")}
           <Select
@@ -289,20 +264,11 @@ export function MediaPage({
             }}
           >
             <option value="">{tr("全部渠道")}</option>
-            {channels.data
-              ?.filter((c) =>
-                group === "personal"
-                  ? c.scope === "personal"
-                  : c.scope === "platform" &&
-                    groups.data
-                      ?.find((g) => g.id === group)
-                      ?.channelIds.includes(c.id),
-              )
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+            {channels.data?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </Select>
         </label>
       </div>
@@ -355,15 +321,19 @@ export function MediaPage({
                 ))}
               </Select>
               {!!selected?.requestFee && (
-                <small>{tr("平台手续费：{0} USD / 次", { "0": String(selected.requestFee) })}</small>
+                <small>
+                  {tr("平台手续费：{0} USD / 次", {
+                    "0": String(selected.requestFee),
+                  })}
+                </small>
               )}
             </label>
             {models.data && !models.data.length && (
               <p className="field-note">
                 {tr(
                   kind === "image"
-                    ? "当前分组暂无图片模型"
-                    : "当前分组暂无视频模型",
+                    ? "当前渠道暂无图片模型"
+                    : "当前渠道暂无视频模型",
                 )}
               </p>
             )}

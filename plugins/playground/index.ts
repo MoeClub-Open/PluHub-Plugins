@@ -9,7 +9,7 @@ export default definePlugin({
       access: "authenticated",
       async handle(request, ctx) {
         const models = await host.call<CatalogModel[]>(
-          "ai.catalog@2",
+          "ai.catalog@3",
           catalogScope(request, ctx),
         );
         const allowed = ctx.principal?.attributes?.models as

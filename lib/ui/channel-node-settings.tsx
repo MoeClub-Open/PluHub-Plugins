@@ -5,7 +5,10 @@ import { t as tr } from "./i18n.js";
 import { ProviderNodeSettings } from "./channel-provider-settings.js";
 import { FlowParameter } from "./flow-parameter-port.js";
 import { SecretInput } from "./secret-input.js";
-import { LinesField, WorkflowDataNodeSettings } from "./workflow-data-node-settings.js";
+import {
+  LinesField,
+  WorkflowDataNodeSettings,
+} from "./workflow-data-node-settings.js";
 import type { WorkflowNode } from "@pluhub/contracts/workflow";
 import type { UpstreamInterface, Protocol } from "@pluhub/contracts/ai";
 import type { ChannelPanel } from "./channel-location.js";
@@ -17,8 +20,8 @@ export const ingressOptions: { value: Protocol; label: string }[] = [
 ];
 export interface ChannelNodeContext {
   personal: boolean;
-  platformGroups?: {
-    data?: { id: string; name: string; multiplier: number }[];
+  platformChannels?: {
+    data?: { id: string; name: string; scope: string }[];
   };
   platformNodes?: Extract<WorkflowNode, { type: "platform" }>[];
   channel: any;
@@ -284,9 +287,9 @@ export function ChannelNodeSettings({
                 <option value="">{tr("不切换")}</option>
                 {context.platformNodes?.map((target) => (
                   <option key={target.id} value={target.id}>
-                    {context.platformGroups?.data?.find(
-                      (group) => group.id === target.groupId,
-                    )?.name ?? target.groupId}{" "}
+                    {context.platformChannels?.data?.find(
+                      (channel) => channel.id === target.channelId,
+                    )?.name ?? target.channelId}{" "}
                     · {target.model || tr("使用模型映射")}
                   </option>
                 ))}
@@ -297,19 +300,19 @@ export function ChannelNodeSettings({
       )}
       {node.type === "platform" && (
         <>
-          <FlowParameter field="groupId">
+          <FlowParameter field="channelId">
             <label>
-              {tr("使用分组")}
+              {tr("平台渠道")}
               <Select
-                value={node.groupId}
-                onChange={(e) => change({ groupId: e.target.value })}
+                value={node.channelId}
+                onChange={(e) => change({ channelId: e.target.value })}
               >
                 <option value="" disabled>
-                  {tr("请选择分组")}
+                  {tr("请选择渠道")}
                 </option>
-                {context.platformGroups?.data?.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name} · ×{group.multiplier}
+                {context.platformChannels?.data?.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.name}
                   </option>
                 ))}
               </Select>
@@ -325,9 +328,6 @@ export function ChannelNodeSettings({
               />
             </label>
           </FlowParameter>
-          <p className="field-note">
-            {tr("调用此节点会按平台分组价格扣除余额。")}
-          </p>
         </>
       )}
       {node.type === "routing" && (

@@ -1,4 +1,3 @@
-import { serviceGroups, groupAccess } from "./groups.js";
 import { modelDefinition } from "../../lib/ai/model-definition.js";
 import { installConfiguration } from "./configuration.js";
 import {
@@ -53,34 +52,13 @@ export default definePlugin({
     installJevIngress(host);
     installDecisionIngress(host);
     installWorkflowExecution(host);
-    const groups = (input?: { userId?: string }) =>
-      Object.entries(serviceGroups(host.config()))
-        .filter(([, group]) => groupAccess(group, input?.userId))
-        .map(([id, group]) => ({
-          id,
-          name: group.name,
-          multiplier: group.multiplier ?? 1,
-          channelIds:
-            group.channelIds ?? Object.keys(host.config().upstreams ?? {}),
-        }));
-    host.provide("ai.groups@1", groups);
-    host.api({
-      method: "GET",
-      path: "/groups",
-      access: "authenticated",
-      handle: async (_request, ctx) =>
-        json(groups({ userId: ctx.principal?.id })),
-    });
     const getCatalog = (input?: CatalogScope) => readCatalog(host, input);
-    host.provide("ai.catalog@2", getCatalog);
+    host.provide("ai.catalog@3", getCatalog);
     async function channels(input?: { userId?: string }) {
-      const allowed = new Set(
-        groups(input).flatMap((group) => group.channelIds),
-      );
       const platform = Object.entries(
         (host.config().upstreams ?? {}) as Record<string, Upstream>,
       )
-        .filter(([id, u]) => u.enabled !== false && allowed.has(id))
+        .filter(([, u]) => u.enabled !== false)
         .map(([id, u]) => ({
           id,
           name: u.name ?? id,
@@ -131,7 +109,6 @@ export default definePlugin({
             request: input.request,
             features: ["text", "usage"],
             principalId: input.principalId,
-            groupId: input.groupId,
             ingressProtocol: input.ingressProtocol,
             pricingContext: input.pricingContext,
           },
@@ -145,7 +122,11 @@ export default definePlugin({
           },
         );
         if (target.plan.kind !== "provider")
-          throw new HostError("invalid_route", "候选必须解析为实际的上游调用", 400);
+          throw new HostError(
+            "invalid_route",
+            "候选必须解析为实际的上游调用",
+            400,
+          );
         const { upstream, model } = target.plan;
         if (upstream.subscriptionAccountIds) {
           const state = await host.call<{ available: boolean }>(
@@ -232,7 +213,10 @@ export default definePlugin({
             "invalid_config",
             "Subscription account manager is required; use a single credential source",
           );
-      } else if (!isDecisionProtocol(upstream.protocol) && !keyReferences(upstream.keyRef).length)
+      } else if (
+        !isDecisionProtocol(upstream.protocol) &&
+        !keyReferences(upstream.keyRef).length
+      )
         throw new HostError("invalid_config", "请配置上游密钥");
       let url: URL;
       try {
@@ -262,10 +246,6 @@ export default definePlugin({
         );
     }
     host.validateConfig((config) => {
-      for (const [id, group] of Object.entries(serviceGroups(config))) {
-        if (id !== "default" && !Array.isArray(group.channelIds))
-          throw new HostError("invalid_config", "分组需要选择渠道");
-      }
       for (const model of Object.values(config.models ?? {}) as ModelRoute[]) {
         routePricing(model);
         modelDefinition(model);
@@ -283,7 +263,7 @@ export default definePlugin({
             )
               throw new HostError(
                 "invalid_config",
-                "平台分组节点仅用于个人渠道",
+                "平台渠道委托仅用于个人渠道",
               );
             if (
               node.type === "upstream" &&
@@ -362,7 +342,6 @@ export default definePlugin({
         const scope = channelScope(
           ctx.principal,
           request.headers.get("x-pluhub-channel") ?? undefined,
-          request.headers.get("x-pluhub-group") ?? undefined,
         );
         const allowed = ctx.principal?.attributes?.models as
           string[] | undefined;
@@ -391,13 +370,13 @@ export default definePlugin({
           {
             headers: {
               "cache-control": "private, no-store",
-              vary: "Cookie, Authorization, x-pluhub-channel, x-pluhub-group",
+              vary: "Cookie, Authorization, x-pluhub-channel",
             },
           },
         );
       },
     });
-    host.provide("ai.routing@2", (request: RoutingRequest, signal) =>
+    host.provide("ai.routing@3", (request: RoutingRequest, signal) =>
       planRoute(host, request, signal),
     );
     host.provide(
@@ -407,7 +386,11 @@ export default definePlugin({
         signal,
       ) => {
         if (plan.kind !== "provider")
-          throw new HostError("invalid_route", "上游执行需要完整的调用计划", 400);
+          throw new HostError(
+            "invalid_route",
+            "上游执行需要完整的调用计划",
+            400,
+          );
         const actual = {
           ...(plan.preparedRequest ?? request),
           model: plan.model,

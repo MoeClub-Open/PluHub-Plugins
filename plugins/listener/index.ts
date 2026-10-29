@@ -30,7 +30,7 @@ export default definePlugin({
         let ready = req.url === "/healthz";
         try {
           ready ||=
-            host.hasCapability("ai.routing@2") &&
+            host.hasCapability("ai.routing@3") &&
             host.hasCapability("auth.admit@1");
         } catch {
           /* A missing dependency must fail readiness, not terminate the listener. */

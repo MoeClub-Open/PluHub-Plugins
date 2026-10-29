@@ -78,15 +78,20 @@ it("applies the same transforms, limits and bound fallback in both execution mod
       { id: "limit", type: "rateLimit", rule: { rpm: 4 }, next: "budget" },
       { id: "budget", type: "maxTokens", limit: 5, next: "provider" },
       { id: "provider", type: "provider", fallback: "platform" },
-      { id: "platform", type: "platform", groupId: "initial" },
-      { id: "group", type: "value", valueType: "string", value: "chosen" },
+      { id: "platform", type: "platform", channelId: "initial" },
+      {
+        id: "target-channel",
+        type: "value",
+        valueType: "string",
+        value: "chosen",
+      },
     ],
     bindings: [
       {
-        source: "group",
+        source: "target-channel",
         output: "value",
         target: "platform",
-        input: "groupId",
+        input: "channelId",
       },
     ],
   };
@@ -114,7 +119,7 @@ it("applies the same transforms, limits and bound fallback in both execution mod
     },
   );
   expect(result).toEqual(runWorkflow("channel", flow, request, signal));
-  expect(result.fallback?.groupId).toBe("chosen");
+  expect(result.fallback?.channelId).toBe("chosen");
   expect(limits).toEqual(result.requestLimits);
   expect(request.messages).toHaveLength(1);
 });

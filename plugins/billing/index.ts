@@ -17,7 +17,6 @@ import { integer } from "../../lib/commerce/money.js";
 import { reserveCost } from "../../lib/commerce/pricing.js";
 import { installPriceQuote } from "./quote.js";
 import { mediaInputBound } from "../../lib/ai/media.js";
-import { retirePricingFactors } from "../../lib/commerce/migrations.js";
 import { observation } from "../../lib/ai/telemetry.js";
 import { requireAdmin, adminTarget } from "../../lib/admin/access.js";
 import { installBillingAdmin } from "./admin.js";
@@ -38,14 +37,10 @@ export default definePlugin({
   `,
       "CREATE TABLE adjustments(source TEXT PRIMARY KEY,actor TEXT NOT NULL,reason TEXT NOT NULL);",
       `ALTER TABLE reservations ADD COLUMN pricing TEXT;
-       ALTER TABLE reservations ADD COLUMN receipt TEXT;
-       CREATE TABLE pricing_users(user_id TEXT PRIMARY KEY,group_id TEXT NOT NULL,user_multiplier REAL NOT NULL);`,
+       ALTER TABLE reservations ADD COLUMN receipt TEXT;`,
       "CREATE INDEX ledger_user_id ON ledger(user_id,id);",
       paymentMigration,
       "ALTER TABLE reservations ADD COLUMN budget TEXT; ALTER TABLE reservations ADD COLUMN reported_usage TEXT;",
-      retirePricingFactors("reservations", "pricing") +
-        retirePricingFactors("reservations", "receipt", "$.pricing") +
-        "DROP TABLE pricing_users;",
     ]);
     host.cleanup(() => db.close());
     function wallet(userId: string, create = true) {
@@ -133,13 +128,18 @@ export default definePlugin({
     host.provide("billing.balance@1", ({ userId }) =>
       wallet(requiredString(userId, "userId")),
     );
-    host.provide("billing.personal-pricing@1", () => personalRequestPricing(host.config()));
+    host.provide("billing.personal-pricing@1", () =>
+      personalRequestPricing(host.config()),
+    );
     host.provide("billing.customer-status@1", ({ userId }) => {
       const id = requiredString(userId, "userId");
-      const row = db.prepare(`SELECT
+      const row = db
+        .prepare(
+          `SELECT
         EXISTS(SELECT 1 FROM ledger WHERE user_id=? AND amount>0 AND source LIKE 'payment:%') paid,
-        EXISTS(SELECT 1 FROM ledger WHERE user_id=? AND amount<0 AND source LIKE 'request:%') consumed`
-      ).get(id, id) as { paid: number; consumed: number };
+        EXISTS(SELECT 1 FROM ledger WHERE user_id=? AND amount<0 AND source LIKE 'request:%') consumed`,
+        )
+        .get(id, id) as { paid: number; consumed: number };
       return { paid: !!row.paid, consumed: !!row.consumed };
     });
     function admit(ctx: RequestContext, retry = false) {
@@ -163,7 +163,9 @@ export default definePlugin({
         personal ? "personal" : host.config().enabled ? "platform" : "disabled",
       );
       if (!host.config().enabled) return;
-      const pricing = personal ? personalRequestPricing(host.config()) : structuredClone(plan.pricing);
+      const pricing = personal
+        ? personalRequestPricing(host.config())
+        : structuredClone(plan.pricing);
       if (personal && !pricing?.request) return;
       if (personal) ctx.state.set("billing.mode", "personal-fee");
       if (!pricing)
@@ -176,18 +178,24 @@ export default definePlugin({
       let prepared = plan.preparedRequest ?? request;
       let budget: ReturnType<typeof outputBudget>["budget"] | undefined;
       if (!personal) {
-        ({ request: prepared, budget } = outputBudget(request, plan, host.config()));
+        ({ request: prepared, budget } = outputBudget(
+          request,
+          plan,
+          host.config(),
+        ));
         plan.preparedRequest = prepared;
         plan.pricing = pricing;
       }
-      const inputBound = personal ? 0 : prepared.operation
-        ? mediaInputBound(prepared)
-        : Buffer.byteLength(
-            JSON.stringify({
-              messages: prepared.messages,
-              tools: prepared.tools,
-            }),
-          ) + 1024;
+      const inputBound = personal
+        ? 0
+        : prepared.operation
+          ? mediaInputBound(prepared)
+          : Buffer.byteLength(
+              JSON.stringify({
+                messages: prepared.messages,
+                tools: prepared.tools,
+              }),
+            ) + 1024;
       const state = observation(ctx);
       if (state && !personal) {
         state.pricing = pricing;
@@ -197,7 +205,9 @@ export default definePlugin({
         inputBound,
         budget?.reservedTokens ?? 0,
         pricing,
-        !personal && prepared.webSearch ? (prepared.webSearch.maxCalls ?? 3) : 0,
+        !personal && prepared.webSearch
+          ? (prepared.webSearch.maxCalls ?? 3)
+          : 0,
       );
       transaction(db, () => {
         const userId = ctx.principal!.id;

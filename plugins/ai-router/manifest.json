@@ -5,19 +5,18 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.59",
+  "version": "0.1.0-alpha.60",
   "host": ">=0.1.0-alpha.17 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
   "provides": [
-    "ai.routing@2",
+    "ai.routing@3",
     "ai.execution@1",
-    "ai.catalog@2",
+    "ai.catalog@3",
     "ai.channels@1",
     "ai.targets@1",
-    "ai.groups@1",
     "ai.upstream.systemone@1",
     "ai.upstream.luna@1",
     "ai.upstream.jev@1",
@@ -25,7 +24,14 @@
     "ai.workflow-execution@1"
   ],
   "requires": [],
-  "permissions": ["api.register", "http.route", "http.dispatch", "http.dispatch.child", "secrets.read", "hooks.register"],
+  "permissions": [
+    "api.register",
+    "http.route",
+    "http.dispatch",
+    "http.dispatch.child",
+    "secrets.read",
+    "hooks.register"
+  ],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -142,36 +148,16 @@
                         "additionalProperties": false,
                         "required": ["id", "type"],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "text" },
-                          "text": { "type": "string" }
-                        }
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": ["id", "type"],
-                        "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "format" },
-                          "value": {}
-                        }
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": ["id", "type", "values"],
-                        "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "template" },
-                          "template": { "type": "string" },
-                          "values": {
-                            "type": "object",
-                            "propertyNames": {
-                              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-                              "not": { "enum": ["__proto__", "prototype", "constructor"] }
-                            },
-                            "additionalProperties": { "type": "string" }
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "text"
+                          },
+                          "text": {
+                            "type": "string"
                           }
                         }
                       },
@@ -180,12 +166,76 @@
                         "additionalProperties": false,
                         "required": ["id", "type"],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "replace" },
-                          "text": { "type": "string" },
-                          "find": { "type": "string" },
-                          "replacement": { "type": "string" },
-                          "all": { "type": "boolean" }
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "format"
+                          },
+                          "value": {}
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["id", "type", "values"],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "template"
+                          },
+                          "template": {
+                            "type": "string"
+                          },
+                          "values": {
+                            "type": "object",
+                            "propertyNames": {
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                              "not": {
+                                "enum": [
+                                  "__proto__",
+                                  "prototype",
+                                  "constructor"
+                                ]
+                              }
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["id", "type"],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "replace"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "find": {
+                            "type": "string"
+                          },
+                          "replacement": {
+                            "type": "string"
+                          },
+                          "all": {
+                            "type": "boolean"
+                          }
                         }
                       },
                       {
@@ -193,17 +243,51 @@
                         "additionalProperties": false,
                         "required": ["id", "type", "promptMode"],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "llm" },
-                          "model": { "type": "string" },
-                          "channelId": { "type": "string" },
-                          "allowedModels": { "type": "array", "items": { "type": "string" } },
-                          "protocol": { "enum": ["openai-chat", "openai-responses", "anthropic"] },
-                          "messages": { "type": "array", "items": { "type": "object" } },
-                          "prompt": { "type": "string" },
-                          "system": { "type": "string" },
-                          "maxTokens": { "type": "integer" },
-                          "promptMode": { "enum": ["append", "replace"] }
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "llm"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "channelId": {
+                            "type": "string"
+                          },
+                          "allowedModels": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "protocol": {
+                            "enum": [
+                              "openai-chat",
+                              "openai-responses",
+                              "anthropic"
+                            ]
+                          },
+                          "messages": {
+                            "type": "array",
+                            "items": {
+                              "type": "object"
+                            }
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "system": {
+                            "type": "string"
+                          },
+                          "maxTokens": {
+                            "type": "integer"
+                          },
+                          "promptMode": {
+                            "enum": ["append", "replace"]
+                          }
                         }
                       },
                       {
@@ -211,14 +295,30 @@
                         "additionalProperties": false,
                         "required": ["id", "type"],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "jev" },
-                          "model": { "type": "string" },
-                          "channelId": { "type": "string" },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "jev"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "channelId": {
+                            "type": "string"
+                          },
                           "state": {},
-                          "questions": { "type": "object" },
-                          "assets": { "type": "object" },
-                          "answerKey": { "type": "string" }
+                          "questions": {
+                            "type": "object"
+                          },
+                          "assets": {
+                            "type": "object"
+                          },
+                          "answerKey": {
+                            "type": "string"
+                          }
                         }
                       },
                       {
@@ -226,9 +326,17 @@
                         "additionalProperties": false,
                         "required": ["id", "type"],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "response" },
-                          "text": { "type": "string" }
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "response"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
                         }
                       },
                       {
@@ -304,22 +412,63 @@
                         "additionalProperties": false,
                         "required": ["id", "type", "condition", "yes", "no"],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "branch" },
-                          "condition": { "type": "boolean" },
-                          "yes": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "no": { "type": "string", "minLength": 1, "maxLength": 128 }
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "branch"
+                          },
+                          "condition": {
+                            "type": "boolean"
+                          },
+                          "yes": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "no": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
                         }
                       },
                       {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": ["id", "type", "valueType", "operator", "left", "right"],
+                        "required": [
+                          "id",
+                          "type",
+                          "valueType",
+                          "operator",
+                          "left",
+                          "right"
+                        ],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "compare" },
-                          "valueType": { "enum": ["string", "number", "boolean"] },
-                          "operator": { "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "matches"] },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "compare"
+                          },
+                          "valueType": {
+                            "enum": ["string", "number", "boolean"]
+                          },
+                          "operator": {
+                            "enum": [
+                              "eq",
+                              "ne",
+                              "gt",
+                              "gte",
+                              "lt",
+                              "lte",
+                              "matches"
+                            ]
+                          },
                           "left": {},
                           "right": {}
                         }
@@ -329,11 +478,23 @@
                         "additionalProperties": false,
                         "required": ["id", "type", "operator", "left"],
                         "properties": {
-                          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-                          "type": { "const": "logic" },
-                          "operator": { "enum": ["and", "or", "not"] },
-                          "left": { "type": "boolean" },
-                          "right": { "type": "boolean" }
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "type": {
+                            "const": "logic"
+                          },
+                          "operator": {
+                            "enum": ["and", "or", "not"]
+                          },
+                          "left": {
+                            "type": "boolean"
+                          },
+                          "right": {
+                            "type": "boolean"
+                          }
                         }
                       },
                       {
@@ -466,7 +627,9 @@
                           },
                           "allowedTargets": {
                             "type": "array",
-                            "items": { "type": "string" }
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "mode": {
                             "type": "string"
@@ -486,7 +649,14 @@
                           "type": {
                             "const": "provider"
                           },
-                          "modelMap": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 256 } },
+                          "modelMap": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            }
+                          },
                           "recordResponseModel": {
                             "type": "boolean"
                           },
@@ -897,7 +1067,11 @@
                   },
                   {
                     "required": ["baseUrl"],
-                    "properties": { "protocol": { "enum": ["systemone", "luna", "jev"] } }
+                    "properties": {
+                      "protocol": {
+                        "enum": ["systemone", "luna", "jev"]
+                      }
+                    }
                   },
                   {
                     "required": ["subscriptionAccountIds"]
@@ -1098,47 +1272,6 @@
           }
         }
       },
-      "groups": {
-        "type": "object",
-        "propertyNames": {
-          "pattern": "^[A-Za-z0-9_-]{1,128}$"
-        },
-        "additionalProperties": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["name"],
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "channelIds": {
-              "type": "array",
-              "uniqueItems": true,
-              "items": {
-                "type": "string"
-              }
-            },
-            "multiplier": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1000000
-            },
-            "userIds": {
-              "type": "array",
-              "uniqueItems": true,
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          }
-        }
-      },
       "secretRefs": {
         "type": "array",
         "uniqueItems": true,
@@ -1156,15 +1289,7 @@
     "public": false,
     "group": "routing",
     "order": 10,
-    "pages": [
-      {
-        "title": "使用分组",
-        "path": "/settings/service-groups",
-        "public": false,
-        "group": "routing",
-        "order": 20
-      }
-    ]
+    "pages": []
   },
   "optionalRequires": [
     "http.transport@1",

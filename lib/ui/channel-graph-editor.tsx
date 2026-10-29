@@ -56,27 +56,47 @@ export function ChannelGraphEditor({
   configurationRevision?: string;
 }) {
   const loaded = useLoad<any>(
-    () => host.request(
-      personal
-        ? "/api/plugins/official.byok/personal-channels"
-        : "/api/plugins/official.ai-router/configuration",
-    ),
+    () =>
+      host.request(
+        personal
+          ? "/api/plugins/official.byok/personal-channels"
+          : "/api/plugins/official.ai-router/configuration",
+      ),
     [configurationRevision],
   );
-  const platformGroups = useLoad<
-    { id: string; name: string; multiplier: number }[]
+  const platformChannels = useLoad<
+    { id: string; name: string; scope: string }[]
   >(
     () =>
       personal
-        ? host.request("/api/plugins/official.ai-router/groups")
+        ? host
+            .request<{ id: string; name: string; scope: string }[]>(
+              "/api/plugins/official.ai-router/channels",
+            )
+            .then((channels) =>
+              channels.filter((channel) => channel.scope === "platform"),
+            )
         : Promise.resolve([]),
     [personal],
   );
-  const modelCatalog = useLoad<{ id: string; channel?: { id: string; name?: string; scope?: string } }[]>(() =>
-    host.request("/api/plugins/official.model-catalog/models"),
-  );
-  const ownChannels = useLoad<{ id: string; name?: string; enabled?: boolean; blocked?: boolean; hasCredential?: boolean }[]>(
-    () => personal ? Promise.resolve([]) : host.request("/api/plugins/official.byok/personal-channels").catch(() => []),
+  const modelCatalog = useLoad<
+    { id: string; channel?: { id: string; name?: string; scope?: string } }[]
+  >(() => host.request("/api/plugins/official.model-catalog/models"));
+  const ownChannels = useLoad<
+    {
+      id: string;
+      name?: string;
+      enabled?: boolean;
+      blocked?: boolean;
+      hasCredential?: boolean;
+    }[]
+  >(
+    () =>
+      personal
+        ? Promise.resolve([])
+        : host
+            .request("/api/plugins/official.byok/personal-channels")
+            .catch(() => []),
     [personal],
   );
   const [draft, setDraft] = React.useState<GraphDraft>();
@@ -121,22 +141,41 @@ export function ChannelGraphEditor({
     return { upstreams: { [channelId]: own }, models: own?.models ?? {} };
   }, [loaded.data, personal, channelId]);
   const channel = router?.upstreams?.[channelId];
-  const modelTargets = [...new Set([
-    ...(modelCatalog.data ?? []).map((model) => model.id),
-    ...Object.entries(router?.models ?? {}).map(([id, model]: [string, any]) => model.publicModel ?? id),
-  ])].sort();
-  const templateTargets = [...new Set(
-    modelCatalog.data
-      ? modelCatalog.data.filter((model) => model.channel?.id !== channelId).map((model) => model.id)
-      : Object.entries(router?.models ?? {})
-          .filter(([, model]: [string, any]) => !personal && model.upstream !== channelId && model.enabled !== false)
-          .map(([id, model]: [string, any]) => model.publicModel ?? id),
-  )].sort();
+  const modelTargets = [
+    ...new Set([
+      ...(modelCatalog.data ?? []).map((model) => model.id),
+      ...Object.entries(router?.models ?? {}).map(
+        ([id, model]: [string, any]) => model.publicModel ?? id,
+      ),
+    ]),
+  ].sort();
+  const templateTargets = [
+    ...new Set(
+      modelCatalog.data
+        ? modelCatalog.data
+            .filter((model) => model.channel?.id !== channelId)
+            .map((model) => model.id)
+        : Object.entries(router?.models ?? {})
+            .filter(
+              ([, model]: [string, any]) =>
+                !personal &&
+                model.upstream !== channelId &&
+                model.enabled !== false,
+            )
+            .map(([id, model]: [string, any]) => model.publicModel ?? id),
+    ),
+  ].sort();
   // This endpoint only returns channels owned by the current session. The model
   // catalog can omit channels without an active or visible model mapping.
   const personalChannels = ((personal ? loaded.data : ownChannels.data) ?? [])
-    .filter((item: any) => item.enabled !== false && !item.blocked && item.hasCredential)
-    .map((item: any) => ({ id: item.id as string, name: item.name as string | undefined }));
+    .filter(
+      (item: any) =>
+        item.enabled !== false && !item.blocked && item.hasCredential,
+    )
+    .map((item: any) => ({
+      id: item.id as string,
+      name: item.name as string | undefined,
+    }));
   React.useEffect(() => {
     if (!channel) return;
     const next: GraphDraft = {
@@ -243,10 +282,17 @@ export function ChannelGraphEditor({
         answerKey: "route",
       },
       response: { text: "" },
-      platform: { groupId: platformGroups.data?.[0]?.id ?? "" },
+      platform: { channelId: platformChannels.data?.[0]?.id ?? "" },
       provider: { modelMap: {} },
-      routing: { profile: (loaded.data?.references?.routingProfiles ?? [])[0] ?? "$model" },
-      protocol: { next: "", allow: ingressOptions.map((p) => p.value), conversion: "auto" },
+      routing: {
+        profile:
+          (loaded.data?.references?.routingProfiles ?? [])[0] ?? "$model",
+      },
+      protocol: {
+        next: "",
+        allow: ingressOptions.map((p) => p.value),
+        conversion: "auto",
+      },
       branch: { condition: false, yes: "", no: "" },
       compare: { valueType: "number", operator: "eq", left: 0, right: 0 },
       logic: { operator: "and", left: false, right: false },
@@ -449,9 +495,11 @@ export function ChannelGraphEditor({
             <button
               className="secondary"
               disabled={busy || !flow}
-              onClick={() => guard.leave(() =>
-                manageModels(node?.type === "provider" ? node.id : undefined),
-              )}
+              onClick={() =>
+                guard.leave(() =>
+                  manageModels(node?.type === "provider" ? node.id : undefined),
+                )
+              }
             >
               {tr("提供模型")}
             </button>
@@ -480,15 +528,15 @@ export function ChannelGraphEditor({
         >
           <div className="channel-policy-settings">
             <style>{`.modal:has(.channel-policy-settings){width:min(1060px,calc(100vw - 24px));max-width:1060px}`}</style>
-              <SettingsExtension
-                host={host}
-                path="/auto-router"
-                query={
-                  node?.type === "routing" && node.profile !== "$model"
-                    ? "?profile=" + encodeURIComponent(node.profile)
-                    : ""
-                }
-              />
+            <SettingsExtension
+              host={host}
+              path="/auto-router"
+              query={
+                node?.type === "routing" && node.profile !== "$model"
+                  ? "?profile=" + encodeURIComponent(node.profile)
+                  : ""
+              }
+            />
           </div>
         </Dialog>
       )}
@@ -498,11 +546,11 @@ export function ChannelGraphEditor({
             <label className="workflow-field">
               {tr("渠道名称")}
               <input
-              disabled={busy}
-              aria-label={tr("渠道名称")}
-              value={channelName}
-              maxLength={128}
-              onChange={(e) => setChannelName(e.target.value)}
+                disabled={busy}
+                aria-label={tr("渠道名称")}
+                value={channelName}
+                maxLength={128}
+                onChange={(e) => setChannelName(e.target.value)}
               />
             </label>
             <label className="workflow-field">
@@ -567,7 +615,11 @@ export function ChannelGraphEditor({
                 </Popover.Content>
               </Popover.Portal>
             </Popover.Root>
-            <button className="secondary" disabled={busy} onClick={() => setTemplateOpen(true)}>
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => setTemplateOpen(true)}
+            >
               {tr("流程模板")}
             </button>
           </div>
@@ -576,7 +628,10 @@ export function ChannelGraphEditor({
               targets={templateTargets}
               disabled={busy}
               close={() => setTemplateOpen(false)}
-              onApply={(next) => { update(next); select(next.entry); }}
+              onApply={(next) => {
+                update(next);
+                select(next.entry);
+              }}
             />
           )}
           <div className="workflow-grid">
@@ -603,7 +658,7 @@ export function ChannelGraphEditor({
                       node={current}
                       context={{
                         personal,
-                        platformGroups,
+                        platformChannels,
                         platformNodes: flow.nodes.filter(
                           (node) => node.type === "platform",
                         ),
@@ -635,8 +690,15 @@ export function ChannelGraphEditor({
                         subscriptionAccounts,
                         modelTargets,
                         providedModels: Object.entries(router?.models ?? {})
-                          .filter(([, model]: [string, any]) => personal || model.upstream === channelId)
-                          .map(([id, model]: [string, any]) => ({ id, model: model.model, name: model.publicModel ?? id })),
+                          .filter(
+                            ([, model]: [string, any]) =>
+                              personal || model.upstream === channelId,
+                          )
+                          .map(([id, model]: [string, any]) => ({
+                            id,
+                            model: model.model,
+                            name: model.publicModel ?? id,
+                          })),
                         personalChannels,
                         references: loaded.data?.references,
                         onPanel: setPanel,

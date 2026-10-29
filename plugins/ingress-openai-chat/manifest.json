@@ -5,14 +5,14 @@
   "name": "OpenAI Chat Completions 入口",
   "description": "接收并解析 OpenAI Chat Completions 客户端请求。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.27",
+  "version": "0.1.0-alpha.28",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
   },
   "provides": ["ai.ingress.openai-chat@1"],
-  "requires": ["ai.routing@2", "ai.execution@1", "ai.request-limits@1"],
+  "requires": ["ai.routing@3", "ai.execution@1", "ai.request-limits@1"],
   "permissions": ["http.route"],
   "configReload": "snapshot",
   "configSchema": {
@@ -20,5 +20,9 @@
     "additionalProperties": false,
     "properties": {}
   },
-  "optionalRequires": ["auth.admit@1", "billing.admit@1", "ai.workflow-execution@1"]
+  "optionalRequires": [
+    "auth.admit@1",
+    "billing.admit@1",
+    "ai.workflow-execution@1"
+  ]
 }

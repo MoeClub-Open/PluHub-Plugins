@@ -204,7 +204,7 @@ export function installPersonalChannels(
           personalInterfaces(node.interfaces, protocol);
           break;
         case "platform":
-          requiredString(node.groupId, "groupId", 128);
+          requiredString(node.channelId, "channelId", 256);
           if (node.model !== undefined)
             requiredString(node.model, "model", 256);
           break;
@@ -555,19 +555,21 @@ export function installPersonalChannels(
           true,
         );
         if (resolved.nodes.some((node) => node.type === "platform")) {
-          const groups = await host.call<{ id: string }[]>("ai.groups@1", {
-            userId,
-          });
+          const channels = await host.call<{ id: string; scope: string }[]>(
+            "ai.channels@1",
+            {
+              userId,
+            },
+          );
           for (const node of resolved.nodes)
             if (
               node.type === "platform" &&
-              !groups.some((group) => group.id === node.groupId)
+              !channels.some(
+                (channel) =>
+                  channel.scope === "platform" && channel.id === node.channelId,
+              )
             )
-              throw new HostError(
-                "group_unavailable",
-                "使用分组已停用或无权访问",
-                403,
-              );
+              throw new HostError("channel_forbidden", "平台渠道不可用", 403);
         }
         await subscriptionCheck(config, userId);
         const kind = config.subscriptionAccountId ? "subscription" : "key";
@@ -754,7 +756,7 @@ export function installPersonalChannels(
           prices,
           source: "newapi",
           fetchedAt: Date.now(),
-          note: "仅同步基础输入输出 Token 价格，未包含分组折扣、缓存和按次价格；确认后保存生效。",
+          note: "仅同步基础输入输出 Token 价格，未包含渠道倍率、缓存和按次价格；确认后保存生效。",
         });
       }
       if (body.action !== "models")
@@ -862,7 +864,9 @@ export function installPersonalChannels(
       const id = requiredString(body.id, "id"),
         model = requiredString(body.model, "model", 256);
       const channel = runtime(rowFor(id, userId));
-      if (["systemone", "luna", "jev"].includes(channel.upstream.protocol ?? ""))
+      if (
+        ["systemone", "luna", "jev"].includes(channel.upstream.protocol ?? "")
+      )
         throw new HostError(
           "unsupported_operation",
           "判断渠道请通过自动路由或流程中的 Jev 节点调用",
@@ -873,7 +877,6 @@ export function installPersonalChannels(
       headers.set("content-type", "application/json");
       headers.set("x-pluhub-channel", id);
       headers.delete("content-length");
-      headers.delete("x-pluhub-group");
       const response = await host.dispatch(
         new Request(new URL("/v1/chat/completions", request.url), {
           method: "POST",

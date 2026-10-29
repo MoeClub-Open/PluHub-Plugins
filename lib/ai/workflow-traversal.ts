@@ -100,7 +100,7 @@ export function* traverseWorkflow(
     if (node.type === "platform")
       return {
         ...common,
-        platformGroup: { groupId: node.groupId, model: node.model },
+        platformChannel: { channelId: node.channelId, model: node.model },
       };
     if (node.type === "provider") {
       const fallback = node.fallback
@@ -109,7 +109,7 @@ export function* traverseWorkflow(
       if (fallback && fallback.type !== "platform")
         throw new HostError(
           "invalid_workflow",
-          "备用出口需要连接平台分组节点",
+          "备用出口需要连接平台渠道节点",
           400,
         );
       return {
@@ -118,7 +118,12 @@ export function* traverseWorkflow(
         providerId: node.id,
         providerNode: node,
         ...(fallback?.type === "platform"
-          ? { fallback: { groupId: fallback.groupId, model: fallback.model } }
+          ? {
+              fallback: {
+                channelId: fallback.channelId,
+                model: fallback.model,
+              },
+            }
           : {}),
       };
     }

@@ -73,18 +73,13 @@ it("separates global limits from channel execution settings", () => {
   expect(nav.section?.pages.map((p) => p.path)).toEqual([
     "/channels",
     "/settings/traffic",
-    "/settings/service-groups",
     "/settings/user-channels",
   ]);
   expect(nav.searchEntries.map((p) => p.path)).not.toEqual(
     expect.arrayContaining(["/rate-limit", "/token-speed", "/auto-router"]),
   );
-  expect(channelSettingsDestination("/rate-limit")).toBe(
-    "/settings/traffic",
-  );
-  expect(channelSettingsDestination("/token-speed")).toBe(
-    "/settings/traffic",
-  );
+  expect(channelSettingsDestination("/rate-limit")).toBe("/settings/traffic");
+  expect(channelSettingsDestination("/token-speed")).toBe("/settings/traffic");
   expect(channelSettingsDestination("/auto-router")).toBe(
     "/channels?panel=routing",
   );
@@ -95,7 +90,9 @@ it("separates global limits from channel execution settings", () => {
       searchSettings(nav.sections, query).flatMap((section) =>
         section.pages.map((page) => page.path),
       ),
-    ).toEqual(query === "自动路由" ? ["/channels"] : ["/channels", "/settings/traffic"]);
+    ).toEqual(
+      query === "自动路由" ? ["/channels"] : ["/channels", "/settings/traffic"],
+    );
   expect(
     navigation(
       pages.filter((p) => p.path !== "/channels"),

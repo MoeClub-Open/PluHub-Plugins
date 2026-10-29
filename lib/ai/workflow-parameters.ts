@@ -104,12 +104,19 @@ export function workflowParameters(
     case "compare":
       return [
         param("left", node.valueType, "左侧", false),
-        param("right", node.operator === "matches" ? "string[]" : node.valueType, "右侧", false),
+        param(
+          "right",
+          node.operator === "matches" ? "string[]" : node.valueType,
+          "右侧",
+          false,
+        ),
       ];
     case "logic":
       return [
         param("left", "boolean", "条件", false),
-        ...(node.operator === "not" ? [] : [param("right", "boolean", "条件", false)]),
+        ...(node.operator === "not"
+          ? []
+          : [param("right", "boolean", "条件", false)]),
       ];
     case "protocol":
       return [
@@ -151,7 +158,7 @@ export function workflowParameters(
       ];
     case "platform":
       return [
-        param("groupId", "string", "使用分组"),
+        param("channelId", "string", "平台渠道"),
         param("model", "string", "平台模型"),
       ];
     case "provider":
@@ -183,12 +190,27 @@ export function workflowParameters(
 
 /** Data sources are explicit; values can fan out to any number of compatible inputs. */
 export function workflowDataOutputs(node: WorkflowNode): WorkflowParameter[] {
-  if (node.type === "text" || node.type === "format" || node.type === "template" || node.type === "replace")
+  if (
+    node.type === "text" ||
+    node.type === "format" ||
+    node.type === "template" ||
+    node.type === "replace"
+  )
     return [param("text", "string", "文本", false)];
   if (node.type === "llm")
-    return [param("text", "string", "输出文本", false), param("usage", "object", "用量", false)];
+    return [
+      param("text", "string", "输出文本", false),
+      param("usage", "object", "用量", false),
+    ];
   if (node.type === "jev")
-    return [param("answers", "object", "答案", false), param("choice", "string", "选项", false), param("score", "number", "评分", false), param("noul", "number", "Noul", false), param("box", "object", "边界框", false), param("confidence", "number", "置信度", false)];
+    return [
+      param("answers", "object", "答案", false),
+      param("choice", "string", "选项", false),
+      param("score", "number", "评分", false),
+      param("noul", "number", "Noul", false),
+      param("box", "object", "边界框", false),
+      param("confidence", "number", "置信度", false),
+    ];
   if (node.type === "value")
     return [param("value", node.valueType, "值", false)];
   if (node.type === "compare" || node.type === "logic")
@@ -211,8 +233,11 @@ export function compatibleWorkflowTypes(
   source: WorkflowValueType,
   target: WorkflowValueType,
 ) {
-  return source === target || (source === "integer" && target === "number") ||
-    (target === "json" && source !== "secret");
+  return (
+    source === target ||
+    (source === "integer" && target === "number") ||
+    (target === "json" && source !== "secret")
+  );
 }
 export function canBindWorkflowPorts(
   source: WorkflowNode,
@@ -232,6 +257,11 @@ export function canBindWorkflowPorts(
     !!out &&
     !!into &&
     compatibleWorkflowTypes(out.type, into.type) &&
-    !( (source.type === "start" || source.type === "llm" || source.type === "jev") && into.sensitive)
+    !(
+      (source.type === "start" ||
+        source.type === "llm" ||
+        source.type === "jev") &&
+      into.sensitive
+    )
   );
 }
