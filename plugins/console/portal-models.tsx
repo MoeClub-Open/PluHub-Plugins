@@ -53,9 +53,9 @@ export function PortalModels({
         <table>
           <thead>
             <tr>
-              <th>{t("模型 / 渠道")}</th>
-              <th>{t("输入")}</th>
-              <th>{t("输出")}</th>
+              <th scope="col">{t("模型 / 渠道")}</th>
+              <th scope="col">{t("输入")}</th>
+              <th scope="col">{t("输出")}</th>
             </tr>
           </thead>
           <tbody>
@@ -78,12 +78,7 @@ export function PortalModels({
                     />
                     <span>
                       <strong>{model.name}</strong>
-                      <small>
-                        {model.channel?.name ?? model.provider} · ×
-                        {model.billing?.multiplier ??
-                          model.consumptionMultiplier ??
-                          1}
-                      </small>
+                      <small>{model.channel?.name ?? model.provider}</small>
                     </span>
                   </a>
                 </td>

@@ -17,11 +17,11 @@ export function GatewayVisual({
           <span>API Key</span>
         </div>
         <svg
-          viewBox="0 0 100 180"
+          viewBox="0 0 100 184"
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <path d="M0 90H30Q40 90 40 80V36Q40 26 50 26H100M40 90H100M40 90V144Q40 154 50 154H100" />
+          <path d="M0 92H30Q40 92 40 82V38Q40 28 50 28H100M40 92H100M40 92V146Q40 156 50 156H100" />
         </svg>
         <div className="gateway-operations">
           <div>
@@ -50,7 +50,6 @@ export function GatewayVisual({
       {example && (
         <div className="gateway-code">
           <div>
-            <span className="gateway-code-dot" />
             <span>{name}</span>
             <span>POST /v1/chat/completions</span>
           </div>
@@ -60,11 +59,11 @@ export function GatewayVisual({
               {'  "model": '}
               <em>"model-id"</em>
               {",\n"}
-              {'  "messages": [{\n    "role": '}
+              {'  "messages": [{ "role": '}
               <em>"user"</em>
-              {',\n    "content": '}
+              {', "content": '}
               <em>"Hello"</em>
-              {"\n  }],\n"}
+              {" }],\n"}
               {'  "stream": '}
               <b>true</b>
               {"\n}"}

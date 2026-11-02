@@ -307,13 +307,4 @@
   .login .passkey-login {
     min-height: 44px;
   }
-  .portal-header {
-    padding: 14px 20px;
-    min-height: 64px;
-    flex-wrap: nowrap;
-    gap: 12px;
-  }
-  .portal-header nav {
-    gap: 6px;
-  }
 }

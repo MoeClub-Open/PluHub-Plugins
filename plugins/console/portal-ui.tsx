@@ -66,14 +66,15 @@ export function Portal({
         </a>
         <nav aria-label={tr("门户导航")}>
           {children && content.enabled && <a href="#/">{tr("首页")}</a>}
-          {modelCatalog && (path !== "/" || content.primaryUrl !== "#/models") && (
-            <a
-              href="#/models"
-              aria-current={path === "/models" ? "page" : undefined}
-            >
-              {tr("模型")}
-            </a>
-          )}
+          {modelCatalog &&
+            (path !== "/" || content.primaryUrl !== "#/models") && (
+              <a
+                href="#/models"
+                aria-current={path === "/models" ? "page" : undefined}
+              >
+                {tr("模型")}
+              </a>
+            )}
           {content.docsUrl && <a href={content.docsUrl}>{tr("文档")}</a>}
           <LanguageMenu />
           <ThemeButton theme={theme} />
@@ -134,35 +135,42 @@ export function Portal({
                       <Icon name="arrow" size={16} />
                     </a>
                     {!user && content.primaryUrl !== "#/register" && (
-                      <a className="portal-secondary" href="#/register">
+                      <a className="button secondary" href="#/register">
                         {tr("创建账号")}
                       </a>
                     )}
                   </div>
+                  {content.showEndpoint && (
+                    <div className="portal-endpoint">
+                      <span>API</span>
+                      <code>{endpoint}</code>
+                      <button
+                        className="ghost icon-button"
+                        type="button"
+                        aria-label={tr("复制 API 地址")}
+                        title={tr("复制 API 地址")}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(endpoint);
+                            setCopyStatus(tr("已复制"));
+                          } catch {
+                            setCopyStatus(tr("复制失败，请手动复制"));
+                          }
+                        }}
+                      >
+                        <Icon
+                          name={copyStatus === tr("已复制") ? "check" : "copy"}
+                          size={14}
+                        />
+                      </button>
+                      <span className="portal-copy-status" role="status">
+                        {copyStatus}
+                      </span>
+                    </div>
+                  )}
                 </section>
                 <GatewayVisual name={brand.name} />
               </div>
-              {content.showEndpoint && (
-                <div className="portal-endpoint">
-                  <span>API</span>
-                  <code>{endpoint}</code>
-                  <button
-                    className="ghost"
-                    aria-label={tr("复制 API 地址")}
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(endpoint);
-                        setCopyStatus(tr("已复制"));
-                      } catch {
-                        setCopyStatus(tr("复制失败，请手动复制"));
-                      }
-                    }}
-                  >
-                    <Icon name="copy" size={14} />
-                    <span role="status">{copyStatus || tr("复制")}</span>
-                  </button>
-                </div>
-              )}
               {modelCatalog && (
                 <PortalModels host={host} selected={content.featuredModels} />
               )}
@@ -185,7 +193,10 @@ export function Portal({
                   <div>
                     {content.faqs.map((faq, index) => (
                       <details key={index}>
-                        <summary>{faq.question}</summary>
+                        <summary>
+                          {faq.question}
+                          <Icon name="chevron" size={16} />
+                        </summary>
                         <p>{faq.answer}</p>
                       </details>
                     ))}
