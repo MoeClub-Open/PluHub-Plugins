@@ -24,7 +24,7 @@ export const defaultBranding: Branding = {
   description: "AI 模型服务",
   logoUrl: "",
   faviconUrl: "",
-  accentColor: "#635bff",
+  accentColor: siteThemes.graphite.accent,
   loginTitle: "",
   loginDescription: "",
   footerText: "",
@@ -96,6 +96,8 @@ export function readBranding(config: Record<string, unknown>): Branding {
       value.trim();
   }
   if (!result.name) throw new Error("请填写站点名称");
+  if ((raw as Record<string, unknown>).accentColor === undefined)
+    result.accentColor = siteThemes[result.siteTheme].accent;
   if (
     result.defaultLanguage === "en-US" &&
     (raw as Record<string, unknown>).description === undefined
@@ -149,8 +151,7 @@ const luminance = (color: string) =>
 export const contrast = (a: string, b: string) =>
   (Math.max(luminance(a), luminance(b)) + 0.05) /
   (Math.min(luminance(a), luminance(b)) + 0.05);
-export function brandColors(color: string, dark: boolean) {
-  const surface = dark ? "#202737" : "#ffffff";
+export function brandColors(color: string, dark: boolean, surface: string) {
   let accent = color;
   let soft = mix(accent, surface, dark ? 0.83 : 0.93);
   for (

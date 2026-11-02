@@ -7,7 +7,7 @@ import { localizePortal, type PortalContent } from "./portal.js";
 import { useLocale } from "../../lib/ui/language.js";
 import { PortalModels } from "./portal-models.js";
 import { Empty, Icon } from "../../lib/ui/components.js";
-import type { ThemeMode } from "./theme.js";
+import type { Theme } from "./theme.js";
 import { GatewayVisual } from "./gateway-visual.js";
 import { ThemeButton } from "./theme-button.js";
 import { LanguageMenu } from "./language-menu.js";
@@ -28,7 +28,7 @@ export function Portal({
   content: PortalContent;
   path: string;
   user?: any;
-  theme: { mode: ThemeMode; change: (mode: ThemeMode) => void };
+  theme: Theme;
   modelCatalog?: boolean;
   children?: React.ReactNode;
   contentRef?: React.Ref<HTMLElement>;

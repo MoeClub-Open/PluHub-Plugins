@@ -47,7 +47,7 @@
   border-radius: 9px;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 10px 35px rgb(0 0 0 / 15%);
+  box-shadow: var(--shadow-popover);
   z-index: 80;
 }
 .account-popover-heading {
@@ -167,7 +167,7 @@
   border-radius: 7px;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  box-shadow: var(--shadow-popover);
   font-size: 12px;
 }
 .select-options [role="option"] {
@@ -337,8 +337,8 @@ html[lang="en-US"] .actions {
   text-decoration: none;
 }
 .tabs > a.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 .security-history-filters {
   display: grid;

@@ -5,6 +5,7 @@ import {
   defaultBranding,
   readBranding,
 } from "../plugins/console/branding.js";
+import { siteThemes, themeVariables } from "../plugins/console/site-themes.js";
 
 it("exports only declared public fields and rejects active URLs, SVG uploads and malformed branding", () => {
   expect(readBranding({ secretRefs: ["env:PRIVATE"] })).toEqual(
@@ -34,19 +35,21 @@ it("exports only declared public fields and rejects active URLs, SVG uploads and
 
 it("maintains accessible accent and button contrast for light, dark and extreme brand colors", () => {
   for (const dark of [true, false])
-    for (const color of [
-      "#ffffff",
-      "#000000",
-      "#635bff",
-      "#ffcc00",
-      "#777777",
-      "#00ff88",
-    ]) {
-      const colors = brandColors(color, dark);
-      expect(
-        contrast(colors.accent, dark ? "#171c29" : "#ffffff"),
-      ).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(colors.accent, colors.ink)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(colors.accent, colors.soft)).toBeGreaterThanOrEqual(4.5);
-    }
+    for (const id of Object.keys(siteThemes) as (keyof typeof siteThemes)[])
+      for (const color of [
+        "#ffffff",
+        "#000000",
+        "#635bff",
+        "#ffcc00",
+        "#777777",
+        "#00ff88",
+      ]) {
+        const surface = themeVariables(id, dark)["--surface"]!;
+        const colors = brandColors(color, dark, surface);
+        expect(contrast(colors.accent, surface)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(colors.accent, colors.ink)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(colors.accent, colors.soft)).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
 });

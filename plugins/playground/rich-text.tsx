@@ -4,6 +4,28 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { t as tr } from "../../lib/ui/i18n.js";
+const diagramThemeKeys = [
+  "surface",
+  "subtle",
+  "text",
+  "muted",
+  "border",
+  "accent-soft",
+];
+function diagramTheme() {
+  const style = getComputedStyle(document.documentElement);
+  return diagramThemeKeys
+    .map((key) => style.getPropertyValue("--" + key).trim())
+    .join("|");
+}
+function observeTheme(changed: () => void) {
+  const observer = new MutationObserver(changed);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["style", "data-theme"],
+  });
+  return () => observer.disconnect();
+}
 function mathMarkdown(text: string) {
   return text
     .split(/(```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`)/g)
@@ -28,6 +50,7 @@ function Diagram({
   const [error, setError] = React.useState(false);
   const [code, setCode] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const palette = React.useSyncExternalStore(observeTheme, diagramTheme);
   React.useEffect(() => {
     if (streaming || code) return;
     let current = true;
@@ -35,11 +58,24 @@ function Diagram({
     setLoading(true);
     void import("mermaid")
       .then(async ({ default: mermaid }) => {
+        const [surface, subtle, text, muted, border, accentSoft] =
+          palette.split("|");
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
           suppressErrorRendering: true,
-          theme: "neutral",
+          theme: "base",
+          themeVariables: {
+            darkMode: document.documentElement.dataset.theme === "dark",
+            background: surface,
+            primaryColor: subtle,
+            primaryTextColor: text,
+            primaryBorderColor: border,
+            lineColor: muted,
+            secondaryColor: accentSoft,
+            tertiaryColor: surface,
+            textColor: text,
+          },
           flowchart: { htmlLabels: false },
           fontFamily: "inherit",
         });
@@ -61,7 +97,7 @@ function Diagram({
     return () => {
       current = false;
     };
-  }, [source, streaming, code]);
+  }, [source, streaming, code, palette]);
   return (
     <figure className="chat-diagram">
       <div className="chat-code-toolbar">

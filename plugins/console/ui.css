@@ -2,22 +2,27 @@
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   font-size: 13px;
   color-scheme: light;
-  --bg: #f7f7f5;
+  --bg: #f7f7f8;
   --surface: #ffffff;
-  --subtle: #f1f1ee;
-  --text: #17191d;
-  --muted: #686d76;
-  --border: #e2e2dd;
-  --sidebar-width: 216px;
-  --control-height: 30px;
+  --subtle: #f1f1f3;
+  --text: #18181b;
+  --muted: #64646e;
+  --border: #e4e4e7;
+  --sidebar-width: 224px;
+  --control-height: 32px;
   --space-field: 10px;
   --space-section: 16px;
-  --radius: 6px;
+  --radius: 8px;
   --shadow-control: 0 1px 2px rgb(20 22 27 / 5%);
-  --accent: #2563eb;
-  --accent-soft: #eaf0ff;
+  --shadow-popover:
+    0 12px 36px rgb(20 22 27 / 12%), 0 2px 8px rgb(20 22 27 / 6%);
+  --overlay: rgb(15 18 24 / 35%);
+  --accent: #52525b;
+  --accent-soft: #f0f0f2;
   --danger: #cf3f52;
   --success: #16785d;
+  --success-soft: color-mix(in srgb, var(--success) 10%, var(--surface));
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, var(--surface));
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -25,17 +30,19 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0e0f12;
-  --surface: #15171b;
-  --subtle: #1b1d22;
-  --text: #f0f1f3;
-  --muted: #989da8;
-  --border: #292c32;
-  --accent: #7aa2ff;
-  --accent-soft: #192749;
+  --bg: #0f1012;
+  --surface: #18191d;
+  --subtle: #222328;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --border: #303139;
+  --accent: #c2c2c8;
+  --accent-soft: #2a2b30;
   --danger: #f07d8e;
   --success: #71d1ae;
   --shadow-control: 0 1px 2px rgb(0 0 0 / 20%);
+  --shadow-popover: 0 16px 40px rgb(0 0 0 / 32%), 0 2px 8px rgb(0 0 0 / 20%);
+  --overlay: rgb(0 0 0 / 58%);
 }
 * {
   box-sizing: border-box;
@@ -73,7 +80,7 @@ button,
 }
 button:hover,
 .button:hover {
-  filter: brightness(0.97);
+  filter: brightness(0.95);
 }
 button:disabled {
   opacity: 0.5;
@@ -173,7 +180,7 @@ p {
   inset: 0 auto 0 0;
   display: flex;
   flex-direction: column;
-  padding: 14px 10px 12px;
+  padding: 12px 10px;
   background: var(--surface);
   border-right: 1px solid var(--border);
   z-index: 30;
@@ -315,7 +322,7 @@ p {
   flex-direction: column;
 }
 .main main {
-  padding: 24px;
+  padding: 20px;
   flex: 1;
   width: 100%;
   max-width: 1540px;
@@ -343,7 +350,7 @@ p {
 }
 .page-heading h1 {
   margin-bottom: 0;
-  font-size: 19px;
+  font-size: 20px;
   letter-spacing: -0.35px;
 }
 .page-heading > div:first-child {
@@ -423,7 +430,7 @@ p {
 }
 .stat > strong {
   display: block;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 620;
   letter-spacing: -0.8px;
   margin: 5px 0 3px;
@@ -458,9 +465,9 @@ p {
 .panel,
 .card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--surface);
-  padding: 14px;
+  padding: 12px;
 }
 .card {
   margin: var(--space-section) 0;
@@ -651,7 +658,7 @@ table {
   white-space: nowrap;
 }
 th {
-  padding: 8px 12px;
+  padding: 9px 12px;
   background: var(--subtle);
   color: var(--muted);
   font-size: 11px;
@@ -659,7 +666,7 @@ th {
   border-bottom: 1px solid var(--border);
 }
 td {
-  padding: 8px 12px;
+  padding: 9px 12px;
   border-top: 1px solid var(--border);
   font-size: 12px;
   line-height: 1.5;
@@ -691,20 +698,12 @@ tbody tr:hover {
   line-height: 1.3;
 }
 .badge.ready {
-  background: #e7f5ee;
-  color: #207953;
+  background: var(--success-soft);
+  color: var(--success);
 }
 .badge.error {
-  background: #fcebed;
-  color: #b6364b;
-}
-:root[data-theme="dark"] .badge.ready {
-  background: #203e34;
-  color: #82d9b4;
-}
-:root[data-theme="dark"] .badge.error {
-  background: #4d2632;
-  color: #ff9eae;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .strength-control {
   display: flex;
@@ -1224,7 +1223,7 @@ code {
   width: min(650px, calc(100% - 32px));
   max-height: 88vh;
   overflow: auto;
-  box-shadow: 0 24px 100px #0003;
+  box-shadow: var(--shadow-popover);
 }
 .modal form:has(> label) {
   display: grid;
@@ -1250,7 +1249,7 @@ code {
   position: fixed;
   inset: 0;
   pointer-events: auto;
-  background: #14182f66;
+  background: var(--overlay);
   backdrop-filter: blur(2px);
 }
 .modal-heading {
@@ -1383,7 +1382,7 @@ code {
     inset: 0;
     z-index: 25;
     border-radius: 0;
-    background: #10152755;
+    background: var(--overlay);
   }
   .main {
     margin-left: 0;

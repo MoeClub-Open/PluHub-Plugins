@@ -496,7 +496,7 @@
 }
 .chat-diagram > div:not(.chat-code-toolbar) {
   overflow: auto;
-  background: #fff;
+  background: var(--surface);
   padding: 16px;
 }
 .chat-diagram svg {

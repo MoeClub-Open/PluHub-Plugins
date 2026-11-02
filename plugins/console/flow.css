@@ -70,7 +70,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
-  box-shadow: 0 2px 6px #0000000a;
+  box-shadow: var(--shadow-control);
 }
 .flow-node.is-selected {
   border-color: var(--accent);
@@ -162,7 +162,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 8px 24px #00000018;
+  box-shadow: var(--shadow-popover);
 }
 .flow-add-menu button {
   justify-content: flex-start;

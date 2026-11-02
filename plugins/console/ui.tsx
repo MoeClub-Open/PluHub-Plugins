@@ -62,7 +62,8 @@ import { setupRedirect, type SetupState } from "./onboarding.js";
 import { Icon, PageHeading, Empty } from "../../lib/ui/components.js";
 import "./ui.css";
 import "./management.css";
-import "./stripe.css";
+import "./settings.css";
+import "./appearance.css";
 import "./portal.css";
 import "./auth.css";
 import "./controls.css";
@@ -245,7 +246,7 @@ function App() {
       ),
     [],
   );
-  const brand = useBranding(client, version, dark);
+  const brand = useBranding(client, version, dark, theme.palette);
   React.useEffect(
     () => setSiteLanguage(brand.defaultLanguage),
     [brand.defaultLanguage],
@@ -531,13 +532,7 @@ function App() {
             <span className="brand-name">{brand.name}</span>
           </span>
           <div className="actions">
-            <button
-              className="ghost"
-              aria-label={dark ? tr("切换为浅色模式") : tr("切换为深色模式")}
-              onClick={theme.toggle}
-            >
-              <Icon name={dark ? "sun" : "moon"} />
-            </button>
+            <ThemeButton theme={theme} />
           </div>
         </header>
         <main ref={content}>
@@ -758,8 +753,7 @@ function App() {
             host={client}
             user={user}
             extensions={extensions}
-            mode={theme.mode}
-            change={theme.change}
+            theme={theme}
             logout={logout}
             path={path!}
           />

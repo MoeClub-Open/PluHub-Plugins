@@ -5,7 +5,14 @@ import { Notice, useLoad } from "../../lib/ui/mount.js";
 import { Icon } from "../../lib/ui/components.js";
 import { Select } from "../../lib/ui/select.js";
 import type { Locale } from "@pluhub/ui-sdk";
-import { siteThemes, themeVariables, type SiteTheme } from "./site-themes.js";
+import {
+  siteThemes,
+  themeVariables,
+  type SiteTheme,
+  type PalettePreference,
+} from "./site-themes.js";
+import { PalettePicker } from "./theme-button.js";
+import { useTheme } from "./theme.js";
 import {
   defaultBranding,
   readBranding,
@@ -28,7 +35,12 @@ export function BrandMark({ brand }: { brand: Branding }) {
   ) : null;
 }
 
-export function useBranding(client: UIHost, version: number, dark: boolean) {
+export function useBranding(
+  client: UIHost,
+  version: number,
+  dark: boolean,
+  palette: PalettePreference,
+) {
   const [brand, setBrand] = React.useState(() => {
     try {
       const data = document.getElementById("pluhub-branding")?.textContent;
@@ -59,14 +71,18 @@ export function useBranding(client: UIHost, version: number, dark: boolean) {
       window.removeEventListener("pluhub:branding", load);
     };
   }, [client, version]);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     document.title = brand.name;
-    document.documentElement.dataset.siteTheme = brand.siteTheme;
-    for (const [key, value] of Object.entries(
-      themeVariables(brand.siteTheme, dark),
-    ))
-      document.documentElement.style.setProperty(key, value!);
-    const colors = brandColors(brand.accentColor, dark);
+    const selected = palette === "site" ? brand.siteTheme : palette;
+    const variables = themeVariables(selected, dark);
+    document.documentElement.dataset.siteTheme = selected;
+    for (const [key, value] of Object.entries(variables))
+      document.documentElement.style.setProperty(key, value);
+    const colors = brandColors(
+      palette === "site" ? brand.accentColor : siteThemes[selected].accent,
+      dark,
+      variables["--surface"]!,
+    );
     document.documentElement.style.setProperty("--accent", colors.accent);
     document.documentElement.style.setProperty("--accent-soft", colors.soft);
     document.documentElement.style.setProperty("--accent-contrast", colors.ink);
@@ -75,11 +91,12 @@ export function useBranding(client: UIHost, version: number, dark: boolean) {
       document.head.appendChild(document.createElement("link"));
     icon.rel = "icon";
     icon.href = brand.faviconUrl || "/favicon.ico";
-  }, [brand, dark]);
+  }, [brand, dark, palette]);
   return brand;
 }
 
 export function BrandingSettings({ host }: { host: UIHost }) {
+  const { dark } = useTheme();
   const data = useLoad<any>(() => host.request("/api/host/config"));
   const [draft, setDraft] = React.useState(defaultBranding);
   const [saved, setSaved] = React.useState(defaultBranding);
@@ -204,11 +221,13 @@ export function BrandingSettings({ host }: { host: UIHost }) {
       )}
     </div>
   );
+  const previewVariables = themeVariables(draft.siteTheme, dark);
   const colors = brandColors(
     /^#[0-9a-f]{6}$/i.test(draft.accentColor)
       ? draft.accentColor
       : defaultBranding.accentColor,
-    false,
+    dark,
+    previewVariables["--surface"]!,
   );
   return (
     <>
@@ -276,27 +295,44 @@ export function BrandingSettings({ host }: { host: UIHost }) {
               >
                 <h2>{tr("外观主题")}</h2>
                 <div className="form-grid">
-                  <label>
-                    {tr("站点主题")}
-                    <Select
+                  <div className="full">
+                    <PalettePicker
                       value={draft.siteTheme}
-                      onChange={(event) => {
-                        const siteTheme = event.target.value as SiteTheme;
+                      change={(value) => {
+                        const siteTheme = value as SiteTheme;
                         setDraft({
                           ...draft,
                           siteTheme,
                           accentColor: siteThemes[siteTheme].accent,
                         });
                       }}
-                    >
-                      {Object.entries(siteThemes).map(([id, theme]) => (
-                        <option key={id} value={id}>
-                          {tr(theme.name)}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  {input("accentColor", tr("主题色"), "#635bff")}
+                    />
+                  </div>
+                  <fieldset className="appearance-fieldset full">
+                    <legend>{tr("主题色")}</legend>
+                    <div className="brand-accent-input">
+                      <input
+                        type="color"
+                        aria-label={tr("选择主题色")}
+                        value={
+                          /^#[0-9a-f]{6}$/i.test(draft.accentColor)
+                            ? draft.accentColor
+                            : siteThemes[draft.siteTheme].accent
+                        }
+                        onChange={(event) =>
+                          update("accentColor", event.target.value)
+                        }
+                      />
+                      <input
+                        aria-label={tr("主题色值")}
+                        value={draft.accentColor}
+                        maxLength={7}
+                        onChange={(event) =>
+                          update("accentColor", event.target.value)
+                        }
+                      />
+                    </div>
+                  </fieldset>
                 </div>
               </section>
               <section
@@ -351,7 +387,7 @@ export function BrandingSettings({ host }: { host: UIHost }) {
               className="brand-preview"
               style={
                 {
-                  ...themeVariables(draft.siteTheme, false),
+                  ...previewVariables,
                   "--accent": colors.accent,
                   "--accent-soft": colors.soft,
                   "--accent-contrast": colors.ink,

@@ -2,7 +2,8 @@ import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost, Extension } from "@pluhub/ui-sdk";
 import { Icon } from "../../lib/ui/components.js";
-import type { ThemeMode } from "./theme.js";
+import type { Theme } from "./theme.js";
+import { ThemeButton } from "./theme-button.js";
 import { LanguageMenu } from "./language-menu.js";
 const usd = (value: number) =>
   new Intl.NumberFormat(getLocale(), {
@@ -15,16 +16,14 @@ export function AccountMenu({
   host,
   user,
   extensions,
-  mode,
-  change,
+  theme,
   logout,
   path,
 }: {
   host: UIHost;
   user: any;
   extensions: Extension[];
-  mode: ThemeMode;
-  change: (mode: ThemeMode) => void;
+  theme: Theme;
   logout: () => Promise<void>;
   path: string;
 }) {
@@ -37,13 +36,6 @@ export function AccountMenu({
   const root = React.useRef<HTMLDivElement>(null);
   const trigger = React.useRef<HTMLButtonElement>(null);
   const id = React.useId();
-  const themeNames = {
-    system: tr("跟随系统"),
-    light: tr("浅色"),
-    dark: tr("深色"),
-  };
-  const nextTheme =
-    mode === "system" ? "light" : mode === "light" ? "dark" : "system";
   const has = (path: string) => extensions.some((e) => e.path === path);
   const billing = has("/billing"),
     commerce = has("/commerce");
@@ -141,24 +133,7 @@ export function AccountMenu({
           <Icon name="chevrons" size={14} />
         </button>
         <LanguageMenu />
-        <button
-          className="ghost icon-button"
-          aria-label={
-            tr("颜色模式：") +
-            themeNames[mode] +
-            tr("，点击切换为") +
-            themeNames[nextTheme]
-          }
-          title={tr("颜色模式：") + themeNames[mode]}
-          onClick={() => change(nextTheme)}
-        >
-          <Icon
-            name={
-              mode === "system" ? "monitor" : mode === "dark" ? "moon" : "sun"
-            }
-            size={17}
-          />
-        </button>
+        <ThemeButton theme={theme} />
       </div>
       {open && (
         <section

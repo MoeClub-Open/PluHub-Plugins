@@ -5,7 +5,7 @@
   "name": "控制台",
   "description": "提供站点门户、登录页面及管理界面。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.88",
+  "version": "0.1.0-alpha.89",
   "host": ">=0.1.0-alpha.16 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -77,7 +77,7 @@
           },
           "siteTheme": {
             "type": "string",
-            "enum": ["graphite", "ocean", "violet"]
+            "enum": ["graphite", "ocean", "violet", "emerald", "amber", "rose"]
           }
         }
       },
