@@ -16,6 +16,26 @@ const sharedUiExternals = [
   "react-dom/client",
   "@pluhub/ui-sdk",
 ];
+// CommonJS dependencies need the same shared runtime as native ES module imports.
+const sharedUiBanner = `
+import __pluhubReact from "react";
+import * as __pluhubDOM from "react-dom";
+import * as __pluhubClient from "react-dom/client";
+import * as __pluhubJSX from "react/jsx-runtime";
+import * as __pluhubSDK from "@pluhub/ui-sdk";
+const __pluhubModules = {
+  "react": __pluhubReact,
+  "react-dom": __pluhubDOM,
+  "react-dom/client": __pluhubClient,
+  "react/jsx-runtime": __pluhubJSX,
+  "react/jsx-dev-runtime": __pluhubJSX,
+  "@pluhub/ui-sdk": __pluhubSDK,
+};
+const require = (id) => {
+  if (Object.hasOwn(__pluhubModules, id)) return __pluhubModules[id];
+  throw new Error("Unsupported browser module: " + id);
+};
+`;
 const expressionLicense: Plugin = {
   name: "billing-expression-license",
   setup(builder) {
@@ -72,17 +92,17 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
       minify: true,
       external: sharedUiExternals,
       plugins: [expressionLicense],
-      banner: ["model-catalog", "console", "leaderboard"].includes(entry.name)
-        ? {
-            js:
+      banner: {
+        js: sharedUiBanner + (["model-catalog", "console", "leaderboard"].includes(entry.name)
+          ?
               "/*!\n" +
               (await readFile(
                 resolve(root, "model-catalog", "THIRD_PARTY_NOTICES.md"),
                 "utf8",
               )) +
-              "\n*/",
-          }
-        : undefined,
+              "\n*/"
+          : ""),
+      },
       loader: { ".svg": "text" },
       define: { "process.env.NODE_ENV": '"production"' },
     });
