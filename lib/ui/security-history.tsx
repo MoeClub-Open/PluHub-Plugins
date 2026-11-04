@@ -124,7 +124,7 @@ export function SecurityHistory({
   const users = useLoad<any[]>(
     () =>
       administrative
-        ? host.request("/api/plugins/official.users/users")
+        ? host.request("/api/plugins/official.auth/users")
         : Promise.resolve([]),
     [administrative],
   );

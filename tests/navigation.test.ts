@@ -47,7 +47,6 @@ const pages = [
   "mailer",
   "turnstile",
   "byok",
-  "users",
   "observability",
   "ai-router",
   "rate-limit",

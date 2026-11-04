@@ -17,6 +17,7 @@ import type {
   AutoRoutingInput,
 } from "@pluhub/contracts/routing";
 import { decide, type DifficultyDecision } from "./decisions.js";
+import { estimateInputTokens } from "../../lib/ai/input-tokens.js";
 import { efforts, encodeReasoning } from "../../lib/ai/reasoning.js";
 import { priceUsage } from "../../lib/commerce/pricing.js";
 import {
@@ -146,11 +147,9 @@ export default definePlugin({
           "Use an effort setting or model-only mode to preserve an explicit thinking budget",
         );
       const keep = !!explicit && p.preserveClientEffort !== false;
-      const inputBytes = Buffer.byteLength(
-        JSON.stringify({
-          messages: input.request.messages,
-          tools: input.request.tools,
-        }),
+      const inputBytes = estimateInputTokens(
+        input.request.messages,
+        input.request.tools,
       );
       const requestedSize = inputBytes + (input.request.maxTokens ?? 0);
       const eligible: Eligible[] = [];
@@ -167,7 +166,6 @@ export default definePlugin({
               protocolPolicy: input.protocolPolicy,
               principalId: input.principalId,
               allowedChannelIds: input.allowedChannelIds,
-              consumptionMultiplier: input.consumptionMultiplier,
               pricingContext: input.pricingContext,
             },
             signal,

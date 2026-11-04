@@ -15,6 +15,12 @@ export async function executeIngress(
 ) {
   const responseModel = plan.responseModel ?? request.model;
   ctx.state.set("ai.executionStarted", true);
+  if (host.hasCapability("billing.admit@1"))
+    await host.call(
+      "billing.admit@1",
+      { action: "start", context: ctx },
+      ctx.signal,
+    );
   const execution = new AbortController();
   const signal = AbortSignal.any([ctx.signal, execution.signal]);
   const events = await executeRequest(host, ctx, request, plan, signal);

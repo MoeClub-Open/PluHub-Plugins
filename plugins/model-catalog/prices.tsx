@@ -18,25 +18,18 @@ export const consumptionPrice = (
   kind: "input" | "output" | "request",
 ) => {
   if (model.pricing?.mode === "expression") return undefined;
-  const base =
-    model.billing?.[kind] ??
-    (kind === "request"
-      ? model.pricing?.request
-      : kind === "input"
-        ? model.inputPrice
-        : model.outputPrice);
-  return base === undefined
-    ? undefined
-    : base * (model.billing?.multiplier ?? model.consumptionMultiplier ?? 1);
+  return kind === "request"
+    ? model.pricing?.request
+    : kind === "input"
+      ? model.inputPrice
+      : model.outputPrice;
 };
 
 export function ModelPrices({ model }: { model: CatalogModel }) {
-  const factor = model.billing?.multiplier ?? model.consumptionMultiplier ?? 1;
   if (model.pricing?.mode === "expression")
     return (
       <ExpressionPrices
         source={model.pricing.expression!}
-        multiplier={factor}
         formatPrice={formatPrice}
       />
     );
@@ -45,7 +38,6 @@ export function ModelPrices({ model }: { model: CatalogModel }) {
     output: model.outputPrice,
     ...model.pricing,
   };
-  const billing = model.billing ?? original;
   const fields: [keyof TokenPrices, string][] = [
     ["input", tr("输入")],
     ["output", tr("输出")],
@@ -53,18 +45,13 @@ export function ModelPrices({ model }: { model: CatalogModel }) {
     ["cacheWrite", tr("缓存写入 · 5 分钟")],
     ["cacheWrite1h", tr("缓存写入 · 1 小时")],
   ];
-  const rows = (rates: Partial<TokenPrices>, applied: Partial<TokenPrices>) =>
+  const rows = (rates: Partial<TokenPrices>) =>
     fields
-      .filter(([key]) => rates[key] !== undefined || applied[key] !== undefined)
+      .filter(([key]) => rates[key] !== undefined)
       .map(([key, label]) => (
         <tr key={key}>
           <td>{label} / 1M</td>
           <td>{formatPrice(rates[key])}</td>
-          <td>
-            {formatPrice(
-              applied[key] === undefined ? undefined : applied[key]! * factor,
-            )}
-          </td>
         </tr>
       ));
   return (
@@ -73,8 +60,7 @@ export function ModelPrices({ model }: { model: CatalogModel }) {
         <thead>
           <tr>
             <th>{tr("计价项目")}</th>
-            <th>{tr("原价 · USD")}</th>
-            <th>{tr("扣费价 · USD")}</th>
+            <th>{tr("价格 · USD")}</th>
           </tr>
         </thead>
         <tbody>
@@ -82,27 +68,18 @@ export function ModelPrices({ model }: { model: CatalogModel }) {
             <tr>
               <td>{tr("每次请求")}</td>
               <td>{formatPrice(original.request)}</td>
-              <td>{formatPrice(consumptionPrice(model, "request"))}</td>
             </tr>
           ) : (
             <>
-              {rows(original, billing)}
+              {rows(original)}
               {original.tiers?.map((tier) => (
                 <React.Fragment key={tier.above}>
                   <tr>
-                    <th colSpan={3}>
+                    <th colSpan={2}>
                       {tr("输入 Token 超过")} {number(tier.above)}
                     </th>
                   </tr>
-                  {rows(
-                    { ...original, ...tier },
-                    {
-                      ...billing,
-                      ...(billing.tiers?.find(
-                        (item) => item.above === tier.above,
-                      ) ?? tier),
-                    },
-                  )}
+                  {rows({ ...original, ...tier })}
                 </React.Fragment>
               ))}
             </>

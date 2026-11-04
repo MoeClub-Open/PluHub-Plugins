@@ -3,7 +3,8 @@ import { Checkbox } from "./checkbox.js";
 import { t as tr } from "./i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import { mountPage, useLoad, Notice } from "./mount.js";
+import { mountPage, Notice } from "./mount.js";
+import { usePluginConfig } from "./plugin-config.js";
 import { PageHeading } from "./components.js";
 import { MailTemplateTools } from "./mail-preview.js";
 export function SecurityProviderForm({
@@ -15,16 +16,10 @@ export function SecurityProviderForm({
   kind: "auth" | "mailer";
   onSaved?: () => void;
 }) {
-  const loaded = useLoad<any>(() => host.request("/api/host/config"));
+  const loaded = usePluginConfig(host, "official." + kind);
   const [message, setMessage] = React.useState(""),
     [busy, setBusy] = React.useState(false);
-  const find = (c: any) =>
-    c.plugins.find((p: any) =>
-      new RegExp("/(?:official\\.)?" + kind + "$").test(
-        p.path.replaceAll("\\", "/"),
-      ),
-    );
-  const settings = loaded.data ? (find(loaded.data)?.config ?? {}) : {};
+  const settings = loaded.data ?? {};
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget),
@@ -32,54 +27,48 @@ export function SecurityProviderForm({
       checked = (n: string) => f.get(n) === "on";
     setBusy(true);
     try {
-      const config = await host.request<any>("/api/host/config"),
-        plugin = find(config);
-      if (!plugin) throw Error(tr("插件未安装"));
-      const next: any = { ...plugin.config };
-      if (kind === "auth") {
-        next.registrationEnabled = checked("registrationEnabled");
-        next.emailLoginEnabled = checked("emailLoginEnabled");
-        next.passwordResetEnabled = checked("passwordResetEnabled");
-        next.secureCookie = checked("secureCookie");
-        next.captcha = {
-          login: checked("captchaLogin"),
-          register: checked("captchaRegister"),
-          email: checked("captchaEmail"),
-        };
-        next.webauthn = {
-          enabled: checked("webauthn"),
-          ...(value("rpID") ? { rpID: value("rpID") } : {}),
-          ...(value("origins")
-            ? {
-                origins: value("origins")
-                  .split(/[\s,]+/)
-                  .filter(Boolean),
-              }
-            : {}),
-        };
-      } else {
-        next.enabled = checked("enabled");
-        for (const n of [
-          "host",
-          "from",
-          "user",
-          "passwordRef",
-          "tlsServerName",
-        ])
-          if (value(n)) next[n] = value(n);
-          else delete next[n];
-        next.port = Number(value("port") || 587);
-        next.secure = checked("secure");
-        next.allowInsecure = checked("allowInsecure");
-        next.secretRefs = next.passwordRef ? [next.passwordRef] : [];
-      }
-      plugin.config = next;
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
+      await loaded.save((current) => {
+        const next: any = { ...current };
+        if (kind === "auth") {
+          next.registrationEnabled = checked("registrationEnabled");
+          next.emailLoginEnabled = checked("emailLoginEnabled");
+          next.passwordResetEnabled = checked("passwordResetEnabled");
+          next.secureCookie = checked("secureCookie");
+          next.captcha = {
+            login: checked("captchaLogin"),
+            register: checked("captchaRegister"),
+            email: checked("captchaEmail"),
+          };
+          next.webauthn = {
+            enabled: checked("webauthn"),
+            ...(value("rpID") ? { rpID: value("rpID") } : {}),
+            ...(value("origins")
+              ? {
+                  origins: value("origins")
+                    .split(/[\s,]+/)
+                    .filter(Boolean),
+                }
+              : {}),
+          };
+        } else {
+          next.enabled = checked("enabled");
+          for (const n of [
+            "host",
+            "from",
+            "user",
+            "passwordRef",
+            "tlsServerName",
+          ])
+            if (value(n)) next[n] = value(n);
+            else delete next[n];
+          next.port = Number(value("port") || 587);
+          next.secure = checked("secure");
+          next.allowInsecure = checked("allowInsecure");
+          next.secretRefs = next.passwordRef ? [next.passwordRef] : [];
+        }
+        return next;
       });
       setMessage(tr("已保存"));
-      loaded.reload();
       onSaved?.();
     } catch (e) {
       setMessage((e as Error).message);

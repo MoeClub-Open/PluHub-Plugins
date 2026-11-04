@@ -200,6 +200,7 @@ export function WorkflowDataNodeSettings({ node, change, context }: {
             <option value="openai-chat">OpenAI Chat Completions</option>
             <option value="openai-responses">OpenAI Responses</option>
             <option value="anthropic">Anthropic Messages</option>
+            <option value="gemini">Google Gemini</option>
           </Select>
         </label></FlowParameter>
         <FlowParameter field="promptMode"><label>{tr("提示词处理")}

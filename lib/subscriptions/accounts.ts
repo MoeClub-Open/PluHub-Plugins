@@ -1,11 +1,5 @@
 import { waitFor as cancellable } from "../ai/cancellation.js";
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-  randomUUID,
-} from "node:crypto";
-import { readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import {
   HostError,
@@ -21,6 +15,7 @@ import type {
   SubscriptionLease,
 } from "@pluhub/contracts/subscription";
 import { openDatabase, transaction } from "../storage/sqlite.js";
+import { openPluginVault } from "../security/vault.js";
 import { affinityMigration, createSessionAffinity } from "./affinity.js";
 import { healthMigration, createSubscriptionHealth } from "./health.js";
 import { startSubscriptionMaintenance } from "./maintenance.js";
@@ -37,6 +32,12 @@ import { subscriptionOverview, subscriptionNames } from "./overview.js";
 import { siwcProfile, siwcResource, verifySiwc, revokeSiwc } from "./siwc.js";
 import { accountSubscriptionModels } from "./models.js";
 
+const allKinds: readonly SubscriptionKind[] = [
+  "codex",
+  "claude-subscription",
+  "antigravity",
+  "grok",
+];
 const fail = (code: string, message: string, status = 400): never => {
   throw new HostError(code, message, status);
 };
@@ -45,27 +46,13 @@ const concurrency = (n: unknown) => {
     fail("invalid_concurrency", "最大并发应为 1 至 100");
   return Number(n);
 };
-export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
+
+export function setupSubscriptionAccounts(
+  host: Host,
+  kinds: readonly SubscriptionKind[] = allKinds,
+) {
   const initialMasterKeyRef = host.config().masterKeyRef;
-  const keyFile = join(host.dataDir, "vault.key");
-  let master: Buffer;
-  if (host.config().masterKeyRef)
-    master = Buffer.from(
-      host.secret(String(host.config().masterKeyRef)),
-      "base64",
-    );
-  else {
-    try {
-      master = readFileSync(keyFile);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      master = randomBytes(32);
-      writeFileSync(keyFile, master, { flag: "wx", mode: 0o600 });
-    }
-    chmodSync(keyFile, 0o600);
-  }
-  if (master.length !== 32)
-    fail("invalid_config", "Vault key must be 32 bytes");
+  const vault = openPluginVault(host);
   const db = openDatabase(join(host.dataDir, "accounts.sqlite"), [
     `CREATE TABLE accounts(id TEXT PRIMARY KEY,provider TEXT NOT NULL,name TEXT NOT NULL,cipher TEXT NOT NULL,
        enabled INTEGER NOT NULL DEFAULT 1,max_concurrency INTEGER NOT NULL DEFAULT 2,status TEXT NOT NULL DEFAULT 'ready',
@@ -85,59 +72,50 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
   >();
   const active = new Map<string, number>();
   const affinity = createSessionAffinity(db, active, stop.signal);
-  const health = createSubscriptionHealth(db, kind, affinity.notify);
+  const healthByKind = Object.fromEntries(
+    kinds.map((k) => [k, createSubscriptionHealth(db, k, affinity.notify)]),
+  ) as Record<SubscriptionKind, ReturnType<typeof createSubscriptionHealth>>;
+  const healthFor = (provider: string) =>
+    healthByKind[subscriptionKind(provider)]!;
+
   const row = (id: string): any =>
     db.prepare("SELECT * FROM accounts WHERE id=?").get(id) ??
     fail("subscription_not_found", "订阅账号不存在", 404);
-  const ownedRow = (id: string, ownerId = ""): any => {
+  const ownedRow = (
+    id: string,
+    ownerId = "",
+    expectedKind?: SubscriptionKind,
+  ): any => {
     const r = row(requiredString(id, "id"));
-    if (r.owner_id !== ownerId)
+    if (r.owner_id !== ownerId || (expectedKind && r.provider !== expectedKind))
       fail("subscription_not_found", "订阅账号不存在", 404);
     return r;
   };
-  const poolRows = (ids: string[], ownerId = "") =>
+  const poolRows = (kind: SubscriptionKind, ids: string[], ownerId = "") =>
     ids.flatMap((id) => {
       const r = db.prepare("SELECT * FROM accounts WHERE id=?").get(id) as any;
-      if (!r) return [];
+      if (!r || r.provider !== kind) return [];
       if (r.owner_id !== ownerId)
         fail("subscription_not_found", "订阅账号不存在", 404);
-      if (r.provider !== kind)
-        fail("subscription_provider", "订阅账号与提供商不匹配");
       return [r];
     });
   const aad = (id: string, provider: string, ownerId = "") =>
-    Buffer.from(
-      JSON.stringify(ownerId ? [id, provider, ownerId] : [id, provider]),
-    );
-  function encrypt(
+    JSON.stringify(ownerId ? [id, provider, ownerId] : [id, provider]);
+  const encrypt = (
     id: string,
     provider: string,
     value: SubscriptionToken,
     ownerId = "",
-  ) {
-    const iv = randomBytes(12),
-      cipher = createCipheriv("aes-256-gcm", master, iv);
-    cipher.setAAD(aad(id, provider, ownerId));
-    return Buffer.concat([
-      iv,
-      cipher.update(JSON.stringify(value)),
-      cipher.final(),
-      cipher.getAuthTag(),
-    ]).toString("base64");
-  }
-  function decrypt(r: any): SubscriptionToken {
-    const data = Buffer.from(r.cipher, "base64"),
-      cipher = createDecipheriv("aes-256-gcm", master, data.subarray(0, 12));
-    cipher.setAAD(aad(r.id, r.provider, r.owner_id));
-    cipher.setAuthTag(data.subarray(-16));
-    return JSON.parse(
-      Buffer.concat([
-        cipher.update(data.subarray(12, -16)),
-        cipher.final(),
-      ]).toString(),
+  ) => vault.encryptJson(value, aad(id, provider, ownerId));
+  const decrypt = (r: any): SubscriptionToken =>
+    vault.decryptJson<SubscriptionToken>(
+      r.cipher,
+      aad(r.id, r.provider, r.owner_id),
     );
-  }
+
   function metadata(r: any) {
+    const kind = subscriptionKind(r.provider);
+    const health = healthFor(kind);
     const value = decrypt(r);
     return {
       id: r.id,
@@ -195,13 +173,14 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     };
   }
   async function save(
+    expectedKind: SubscriptionKind,
     input: any,
     ownerId = "",
     signal?: AbortSignal,
     verified = false,
   ) {
-    const provider = subscriptionKind(input.provider ?? kind);
-    if (provider !== kind)
+    const provider = subscriptionKind(input.provider ?? expectedKind);
+    if (provider !== expectedKind)
       fail("subscription_provider", "订阅账号与提供商不匹配");
     const max = concurrency(input.maxConcurrency ?? 2),
       id = input.id ? requiredString(input.id, "id") : randomUUID();
@@ -280,7 +259,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       Date.now(),
       ownerId,
     );
-    health.remove(id);
+    healthFor(provider).remove(id);
     return metadata(row(id));
   }
   async function resolve(
@@ -383,7 +362,6 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         return credential(row(id));
       } catch (error) {
         if (stop.signal.aborted) throw error;
-        // A re-import or project update wins over an in-flight refresh.
         const current = row(id);
         if (current.version !== r.version) return credential(current);
         const code =
@@ -447,6 +425,8 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
     const task = (async () => {
       let token = await resolve(id);
       let current = row(id);
+      const kind = subscriptionKind(current.provider);
+      const health = healthFor(kind);
       if (kind === "grok" || decrypt(current).auth_mode === "siwc") {
         health.expire(id);
         return metadata(current);
@@ -505,7 +485,6 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         credits: overview.credits,
         project_id: overview.projectId ?? value.project_id,
       };
-      // Quota metadata does not rotate credentials; refresh merges the latest encrypted metadata.
       transaction(db, () => {
         db.prepare(
           "UPDATE accounts SET name=?,quota_json=?,quota_updated_at=?,cipher=? WHERE id=? AND version=?",
@@ -528,318 +507,335 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       if (checking.get(id) === task) checking.delete(id);
     }
   }
-  host.provide(
-    `ai.subscription.${kind}@1`,
-    async (input: SubscriptionAccountCommand, signal) => {
-      signal.throwIfAborted();
-      if ("provider" in input && input.provider && input.provider !== kind)
-        fail("subscription_provider", "订阅账号与提供商不匹配");
-      if ("id" in input) {
-        const r = ownedRow(input.id, input.ownerId ?? "");
-        if (input.provider && r.provider !== input.provider)
-          fail("subscription_provider", "订阅账号与提供商不匹配");
-        if (input.action === "models") {
-          await resolve(r.id);
-          return accountSubscriptionModels(
-            host,
-            kind,
-            decrypt(row(r.id)),
-            signal,
-          );
-        }
-        return metadata(r);
-      }
-      if (input.action === "acquire" || input.action === "availability") {
-        if (
-          !Array.isArray(input.ids) ||
-          !input.ids.length ||
-          input.ids.length > 100 ||
-          new Set(input.ids).size !== input.ids.length ||
-          input.ids.some((id) => typeof id !== "string" || id.length > 256)
-        )
-          fail("subscription_binding", "请选择订阅账号，且不可重复");
-        const matchingRows = () =>
-          poolRows(input.ids, input.ownerId).filter(
-            (r) =>
-              kind !== "codex" ||
-              (decrypt(r).auth_mode ?? "cli") === (input.authMode ?? "cli"),
-          );
-        if (input.action === "availability")
-          return {
-            available: matchingRows().some(
-              (r) =>
-                r.enabled &&
-                r.status === "ready" &&
-                r.cooldown_until <= Date.now() &&
-                !health.blocked(r.id, input.model),
-            ),
-          };
-        const sessionKey = input.sessionId
-          ? JSON.stringify([
-              input.ownerId ?? "",
-              requiredString(input.sessionId, "sessionId", 256),
-            ])
-          : undefined;
-        if (
-          input.excludeIds !== undefined &&
-          (!Array.isArray(input.excludeIds) ||
-            input.excludeIds.some((id) => typeof id !== "string"))
-        )
-          fail("subscription_binding", "无效的账号排除列表");
-        const excluded = new Set(input.excludeIds ?? []);
-        let failure: unknown;
-        for (
-          let attempt = 0;
-          attempt < Math.min(3, input.ids.length);
-          attempt++
-        ) {
-          let selected;
-          try {
-            selected = await affinity.acquire(
-              () =>
-                matchingRows().filter(
-                  (r) =>
-                    !excluded.has(r.id) && !health.blocked(r.id, input.model),
-                ),
-              sessionKey,
-              signal,
-            );
-          } catch (error) {
-            if (
-              error instanceof HostError &&
-              error.code === "subscription_unavailable" &&
-              failure
-            )
-              throw failure;
-            throw error;
-          }
-          const leaseId = randomUUID();
-          leases.set(leaseId, {
-            id: selected.id,
-            version: selected.version,
-            model: input.model,
-          });
-          try {
-            const result = await cancellable(resolve(selected.id), signal);
-            signal.throwIfAborted();
-            leases.get(leaseId)!.version = result.version;
-            return {
-              leaseId,
-              accountId: selected.id,
-              credential: result,
-            } satisfies SubscriptionLease;
-          } catch (error) {
-            release(leaseId);
-            signal.throwIfAborted();
-            stop.signal.throwIfAborted();
-            affinity.forget(sessionKey, selected.id);
-            if (
-              !(error instanceof HostError) ||
-              ![
-                "subscription_reauthorize",
-                "oauth_refresh_failed",
-                "oauth_response",
-                "subscription_disabled",
-              ].includes(error.code)
-            )
-              throw error;
-            excluded.add(selected.id);
-            failure = error;
-          }
-        }
-        throw failure;
-      }
-      if (input.action === "release") {
-        release(input.leaseId);
-        return;
-      }
-      const lease =
-        leases.get(input.leaseId) ??
-        fail("subscription_lease", "订阅账号占用已失效", 409);
-      if (input.action === "refresh") {
-        const result = await cancellable(
-          resolve(lease.id, input.version),
-          signal,
-        );
-        signal.throwIfAborted();
-        lease.version = result.version;
-        return result;
-      }
-      if (input.action === "report") {
-        const r = db
-          .prepare("SELECT * FROM accounts WHERE id=?")
-          .get(lease.id) as any;
-        if (!r || r.version !== input.version) return;
-        health.report(r, input, lease.model);
-        return;
-      }
-      fail("subscription_action", "Unknown subscription account action");
-    },
-  );
+
   const session = (ctx: RequestContext) => {
     if (!ctx.principal?.session)
       fail("session_required", "请使用控制台会话", 403);
     return ctx.principal!;
   };
-  const oauth = createSubscriptionOAuth(
-    host,
-    (input, owner, signal) => save(input, owner, signal, true),
-    kind,
-    (id, owner) => decrypt(ownedRow(id, owner)),
-  );
-  host.api({
-    method: "GET",
-    path: "/oauth/callback",
-    access: "public",
-    handle: (request) => oauth.receive(request),
-  });
-  for (const personal of [false, true]) {
-    const owner = (ctx: RequestContext) => (personal ? ctx.principal!.id : "");
-    const api = (
-      method: string,
-      path: string,
-      handle: (r: Request, c: RequestContext) => Response | Promise<Response>,
-    ) =>
-      host.api({
-        method,
-        path: (personal ? "/personal" : "") + path,
-        access: personal ? "authenticated" : "admin",
-        handle: (r, c) => {
-          session(c);
-          return handle(r, c);
-        },
-      });
-    api("GET", "/accounts", (_r, ctx) =>
-      json(
-        (
-          db
-            .prepare(
-              "SELECT * FROM accounts WHERE owner_id=? ORDER BY created_at DESC,id",
-            )
-            .all(owner(ctx)) as any[]
-        ).map(metadata),
-      ),
-    );
-    api("POST", "/accounts", async (r, ctx) =>
-      json(await save(await readObject(r, 262144), owner(ctx), ctx.signal)),
-    );
-    api("POST", "/account", async (request, ctx) => {
-      const b = await readObject(request),
-        r = ownedRow(requiredString(b.id, "id"), owner(ctx));
-      if (b.action === "delete") {
-        const token = decrypt(r);
-        const revocationConfirmed =
-          token.auth_mode !== "siwc" ||
-          (await revokeSiwc(
-            host,
-            token,
-            AbortSignal.any([ctx.signal, AbortSignal.timeout(15000)]),
-          ).catch(() => false));
-        db.prepare("DELETE FROM accounts WHERE id=?").run(r.id);
-        affinity.remove(r.id);
-        health.remove(r.id);
-        return json({ ok: true, revocationConfirmed });
-      }
-      if (b.action === "update") {
-        db.prepare(
-          "UPDATE accounts SET name=?,enabled=?,max_concurrency=?,updated_at=? WHERE id=?",
-        ).run(
-          b.name === undefined
-            ? r.name
-            : typeof b.name === "string" && !b.name.trim()
-              ? (decrypt(r).email ?? subscriptionNames[kind])
-              : requiredString(b.name, "name", 254),
-          b.enabled === undefined
-            ? r.enabled
-            : b.enabled === true
-              ? 1
-              : b.enabled === false
-                ? 0
-                : fail("invalid_request", "Invalid enabled state"),
-          concurrency(b.maxConcurrency ?? r.max_concurrency),
-          Date.now(),
-          r.id,
-        );
-        affinity.notify(r.id);
-      } else if (b.action === "quota")
-        return json(await cancellable(queryOverview(r.id), ctx.signal));
-      else if (b.action === "refresh") await resolve(r.id, r.version);
-      else if (b.action === "resume") {
-        db.prepare(
-          "UPDATE accounts SET status='ready',error_code=NULL,cooldown_until=0,health_revision=health_revision+1 WHERE id=?",
-        ).run(r.id);
-        health.remove(r.id);
-      } else if (b.action === "project") {
-        if (r.provider !== "antigravity")
-          fail("subscription_provider", "仅 Antigravity 支持项目 ID");
-        let project = b.projectId;
-        if (!project) {
-          const token = await resolve(r.id);
-          project = await discoverAntigravityProject(
-            host,
-            token.secret,
-            AbortSignal.any([
-              stop.signal,
-              ctx.signal,
-              AbortSignal.timeout(30000),
-            ]),
-          );
+
+  const oauthClosers: (() => Promise<void> | void)[] = [];
+  for (const kind of kinds) {
+    const health = healthFor(kind);
+    host.provide(
+      `ai.subscription.${kind}@1`,
+      async (input: SubscriptionAccountCommand, signal) => {
+        signal.throwIfAborted();
+        if ("provider" in input && input.provider && input.provider !== kind)
+          fail("subscription_provider", "订阅账号与提供商不匹配");
+        if ("id" in input) {
+          const r = ownedRow(input.id, input.ownerId ?? "", kind);
+          if (input.provider && r.provider !== input.provider)
+            fail("subscription_provider", "订阅账号与提供商不匹配");
+          if (input.action === "models") {
+            await resolve(r.id);
+            return accountSubscriptionModels(
+              host,
+              kind,
+              decrypt(row(r.id)),
+              signal,
+            );
+          }
+          return metadata(r);
         }
-        const current = row(r.id),
-          value = decrypt(current);
-        value.project_id = requiredString(project, "Project ID", 512);
-        db.prepare(
-          "UPDATE accounts SET cipher=?,version=version+1,updated_at=? WHERE id=? AND version=?",
-        ).run(
-          encrypt(r.id, r.provider, value, r.owner_id),
-          Date.now(),
-          r.id,
-          current.version,
-        );
-      } else fail("invalid_action", "Invalid account action");
-      return json(metadata(row(r.id)));
-    });
-    const scope = (ctx: RequestContext) => ({
-      actor: ctx.principal!.id,
-      owner: owner(ctx),
-    });
-    api("GET", "/oauth/providers", (request) =>
-      json(oauth.providers(request.url)),
+        if (input.action === "acquire" || input.action === "availability") {
+          if (
+            !Array.isArray(input.ids) ||
+            !input.ids.length ||
+            input.ids.length > 100 ||
+            new Set(input.ids).size !== input.ids.length ||
+            input.ids.some((id) => typeof id !== "string" || id.length > 256)
+          )
+            fail("subscription_binding", "请选择订阅账号，且不可重复");
+          const matchingRows = () =>
+            poolRows(kind, input.ids, input.ownerId).filter(
+              (r) =>
+                kind !== "codex" ||
+                (decrypt(r).auth_mode ?? "cli") === (input.authMode ?? "cli"),
+            );
+          if (input.action === "availability")
+            return {
+              available: matchingRows().some(
+                (r) =>
+                  r.enabled &&
+                  r.status === "ready" &&
+                  r.cooldown_until <= Date.now() &&
+                  !health.blocked(r.id, input.model),
+              ),
+            };
+          const sessionKey = input.sessionId
+            ? JSON.stringify([
+                kind,
+                input.ownerId ?? "",
+                requiredString(input.sessionId, "sessionId", 256),
+              ])
+            : undefined;
+          if (
+            input.excludeIds !== undefined &&
+            (!Array.isArray(input.excludeIds) ||
+              input.excludeIds.some((id) => typeof id !== "string"))
+          )
+            fail("subscription_binding", "无效的账号排除列表");
+          const excluded = new Set(input.excludeIds ?? []);
+          let failure: unknown;
+          for (
+            let attempt = 0;
+            attempt < Math.min(3, input.ids.length);
+            attempt++
+          ) {
+            let selected;
+            try {
+              selected = await affinity.acquire(
+                () =>
+                  matchingRows().filter(
+                    (r) =>
+                      !excluded.has(r.id) && !health.blocked(r.id, input.model),
+                  ),
+                sessionKey,
+                signal,
+              );
+            } catch (error) {
+              if (
+                error instanceof HostError &&
+                error.code === "subscription_unavailable" &&
+                failure
+              )
+                throw failure;
+              throw error;
+            }
+            const leaseId = randomUUID();
+            leases.set(leaseId, {
+              id: selected.id,
+              version: selected.version,
+              model: input.model,
+            });
+            try {
+              const result = await cancellable(resolve(selected.id), signal);
+              signal.throwIfAborted();
+              leases.get(leaseId)!.version = result.version;
+              return {
+                leaseId,
+                accountId: selected.id,
+                credential: result,
+              } satisfies SubscriptionLease;
+            } catch (error) {
+              release(leaseId);
+              signal.throwIfAborted();
+              stop.signal.throwIfAborted();
+              affinity.forget(sessionKey, selected.id);
+              if (
+                !(error instanceof HostError) ||
+                ![
+                  "subscription_reauthorize",
+                  "oauth_refresh_failed",
+                  "oauth_response",
+                  "subscription_disabled",
+                ].includes(error.code)
+              )
+                throw error;
+              excluded.add(selected.id);
+              failure = error;
+            }
+          }
+          throw failure;
+        }
+        if (input.action === "release") {
+          release(input.leaseId);
+          return;
+        }
+        const lease =
+          leases.get(input.leaseId) ??
+          fail("subscription_lease", "订阅账号占用已失效", 409);
+        if (input.action === "refresh") {
+          const result = await cancellable(
+            resolve(lease.id, input.version),
+            signal,
+          );
+          signal.throwIfAborted();
+          lease.version = result.version;
+          return result;
+        }
+        if (input.action === "report") {
+          const r = db
+            .prepare("SELECT * FROM accounts WHERE id=?")
+            .get(lease.id) as any;
+          if (!r || r.version !== input.version) return;
+          healthFor(r.provider).report(r, input, lease.model);
+          return;
+        }
+        fail("subscription_action", "Unknown subscription account action");
+      },
     );
-    api("POST", "/oauth/start", async (request, ctx) => {
-      const b = await readObject(request),
-        provider = subscriptionKind(b.provider ?? kind);
-      if (provider !== kind)
-        fail("subscription_provider", "订阅账号与提供商不匹配");
-      if (b.id && ownedRow(b.id, owner(ctx)).provider !== provider)
-        fail("subscription_provider", "无法更改授权提供商");
-      return json(
-        await oauth.start(
-          { ...b, maxConcurrency: concurrency(b.maxConcurrency ?? 2) },
-          scope(ctx),
-          request.url,
+
+    const oauth = createSubscriptionOAuth(
+      host,
+      (input, owner, signal) => save(kind, input, owner, signal, true),
+      kind,
+      (id, owner) => decrypt(ownedRow(id, owner, kind)),
+    );
+    oauthClosers.push(() => oauth.close());
+    host.api({
+      method: "GET",
+      path: `/${kind}/oauth/callback`,
+      access: "public",
+      handle: (request) => oauth.receive(request),
+    });
+    for (const personal of [false, true]) {
+      const owner = (ctx: RequestContext) => (personal ? ctx.principal!.id : "");
+      const api = (
+        method: string,
+        path: string,
+        handle: (r: Request, c: RequestContext) => Response | Promise<Response>,
+      ) =>
+        host.api({
+          method,
+          path: `/${kind}` + (personal ? "/personal" : "") + path,
+          access: personal ? "authenticated" : "admin",
+          handle: (r, c) => {
+            session(c);
+            return handle(r, c);
+          },
+        });
+      api("GET", "/accounts", (_r, ctx) =>
+        json(
+          (
+            db
+              .prepare(
+                "SELECT * FROM accounts WHERE provider=? AND owner_id=? ORDER BY created_at DESC,id",
+              )
+              .all(kind, owner(ctx)) as any[]
+          ).map(metadata),
         ),
       );
-    });
-    api("POST", "/oauth/finish", async (request, ctx) => {
-      const b = await readObject(request);
-      return json(
-        await oauth.finish(
-          requiredString(b.id, "id"),
-          requiredString(b.callback, "authorization callback", 8192).trim(),
-          scope(ctx),
+      api("POST", "/accounts", async (r, ctx) =>
+        json(
+          await save(
+            kind,
+            await readObject(r, 262144),
+            owner(ctx),
+            ctx.signal,
+          ),
         ),
       );
-    });
-    api("POST", "/oauth/status", async (request, ctx) => {
-      const b = await readObject(request);
-      return json(await oauth.status(requiredString(b.id, "id"), scope(ctx)));
-    });
-    api("POST", "/oauth/cancel", async (request, ctx) => {
-      const b = await readObject(request);
-      return json(oauth.cancel(requiredString(b.id, "id"), scope(ctx)));
-    });
+      api("POST", "/account", async (request, ctx) => {
+        const b = await readObject(request),
+          r = ownedRow(requiredString(b.id, "id"), owner(ctx), kind);
+        if (b.action === "delete") {
+          const token = decrypt(r);
+          const revocationConfirmed =
+            token.auth_mode !== "siwc" ||
+            (await revokeSiwc(
+              host,
+              token,
+              AbortSignal.any([ctx.signal, AbortSignal.timeout(15000)]),
+            ).catch(() => false));
+          db.prepare("DELETE FROM accounts WHERE id=?").run(r.id);
+          affinity.remove(r.id);
+          health.remove(r.id);
+          return json({ ok: true, revocationConfirmed });
+        }
+        if (b.action === "update") {
+          db.prepare(
+            "UPDATE accounts SET name=?,enabled=?,max_concurrency=?,updated_at=? WHERE id=?",
+          ).run(
+            b.name === undefined
+              ? r.name
+              : typeof b.name === "string" && !b.name.trim()
+                ? (decrypt(r).email ?? subscriptionNames[kind])
+                : requiredString(b.name, "name", 254),
+            b.enabled === undefined
+              ? r.enabled
+              : b.enabled === true
+                ? 1
+                : b.enabled === false
+                  ? 0
+                  : fail("invalid_request", "Invalid enabled state"),
+            concurrency(b.maxConcurrency ?? r.max_concurrency),
+            Date.now(),
+            r.id,
+          );
+          affinity.notify(r.id);
+        } else if (b.action === "quota")
+          return json(await cancellable(queryOverview(r.id), ctx.signal));
+        else if (b.action === "refresh") await resolve(r.id, r.version);
+        else if (b.action === "resume") {
+          db.prepare(
+            "UPDATE accounts SET status='ready',error_code=NULL,cooldown_until=0,health_revision=health_revision+1 WHERE id=?",
+          ).run(r.id);
+          health.remove(r.id);
+        } else if (b.action === "project") {
+          if (r.provider !== "antigravity")
+            fail("subscription_provider", "仅 Antigravity 支持项目 ID");
+          let project = b.projectId;
+          if (!project) {
+            const token = await resolve(r.id);
+            project = await discoverAntigravityProject(
+              host,
+              token.secret,
+              AbortSignal.any([
+                stop.signal,
+                ctx.signal,
+                AbortSignal.timeout(30000),
+              ]),
+            );
+          }
+          const current = row(r.id),
+            value = decrypt(current);
+          value.project_id = requiredString(project, "Project ID", 512);
+          db.prepare(
+            "UPDATE accounts SET cipher=?,version=version+1,updated_at=? WHERE id=? AND version=?",
+          ).run(
+            encrypt(r.id, r.provider, value, r.owner_id),
+            Date.now(),
+            r.id,
+            current.version,
+          );
+        } else fail("invalid_action", "Invalid account action");
+        return json(metadata(row(r.id)));
+      });
+      const scope = (ctx: RequestContext) => ({
+        actor: ctx.principal!.id,
+        owner: owner(ctx),
+      });
+      api("GET", "/oauth/providers", (request) =>
+        json(oauth.providers(request.url)),
+      );
+      api("POST", "/oauth/start", async (request, ctx) => {
+        const b = await readObject(request),
+          provider = subscriptionKind(b.provider ?? kind);
+        if (provider !== kind)
+          fail("subscription_provider", "订阅账号与提供商不匹配");
+        if (b.id && ownedRow(b.id, owner(ctx)).provider !== provider)
+          fail("subscription_provider", "无法更改授权提供商");
+        return json(
+          await oauth.start(
+            { ...b, maxConcurrency: concurrency(b.maxConcurrency ?? 2) },
+            scope(ctx),
+            request.url,
+          ),
+        );
+      });
+      api("POST", "/oauth/finish", async (request, ctx) => {
+        const b = await readObject(request);
+        return json(
+          await oauth.finish(
+            requiredString(b.id, "id"),
+            requiredString(b.callback, "authorization callback", 8192).trim(),
+            scope(ctx),
+          ),
+        );
+      });
+      api("POST", "/oauth/status", async (request, ctx) => {
+        const b = await readObject(request);
+        return json(await oauth.status(requiredString(b.id, "id"), scope(ctx)));
+      });
+      api("POST", "/oauth/cancel", async (request, ctx) => {
+        const b = await readObject(request);
+        return json(oauth.cancel(requiredString(b.id, "id"), scope(ctx)));
+      });
+    }
   }
+
   host.validateConfig((config) => {
     if (config.masterKeyRef !== initialMasterKeyRef)
       fail(
@@ -847,7 +843,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         "Changing the vault key requires an offline key migration",
         409,
       );
-    oauthConfig(host, kind, config);
+    for (const kind of kinds) oauthConfig(host, kind, config);
   });
   const maintenance = startSubscriptionMaintenance({
     host,
@@ -856,7 +852,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
       (
         db
           .prepare(
-            "SELECT id,status,cooldown_until FROM accounts WHERE enabled=1 AND status<>'reauthorize'",
+            "SELECT id,provider,status,cooldown_until FROM accounts WHERE enabled=1 AND status<>'reauthorize'",
           )
           .all() as any[]
       ).map((r) => ({
@@ -864,7 +860,7 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
         cooling:
           r.status !== "ready" ||
           r.cooldown_until > Date.now() ||
-          health.cooldowns(r.id).length > 0,
+          healthFor(r.provider).cooldowns(r.id).length > 0,
       })),
     refresh: (id) => resolve(id, undefined, 300000),
     overview: queryOverview,
@@ -872,11 +868,11 @@ export function setupSubscriptionAccounts(host: Host, kind: SubscriptionKind) {
   host.cleanup(async () => {
     stop.abort();
     await maintenance();
-    await oauth.close();
+    await Promise.allSettled(oauthClosers.map((close) => close()));
     await Promise.allSettled([...refreshing.values(), ...checking.values()]);
     leases.clear();
     active.clear();
     db.close();
-    master.fill(0);
+    vault.close();
   });
 }

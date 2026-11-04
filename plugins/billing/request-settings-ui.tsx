@@ -1,12 +1,13 @@
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { t as tr } from "../../lib/ui/i18n.js";
-import { useLoad, Notice } from "../../lib/ui/mount.js";
+import { Notice } from "../../lib/ui/mount.js";
+import { usePluginConfig } from "../../lib/ui/plugin-config.js";
 import { Select } from "../../lib/ui/select.js";
 import type { OutputBudgetMode } from "../../lib/ai/output-budget.js";
 
 export function RequestBillingSettings({ host }: { host: UIHost }) {
-  const config = useLoad<any>(() => host.request("/api/host/config"));
+  const config = usePluginConfig(host, "official.billing");
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [reserveOutputTokens, setReserveOutputTokens] = React.useState(4096);
@@ -14,13 +15,10 @@ export function RequestBillingSettings({ host }: { host: UIHost }) {
   const [outputBudgetMode, setOutputBudgetMode] =
     React.useState<OutputBudgetMode>("automatic");
   React.useEffect(() => {
-    const plugin = config.data?.plugins.find((p: any) =>
-      /\/(?:official\.)?billing$/.test(p.path.replaceAll("\\", "/")),
-    );
-    if (plugin) {
-      setReserveOutputTokens(plugin.config?.reserveOutputTokens ?? 4096);
-      setPersonalRequestFee(plugin.config?.personalRequestFee ?? 0);
-      setOutputBudgetMode(plugin.config?.outputBudgetMode ?? "automatic");
+    if (config.data) {
+      setReserveOutputTokens(config.data.reserveOutputTokens ?? 4096);
+      setPersonalRequestFee(config.data.personalRequestFee ?? 0);
+      setOutputBudgetMode(config.data.outputBudgetMode ?? "automatic");
     }
   }, [config.data]);
   return (
@@ -33,22 +31,12 @@ export function RequestBillingSettings({ host }: { host: UIHost }) {
           setBusy(true);
           setMessage("");
           try {
-            const fresh = await host.request<any>("/api/host/config");
-            const plugin = fresh.plugins.find((p: any) =>
-              /\/(?:official\.)?billing$/.test(p.path.replaceAll("\\", "/")),
-            );
-            if (!plugin) throw new Error(tr("计费插件不可用"));
-            plugin.config = {
-              ...plugin.config,
+            await config.save((current) => ({
+              ...current,
               reserveOutputTokens,
               outputBudgetMode,
               personalRequestFee,
-            };
-            await host.request("/api/host/config", {
-              method: "PUT",
-              body: JSON.stringify(fresh),
-            });
-            config.reload();
+            }));
             setMessage(tr("已保存"));
           } catch (error) {
             setMessage((error as Error).message);

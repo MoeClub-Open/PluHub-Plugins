@@ -2,6 +2,7 @@ import { t as tr } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
+import { updatePluginConfig } from "../../lib/ui/plugin-config.js";
 function Page({ host }: { host: UIHost }) {
   const data = useLoad<any>(() =>
     host.request("/api/plugins/official.rate-limit/status"),
@@ -13,26 +14,19 @@ function Page({ host }: { host: UIHost }) {
     setBusy(true);
     const f = new FormData(e.currentTarget);
     try {
-      const config = await host.request<any>("/api/host/config");
-      const plugin = config.plugins.find((p: any) =>
-        /\/(?:official\.)?rate-limit$/.test(p.path.replaceAll("\\", "/")),
-      );
-      if (!plugin) throw new Error(tr("限流插件未配置"));
-      const next: any = { channels: plugin.config?.channels ?? {} };
-      for (const scope of ["user", "key"]) {
-        const rule: any = {};
-        for (const field of ["rpm", "tpm", "concurrency"]) {
-          const value = Number(f.get(scope + "." + field));
-          if (value > 0) rule[field] = value;
+      await updatePluginConfig(host, "official.rate-limit", (current) => {
+        const next: Record<string, any> = { channels: current?.channels ?? {} };
+        for (const scope of ["user", "key"]) {
+          const rule: Record<string, number> = {};
+          for (const field of ["rpm", "tpm", "concurrency"]) {
+            const value = Number(f.get(scope + "." + field));
+            if (value > 0) rule[field] = value;
+          }
+          if (Object.keys(rule).length) next[scope] = rule;
         }
-        if (Object.keys(rule).length) next[scope] = rule;
-      }
-      const rate = Number(f.get("bytesPerSecond"));
-      if (rate > 0) next.bytesPerSecond = rate;
-      plugin.config = next;
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
+        const rate = Number(f.get("bytesPerSecond"));
+        if (rate > 0) next.bytesPerSecond = rate;
+        return next;
       });
       setMessage(tr("流量策略已应用"));
       data.reload();

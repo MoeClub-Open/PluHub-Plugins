@@ -98,7 +98,7 @@ function ManagementAudit({
   const [page, setPage] = React.useState(1),
     [size, setSize] = React.useState(20);
   const users = useLoad<any[]>(() =>
-    client.request("/api/plugins/official.users/users"),
+    client.request("/api/plugins/official.auth/users"),
   );
   const applied = new URLSearchParams(
     Object.entries(filters).filter(([, value]) => value),

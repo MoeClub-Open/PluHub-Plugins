@@ -3,9 +3,8 @@ import { t as tr } from "../../lib/ui/i18n.js";
 const actions: Record<string, string> = {
   "PUT /api/host/config": "更新系统配置",
   "PUT /api/plugins/official.ai-router/configuration": "更新渠道与模型配置",
-  "POST /api/plugins/official.users/users": "创建用户",
-  "PATCH /api/plugins/official.users/users": "修改用户",
   "POST /api/plugins/official.auth/users": "创建用户账号",
+  "PATCH /api/plugins/official.auth/users": "修改用户",
   "POST /api/plugins/official.auth/admin/keys/revoke": "撤销用户密钥",
   "POST /api/plugins/official.auth/admin/sessions/revoke": "撤销用户会话",
   "POST /api/plugins/official.auth/admin/factors/reset": "重置用户验证方式",
@@ -21,6 +20,9 @@ const actions: Record<string, string> = {
 export function auditAction(method: string, path: string) {
   const known = actions[method + " " + path];
   if (known) return tr(known);
+  const pluginConfig = /^\/api\/host\/plugins\/([^/]+)\/config$/.exec(path);
+  if (pluginConfig && method === "PUT")
+    return tr("更新插件配置") + " · " + pluginConfig[1];
   const plugin = /^\/api\/plugins\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (plugin) {
     const verb = method === "DELETE" ? tr("删除") : method === "POST" ? tr("创建或执行") : tr("修改");

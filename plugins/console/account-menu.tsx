@@ -205,24 +205,6 @@ export function AccountMenu({
                 {tr("账号与安全")}
               </a>
             )}
-            {has("/auth") && (
-              <a href="#/auth">
-                <Icon name="key" size={16} />
-                {tr("API 密钥")}
-              </a>
-            )}
-            {(billing || commerce) && (
-              <a href={billing ? "#/billing" : "#/commerce"}>
-                <Icon name="money" size={16} />
-                {tr("钱包与订阅")}
-              </a>
-            )}
-            {has("/tickets") && (
-              <a href="#/tickets">
-                <Icon name="support" size={16} />
-                {tr("我的工单")}
-              </a>
-            )}
           </div>
           <button
             className="account-signout"

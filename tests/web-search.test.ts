@@ -165,7 +165,7 @@ it("deduplicates split SSE search snapshots, final text, citations and billable 
   expect(rendered).toContain("response.web_search_call.completed");
   expect(rendered).toContain("response.output_text.annotation.added");
 });
-it("charges hosted tool calls once with the channel multiplier, including fixed and expression pricing", () => {
+it("charges hosted tool calls once, including fixed and expression pricing", () => {
   for (const pricing of [
     { input: 1, output: 2 },
     { input: 0, output: 0, mode: "request" as const, request: 0.001 },
@@ -177,10 +177,10 @@ it("charges hosted tool calls once with the channel multiplier, including fixed 
       context: { at: Date.now(), params: {}, headers: {} },
     },
   ]) {
-    const price = { ...pricing, webSearch: 0.01, multiplier: 0.2 };
+    const price = { ...pricing, webSearch: 0.01 };
     const receipt = priceUsage({ input: 100, output: 10, webSearch: 2 }, price);
     const base = priceUsage({ input: 100, output: 10 }, price);
-    expect(receipt.amount - base.amount).toBe(4000);
+    expect(receipt.amount - base.amount).toBe(20000);
     expect(receipt.lines.find((line) => line.kind === "webSearch")).toEqual({
       kind: "webSearch",
       quantity: 2,

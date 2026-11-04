@@ -47,16 +47,11 @@ export function planObservation(
   plan: AIPlan,
 ) {
   const source = consumptionSource(plan);
-  // Personal provider cost remains separate from any platform handling fee.
-  const pricing =
-    source !== "platform" && plan.pricing
-      ? { ...plan.pricing, multiplier: 1 }
-      : plan.pricing;
   Object.assign(observation(ctx)!, {
     model: request.model,
     stream: request.stream,
     upstream: plan.upstreamId,
-    pricing,
+    pricing: plan.pricing,
     consumptionSource: source,
     ...(plan.decision || plan.reasoning || plan.redirection || plan.workflows
       ? {

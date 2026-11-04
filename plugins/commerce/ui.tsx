@@ -47,6 +47,13 @@ const states: Record<string, string> = {
     return tr("续费逾期");
   },
 };
+function commerceViewFromHash(hash = location.hash) {
+  const params = new URLSearchParams(hash.split("?")[1]);
+  const tab = params.get("tab");
+  if (tab === "subscriptions" || tab === "orders" || tab === "plans")
+    return tab;
+  return params.has("order") ? "orders" : "plans";
+}
 function Page({ host }: { host: UIHost }) {
   const catalog = useLoad<any>(() => host.request(api + "/catalog")),
     subs = useLoad<any[]>(() => host.request(api + "/subscriptions"));
@@ -54,11 +61,18 @@ function Page({ host }: { host: UIHost }) {
     { key: string; value: string } | undefined
   >(undefined);
   const [methodKey, setMethodKey] = React.useState("");
-  const [view, setView] = React.useState(
-    new URLSearchParams(location.hash.split("?")[1]).has("order")
-      ? "orders"
-      : "plans",
-  );
+  const [view, setView] = React.useState(() => commerceViewFromHash());
+  React.useEffect(() => {
+    const sync = () => setView(commerceViewFromHash());
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+  function selectView(next: string) {
+    setView(next as "plans" | "subscriptions" | "orders");
+    host.navigate(next === "plans" ? "/commerce" : "/commerce?tab=" + next);
+  }
+  const hasWalletTabs =
+    typeof document !== "undefined" && !!document.querySelector(".wallet-tabs");
   const [busy, setBusy] = React.useState(false),
     [message, setMessage] = React.useState("");
   const [selected, setSelected] = React.useState<any>(),
@@ -105,7 +119,15 @@ function Page({ host }: { host: UIHost }) {
   }
   return (
     <>
-      <PageHeading title={tr("充值与订阅")}>
+      <PageHeading
+        title={
+          view === "subscriptions"
+            ? tr("我的订阅")
+            : view === "orders"
+              ? tr("订单历史")
+              : tr("充值购买")
+        }
+      >
         {catalog.data?.customerPortals?.map(
           (portal: { id: string; name: string }) => (
             <button
@@ -148,32 +170,34 @@ function Page({ host }: { host: UIHost }) {
           message={message || catalog.error || orders.error || subs.error}
         />
       )}
-      <div
-        className="compact-tabs"
-        role="tablist"
-        aria-label={tr("充值与订阅功能")}
-      >
-        {[
-          ["plans", tr("购买额度")],
-          ["subscriptions", tr("我的订阅")],
-          ["orders", tr("订单历史")],
-        ].map(([id, title]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={view === id}
-            className={view === id ? "active" : ""}
-            onClick={() => setView(id!)}
-          >
-            {title}
-            {id === "orders" && orders.data?.total
-              ? ` (${orders.data.total})`
-              : id === "subscriptions" && subs.data?.length
-                ? ` (${subs.data.length})`
-                : ""}
-          </button>
-        ))}
-      </div>
+      {!hasWalletTabs && (
+        <div
+          className="compact-tabs"
+          role="tablist"
+          aria-label={tr("充值与订阅功能")}
+        >
+          {[
+            ["plans", tr("充值购买")],
+            ["subscriptions", tr("我的订阅")],
+            ["orders", tr("订单历史")],
+          ].map(([id, title]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={view === id}
+              className={view === id ? "active" : ""}
+              onClick={() => selectView(id!)}
+            >
+              {title}
+              {id === "orders" && orders.data?.total
+                ? ` (${orders.data.total})`
+                : id === "subscriptions" && subs.data?.length
+                  ? ` (${subs.data.length})`
+                  : ""}
+            </button>
+          ))}
+        </div>
+      )}
       {view === "plans" && (
         <>
           {!catalog.data && !catalog.error ? (
@@ -507,7 +531,7 @@ function Page({ host }: { host: UIHost }) {
                   );
                   checkoutNonce.current = undefined;
                   setSelected(undefined);
-                  setView("orders");
+                  selectView("orders");
                   orders.reload();
                 } catch (error) {
                   setMessage((error as Error).message);
@@ -579,42 +603,54 @@ function Page({ host }: { host: UIHost }) {
   );
 }
 function Settings({ host }: { host: UIHost }) {
-  const [view, setView] = React.useState(
+  const [tab, setTab] = React.useState(
     new URLSearchParams(location.hash.split("?")[1]).has("userId")
-      ? "orders"
+      ? "ledger"
       : "products",
   );
+  const [ledgerView, setLedgerView] = React.useState<
+    "orders" | "subscriptions" | "outbox" | "adjustments"
+  >("orders");
   return (
     <>
       <div className="tabs" role="tablist" aria-label={tr("商业管理")}>
         {[
           ["products", tr("商品配置")],
-          ["orders", tr("全站订单")],
-          ["subscriptions", tr("全站订阅")],
-          ["outbox", tr("支付入账")],
-          ["adjustments", tr("退款与争议")],
+          ["ledger", tr("订单与账务")],
         ].map(([id, title]) => (
           <button
             key={id}
             role="tab"
-            aria-selected={view === id}
-            className={view === id ? "active" : ""}
-            onClick={() => setView(id!)}
+            aria-selected={tab === id}
+            className={tab === id ? "active" : ""}
+            onClick={() => setTab(id!)}
           >
             {title}
           </button>
         ))}
       </div>
-      {view === "products" ? (
+      {tab === "products" ? (
         <ProductSettings host={host} onSave={() => {}} />
-      ) : view === "adjustments" ? (
-        <PaymentAdjustmentsAdmin host={host} />
       ) : (
-        <CommerceAdmin
-          key={view}
-          host={host}
-          view={view as "orders" | "subscriptions" | "outbox"}
-        />
+        <>
+          <div className="list-toolbar">
+            <Select
+              aria-label={tr("账务视图")}
+              value={ledgerView}
+              onChange={(e) => setLedgerView(e.target.value as any)}
+            >
+              <option value="orders">{tr("全站订单")}</option>
+              <option value="subscriptions">{tr("全站订阅")}</option>
+              <option value="outbox">{tr("支付入账")}</option>
+              <option value="adjustments">{tr("退款与争议")}</option>
+            </Select>
+          </div>
+          {ledgerView === "adjustments" ? (
+            <PaymentAdjustmentsAdmin host={host} />
+          ) : (
+            <CommerceAdmin key={ledgerView} host={host} view={ledgerView} />
+          )}
+        </>
       )}
     </>
   );

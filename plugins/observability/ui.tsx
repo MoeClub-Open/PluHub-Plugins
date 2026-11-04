@@ -120,14 +120,11 @@ function WorkflowCall({ host, row }: { host: UIHost; row: any }) {
               "输入 Token": number(row.input_tokens),
               "输出 Token": number(row.output_tokens),
               "TPS（输出 / 总耗时）": number(row.output_tps),
-              "估算消耗 (USD)": money(
-                row.cost_micro_usd == null ? null : row.cost_micro_usd / 1000000,
-              ),
+              ...(row.billing_status !== "settled" && row.cost_micro_usd != null
+                ? { "估算消耗 (USD)": money(row.cost_micro_usd / 1000000) }
+                : {}),
               "实际扣费 (USD)": money(
                 row.charged_micro_usd == null ? null : row.charged_micro_usd / 1000000,
-              ),
-              "预留金额 (USD)": money(
-                row.held_micro_usd == null ? null : row.held_micro_usd / 1000000,
               ),
               ...(row.billing_status !== "settled"
                 ? { 计费状态: billingStatus(row.billing_status) }
@@ -140,13 +137,9 @@ function WorkflowCall({ host, row }: { host: UIHost; row: any }) {
               </div>
             ))}
           </dl>
-          {row.billing_receipt && (
-            <PriceReceiptView value={row.billing_receipt} title={tr("实际扣费明细")} />
-          )}
           <PriceReceiptView
-            value={estimateReceipt(row)}
-            title={tr("费用估算明细")}
-            showMultiplier={!["byoapi", "byosub", "personal"].includes(row.consumption_source)}
+            value={row.billing_receipt ?? estimateReceipt(row)}
+            title={row.billing_receipt ? tr("实际扣费明细") : tr("费用估算明细")}
           />
           {(row.routing || row.upstream_response_model) && (
             <RoutingDetails value={row.routing} requestedModel={row.model} responseModel={row.upstream_response_model} />
@@ -681,20 +674,14 @@ function Page({ host }: { host: UIHost }) {
               "输入 Token": number(selected.input_tokens),
               "输出 Token": number(selected.output_tokens),
               "TPS（输出 / 总耗时）": number(selected.output_tps),
-              "估算消耗 (USD)": money(
-                selected.cost_micro_usd == null
-                  ? null
-                  : selected.cost_micro_usd / 1000000,
-              ),
+              ...(selected.billing_status !== "settled" &&
+              selected.cost_micro_usd != null
+                ? { "估算消耗 (USD)": money(selected.cost_micro_usd / 1000000) }
+                : {}),
               "实际扣费 (USD)": money(
                 selected.charged_micro_usd == null
                   ? null
                   : selected.charged_micro_usd / 1000000,
-              ),
-              "预留金额 (USD)": money(
-                selected.held_micro_usd == null
-                  ? null
-                  : selected.held_micro_usd / 1000000,
               ),
               ...(selected.billing_status !== "settled"
                 ? { 计费状态: billingStatus(selected.billing_status) }
@@ -715,20 +702,9 @@ function Page({ host }: { host: UIHost }) {
               {requestErrorHint(selected.error_code)}
             </p>
           )}
-          {selected.billing_receipt && (
-            <PriceReceiptView
-              value={selected.billing_receipt}
-              title={tr("实际扣费明细")}
-            />
-          )}
           <PriceReceiptView
-            value={estimateReceipt(selected)}
-            title={tr("费用估算明细")}
-            showMultiplier={
-              !["byoapi", "byosub", "personal"].includes(
-                selected.consumption_source,
-              )
-            }
+            value={selected.billing_receipt ?? estimateReceipt(selected)}
+            title={selected.billing_receipt ? tr("实际扣费明细") : tr("费用估算明细")}
           />
           {(selected.routing || selected.upstream_response_model) && (
             <RoutingDetails

@@ -161,6 +161,7 @@ export function installConfiguration(host: Host) {
               .flatMap((connection) => keyReferences(connection.keyRef)),
           );
         for (const plugin of config.plugins) {
+          if (identities.get(plugin.path)?.id === host.id) continue;
           const capabilities =
             identities.get(plugin.path)?.manifest.provides ?? [];
           const before = new Set(

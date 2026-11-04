@@ -36,6 +36,7 @@ export function ChannelTable({
   tests,
   edit,
   graph,
+  manageModels,
   modelsFor,
   toggle,
   test,
@@ -49,6 +50,7 @@ export function ChannelTable({
   tests: Record<string, string>;
   edit: (id: string) => void;
   graph: (id: string) => void;
+  manageModels: (id: string) => void;
   modelsFor: (id: string) => void;
   toggle: (id: string, enabled: boolean) => void;
   test: (id: string) => void;
@@ -284,12 +286,21 @@ export function ChannelTable({
                   </td>
                   <td>
                     <div className="actions">
+                      {!decisionOnly(channel) && (
+                        <button
+                          className="ghost"
+                          disabled={busy}
+                          onClick={() => manageModels(id)}
+                        >
+                          {tr("提供模型")}
+                        </button>
+                      )}
                       <button
                         className="ghost"
                         disabled={busy}
                         onClick={() => graph(id)}
                       >
-                        {tr("编辑流程")}
+                        {tr("流程图")}
                       </button>
                       <button
                         className="ghost"

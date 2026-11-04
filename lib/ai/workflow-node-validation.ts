@@ -46,7 +46,7 @@ export function validateWorkflowDataNode(node: WorkflowNode, bound = new Set<str
       check("model", typeof node.model === "string" && !!node.model.trim(), "请选择模型");
       check("channelId", node.channelId === undefined || (typeof node.channelId === "string" && !!node.channelId.trim()), "个人渠道无效");
       if (node.allowedModels !== undefined && !names(node.allowedModels)) bad("允许的模型无效");
-      check("protocol", node.protocol === undefined || ["openai-chat", "openai-responses", "anthropic"].includes(node.protocol), "调用协议无效");
+      check("protocol", node.protocol === undefined || ["openai-chat", "openai-responses", "anthropic", "gemini"].includes(node.protocol), "调用协议无效");
       check("messages", node.messages === undefined || Array.isArray(node.messages), "消息无效");
       check("prompt", node.prompt === undefined || typeof node.prompt === "string", "提示词无效");
       check("system", node.system === undefined || typeof node.system === "string", "系统提示词无效");

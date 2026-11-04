@@ -1,7 +1,8 @@
 import { t as tr } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import { Notice, useLoad } from "../../lib/ui/mount.js";
+import { Notice } from "../../lib/ui/mount.js";
+import { usePluginConfig } from "../../lib/ui/plugin-config.js";
 import { Icon } from "../../lib/ui/components.js";
 import { Select } from "../../lib/ui/select.js";
 import type { Locale } from "@pluhub/ui-sdk";
@@ -97,20 +98,16 @@ export function useBranding(
 
 export function BrandingSettings({ host }: { host: UIHost }) {
   const { dark } = useTheme();
-  const data = useLoad<any>(() => host.request("/api/host/config"));
+  const data = usePluginConfig(host, "official.console");
   const [draft, setDraft] = React.useState(defaultBranding);
   const [saved, setSaved] = React.useState(defaultBranding);
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [tab, setTab] = React.useState("identity");
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
-  const find = (config: any) =>
-    config.plugins.find((plugin: any) =>
-      /\/(?:official\.)?console$/.test(plugin.path.replaceAll("\\", "/")),
-    );
   React.useEffect(() => {
     if (data.data) {
-      const brand = readBranding(find(data.data)?.config ?? {});
+      const brand = readBranding(data.data);
       setDraft(brand);
       setSaved(brand);
     }
@@ -157,14 +154,7 @@ export function BrandingSettings({ host }: { host: UIHost }) {
     setMessage("");
     try {
       const brand = readBranding({ branding: draft });
-      const config = await host.request<any>("/api/host/config");
-      const plugin = find(config);
-      if (!plugin) throw new Error(tr("控制台插件配置不存在"));
-      plugin.config = { ...plugin.config, branding: brand };
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
-      });
+      await data.save((current) => ({ ...current, branding: brand }));
       setDraft(brand);
       setSaved(brand);
       setMessage(tr("已保存"));

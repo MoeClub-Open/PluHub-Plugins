@@ -27,7 +27,7 @@ it.each([false, true])(
     } as any;
     const host = {
       hasCapability: (name: string) =>
-        ["billing.admit@1", "ai.workflow-execution@1"].includes(name),
+        ["ai.request-limits@1", "billing.admit@1", "ai.workflow-execution@1"].includes(name),
       async call(name: string, input?: any) {
         calls.push(name);
         if (name === "ai.execution@1")

@@ -3,7 +3,6 @@ import type {
   RequestPricing,
   Usage,
   ModelRoute,
-  Upstream,
   TokenPrices,
 } from "@pluhub/contracts/ai";
 import { decimal, add, multiply, rounded } from "./decimal.js";
@@ -61,8 +60,6 @@ export function validatePricing(price: RequestPricing) {
     );
   if (price.mode === "request" || price.request !== undefined)
     validRate(price.request, "request price");
-  if (price.multiplier !== undefined)
-    validRate(price.multiplier, "multiplier", 1_000_000_000);
   let previous = -1;
   if (
     price.tiers !== undefined &&
@@ -86,10 +83,7 @@ export function validatePricing(price: RequestPricing) {
         validRate(tier[key], key);
   }
 }
-export function routePricing(
-  route: ModelRoute,
-  upstream?: Upstream,
-): RequestPricing | undefined {
+export function routePricing(route: ModelRoute): RequestPricing | undefined {
   if (
     !["request", "expression"].includes(route.pricing?.mode ?? "tokens") &&
     (route.inputPrice === undefined || route.outputPrice === undefined)
@@ -97,11 +91,8 @@ export function routePricing(
     return;
   const price: RequestPricing = {
     ...route.pricing,
-    input: route.effectiveInputPrice ?? route.inputPrice ?? 0,
-    output: route.effectiveOutputPrice ?? route.outputPrice ?? 0,
-    ...(upstream?.consumptionMultiplier !== undefined
-      ? { multiplier: upstream.consumptionMultiplier }
-      : {}),
+    input: route.inputPrice ?? 0,
+    output: route.outputPrice ?? 0,
   };
   validatePricing(price);
   return price;
@@ -134,7 +125,6 @@ export function validateUsage(usage: Usage) {
 }
 export interface UsagePriceReceipt {
   amount: number;
-  originalAmount: number;
   mode: "tokens" | "request";
   tierAbove?: number;
   tier?: string;
@@ -159,18 +149,15 @@ export function priceUsage(
   validateUsage(usage);
   if (pricing.mode === "expression") {
     const result = expressionCost(usage, pricing);
-    const original = add(
+    const total = add(
       result.amount,
       multiply(
         decimal(pricing.webSearch ?? 0),
         decimal((usage.webSearch ?? 0) * 1_000_000),
       ),
     );
-    let total = original;
-    total = multiply(total, decimal(pricing.multiplier ?? 1));
     return {
       amount: rounded(total),
-      originalAmount: rounded(original),
       mode: result.mode,
       tier: result.tier,
       expression: pricing.expression,
@@ -247,11 +234,8 @@ export function priceUsage(
     );
     lines.push({ kind: "webSearch", quantity: usage.webSearch, rate });
   }
-  const originalAmount = rounded(total);
-  total = multiply(total, decimal(pricing.multiplier ?? 1));
   return {
     amount: rounded(total),
-    originalAmount,
     mode,
     ...(tierAbove === undefined ? {} : { tierAbove }),
     usage: structuredClone(usage),
@@ -269,15 +253,12 @@ export function reserveCost(
   validatePricing(pricing);
   if (pricing.mode === "expression")
     return rounded(
-      multiply(
-        add(
-          expressionCost({ input, output }, pricing, true).amount,
-          multiply(
-            decimal(pricing.webSearch ?? 0),
-            decimal(webSearch * 1_000_000),
-          ),
+      add(
+        expressionCost({ input, output }, pricing, true).amount,
+        multiply(
+          decimal(pricing.webSearch ?? 0),
+          decimal(webSearch * 1_000_000),
         ),
-        decimal(pricing.multiplier ?? 1),
       ),
     );
   if (pricing.mode === "request")

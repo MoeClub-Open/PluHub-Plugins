@@ -2,13 +2,21 @@ import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { AdminTable, AdminConfirm, adminTime } from "../../lib/ui/admin.js";
-export function KeyAdmin({ host }: { host: UIHost }) {
+export function KeyAdmin({
+  host,
+  fixedUserId,
+}: {
+  host: UIHost;
+  fixedUserId?: string;
+}) {
   const [target, setTarget] = React.useState<any>(),
     [version, setVersion] = React.useState(0);
   return (
     <>
       <AdminTable
         host={host}
+        embedded={!!fixedUserId}
+        fixedUserId={fixedUserId}
         title={tr("访问密钥管理")}
         endpoint="/api/plugins/official.auth/admin/keys"
         version={version}

@@ -1,7 +1,5 @@
 import { SelectionPool } from "../../lib/ai/selection.js";
 import { splitKeys } from "../../lib/ai/upstream-key.js";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import {
   definePlugin,
@@ -10,8 +8,8 @@ import {
   readObject,
   requiredString,
 } from "@pluhub/sdk";
+import { openPluginVault } from "../../lib/security/vault.js";
 import { openDatabase } from "../../lib/storage/sqlite.js";
-import { migratePersonalConditions } from "./condition-migration.js";
 import {
   channelMigration,
   moderationMigration,
@@ -19,76 +17,26 @@ import {
 } from "./channels.js";
 export default definePlugin({
   setup(host) {
-    const file = join(host.dataDir, "vault.key");
-    let master: Buffer;
-    if (host.config().masterKeyRef)
-      master = Buffer.from(
-        host.secret(String(host.config().masterKeyRef)),
-        "base64",
-      );
-    else {
-      try {
-        master = readFileSync(file);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        master = randomBytes(32);
-        writeFileSync(file, master, { flag: "wx", mode: 0o600 });
-      }
-      chmodSync(file, 0o600);
-    }
-    if (master.length !== 32)
-      throw new HostError("invalid_config", "Vault key must be 32 bytes");
+    const vault = openPluginVault(host);
     const db = openDatabase(join(host.dataDir, "credentials.sqlite"), [
       "CREATE TABLE credentials(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,channel TEXT NOT NULL,name TEXT NOT NULL,kind TEXT NOT NULL,cipher TEXT NOT NULL,created_at INTEGER NOT NULL);",
       channelMigration,
       moderationMigration,
       "DELETE FROM credentials WHERE channel NOT LIKE 'personal:%';",
-      `UPDATE personal_channels
-       SET settings_json=json_remove(settings_json,'$.consumptionMode','$.consumptionMultiplier'),
-           revision=revision+1
-       WHERE json_type(settings_json,'$.consumptionMode') IS NOT NULL
-          OR json_type(settings_json,'$.consumptionMultiplier') IS NOT NULL;`,
+      "SELECT 1;",
       "ALTER TABLE credentials ADD COLUMN key_count INTEGER NOT NULL DEFAULT 1;",
     ]);
-    try {
-      migratePersonalConditions(db);
-    } catch (error) {
-      db.close();
-      master.fill(0);
-      throw error;
-    }
     host.cleanup(() => {
       db.close();
-      master.fill(0);
+      vault.close();
     });
     const aad = (row: any) =>
-      Buffer.from(JSON.stringify([row.id, row.user_id, row.channel, row.kind]));
+      JSON.stringify([row.id, row.user_id, row.channel, row.kind]);
     function encrypt(row: any, value: unknown) {
-      const iv = randomBytes(12);
-      const cipher = createCipheriv("aes-256-gcm", master, iv);
-      cipher.setAAD(aad(row));
-      return Buffer.concat([
-        iv,
-        cipher.update(JSON.stringify(value)),
-        cipher.final(),
-        cipher.getAuthTag(),
-      ]).toString("base64");
+      return vault.encryptJson(value, aad(row));
     }
     function decrypt(row: any) {
-      const data = Buffer.from(row.cipher, "base64");
-      const cipher = createDecipheriv(
-        "aes-256-gcm",
-        master,
-        data.subarray(0, 12),
-      );
-      cipher.setAAD(aad(row));
-      cipher.setAuthTag(data.subarray(-16));
-      return JSON.parse(
-        Buffer.concat([
-          cipher.update(data.subarray(12, -16)),
-          cipher.final(),
-        ]).toString(),
-      );
+      return vault.decryptJson(row.cipher, aad(row));
     }
     function owned(id: string, userId: string) {
       const row = db

@@ -16,10 +16,12 @@ export default definePlugin({
   setup(host) {
     async function visibleModels(ctx: RequestContext) {
       if (!host.hasCapability("ai.catalog@3")) return [];
-      const models = await host.call<CatalogModel[]>("ai.catalog@3", {
-        principalId: ctx.principal!.id,
-        ...channelScope(ctx.principal),
-      });
+      const models = await host.call<CatalogModel[]>(
+        "ai.catalog@3",
+        ctx.principal
+          ? { principalId: ctx.principal.id, ...channelScope(ctx.principal) }
+          : undefined,
+      );
       const allowed = ctx.principal?.attributes?.models as string[] | undefined;
       return models.filter(
         (model) =>
@@ -29,30 +31,8 @@ export default definePlugin({
     }
     host.api({
       method: "GET",
-      path: "/prices",
-      access: "authenticated",
-      async handle(_request, ctx) {
-        const models = await visibleModels(ctx);
-        return Response.json(
-          models.map((model) => ({
-            id: model.id,
-            name: model.name,
-            provider: model.provider,
-            inputPrice: model.inputPrice,
-            outputPrice: model.outputPrice,
-            pricing: model.pricing,
-            billing: model.billing,
-            consumptionMultiplier: model.consumptionMultiplier,
-            channel: model.channel,
-          })),
-          { headers: { "cache-control": "private, no-store" } },
-        );
-      },
-    });
-    host.api({
-      method: "GET",
       path: "/rankings",
-      access: "authenticated",
+      access: "public",
       async handle(request, ctx) {
         const params = new URL(request.url).searchParams;
         const kind = params.get("kind") ?? "users";
@@ -81,7 +61,7 @@ export default definePlugin({
             range,
             userIds: users.map((user) => user.id),
             modelIds: models.map((model) => model.id),
-            viewerId: ctx.principal!.id,
+            ...(ctx.principal ? { viewerId: ctx.principal.id } : {}),
           },
         );
         const total =
@@ -106,7 +86,7 @@ export default definePlugin({
           outputTokens: row.outputTokens,
           usageRequests: row.usageRequests,
           isCurrentUser:
-            kind === "users" && row.subjectId === ctx.principal!.id,
+            kind === "users" && !!ctx.principal && row.subjectId === ctx.principal.id,
           share: total ? row[metric as RankingMetric] / total : 0,
         });
         const result: Leaderboard = {

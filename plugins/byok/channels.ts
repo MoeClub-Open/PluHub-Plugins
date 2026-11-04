@@ -46,8 +46,6 @@ type Model = ModelDefinition & {
   operations?: ModelRoute["operations"];
   inputPrice?: number;
   outputPrice?: number;
-  upstreamInputPrice?: number;
-  upstreamOutputPrice?: number;
   pricingSource?: string;
 };
 type Settings = {
@@ -310,8 +308,6 @@ export function installPersonalChannels(
         ...(model?.operations ? { operations: model.operations } : {}),
         inputPrice: tokenPrice(model?.inputPrice),
         outputPrice: tokenPrice(model?.outputPrice),
-        upstreamInputPrice: tokenPrice(model?.upstreamInputPrice),
-        upstreamOutputPrice: tokenPrice(model?.upstreamOutputPrice),
         pricingSource: model?.pricingSource === "newapi" ? "newapi" : "manual",
       };
     }
@@ -348,7 +344,6 @@ export function installPersonalChannels(
       revision: row.revision,
       updatedAt: row.updated_at,
       ...config,
-      consumptionMultiplier: 0,
       keyCount:
         (
           db
@@ -391,7 +386,6 @@ export function installPersonalChannels(
         credentialId: row.id,
         credentialOwner: row.user_id,
         priority: config.priority ?? 0,
-        consumptionMultiplier: 0,
         ...(config.subscriptionAccountId
           ? {
               subscriptionAccountIds: [config.subscriptionAccountId],
@@ -405,8 +399,6 @@ export function installPersonalChannels(
           {
             ...m,
             upstream: row.id,
-            effectiveInputPrice: m.upstreamInputPrice ?? m.inputPrice,
-            effectiveOutputPrice: m.upstreamOutputPrice ?? m.outputPrice,
           },
         ]),
       ),

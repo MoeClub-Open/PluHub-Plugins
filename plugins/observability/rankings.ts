@@ -77,8 +77,12 @@ export function readRankings(
     !["users", "models"].includes(input.kind) ||
     !["tokens", "requests"].includes(input.metric) ||
     !["7d", "30d", "all"].includes(input.range) ||
-    !Array.isArray(input.userIds) ||
-    !input.userIds.every((id) => typeof id === "string") ||
+    (input.kind === "users" &&
+      (!Array.isArray(input.userIds) ||
+        !input.userIds.every((id) => typeof id === "string"))) ||
+    (input.userIds !== undefined &&
+      (!Array.isArray(input.userIds) ||
+        !input.userIds.every((id) => typeof id === "string"))) ||
     (input.kind === "models" &&
       (!Array.isArray(input.modelIds) ||
         !input.modelIds.every((id) => typeof id === "string")))
@@ -93,13 +97,12 @@ export function readRankings(
       ? 0
       : Math.floor(now / dayMs) - (input.range === "7d" ? 6 : 29);
   const column = input.kind === "users" ? "user_id" : "model";
-  const params: (number | string)[] = [
-    startDay,
-    Math.floor(now / dayMs),
-    JSON.stringify(input.userIds),
-  ];
-  let scope =
-    "day>=? AND day<=? AND user_id IN (SELECT value FROM json_each(?))";
+  const params: (number | string)[] = [startDay, Math.floor(now / dayMs)];
+  let scope = "day>=? AND day<=?";
+  if (input.userIds) {
+    scope += " AND user_id IN (SELECT value FROM json_each(?))";
+    params.push(JSON.stringify(input.userIds));
+  }
   if (input.kind === "models") {
     scope += " AND model IN (SELECT value FROM json_each(?))";
     params.push(JSON.stringify(input.modelIds));

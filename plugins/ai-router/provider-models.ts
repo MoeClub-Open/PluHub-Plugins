@@ -29,15 +29,16 @@ export async function readNodeModels(
   };
 }
 
-async function providerModelDirectory(
+export async function providerModelDirectory(
   host: Host,
   connection: ProviderConnection,
   signal: AbortSignal,
+  secret?: string,
 ) {
   try {
     if (!Object.hasOwn(subscriptionDefaults, connection.protocol))
       return {
-        ...(await discoverConnectionModels(host, connection, signal)),
+        ...(await discoverConnectionModels(host, connection, signal, secret)),
       };
     const ids = connection.subscriptionAccountIds ?? [];
     if (!ids.length)

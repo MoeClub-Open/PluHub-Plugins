@@ -74,13 +74,17 @@ export async function switchFallback(
   ctx.state.set("ai.plan", plan);
   ctx.state.set("ai.request", prepared);
   planObservation(ctx, prepared, plan);
-  await host.call(
-    "ai.request-limits@1",
-    { action: "admit", context: ctx, retry: true },
-    signal,
-  );
-  if (host.hasCapability("billing.admit@1"))
+  if (host.hasCapability("ai.request-limits@1"))
+    await host.call(
+      "ai.request-limits@1",
+      { action: "admit", context: ctx, retry: true },
+      signal,
+    );
+  if (host.hasCapability("billing.admit@1")) {
     await host.call("billing.admit@1", { context: ctx, retry: true }, signal);
+    if (!plan.workflowDeferred)
+      await host.call("billing.admit@1", { action: "start", context: ctx }, signal);
+  }
   ctx.state.set("ai.executionRejected", false);
   return true;
 }

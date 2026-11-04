@@ -1,9 +1,10 @@
-import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
 import { storePassword } from "./passwords.js";
+import { openDatabase, transaction } from "../../lib/storage/sqlite.js";
 import { installAuthSecurity, securityMigration } from "./security/index.js";
-import { adminTarget } from "../../lib/admin/access.js";
+import { requireAdmin, adminTarget } from "../../lib/admin/access.js";
 import { installAdmin } from "./admin.js";
 import { installSetup, setupMigration } from "./setup.js";
+import { installUsersStore, usersMigration } from "./users-store.js";
 import {
   installKeys,
   keysMigration,
@@ -67,23 +68,27 @@ export default definePlugin({
       keysMigration,
       channelBindingsMigration,
       removeSingleBindingMigration,
+      usersMigration,
     ]);
     rawHost.cleanup(() => db.close());
     const history = installSecurityHistory(rawHost, db),
       host = history.host;
-    const lookup = (input: any) => host.call<any>("users.lookup@1", input);
+    const usersStore = installUsersStore(host, db);
+    const lookup = async (input: any) => usersStore.lookup(input);
     const dummy = await hashPassword(randomBytes(24).toString("hex"));
     const setPassword = async (userId: string, password: string) => {
-      if (!(await lookup({ id: userId })))
+      if (!usersStore.lookup({ id: userId }))
         throw new HostError("not_found", "User not found", 404);
       const hash = await hashPassword(password);
       transaction(db, () => storePassword(db, userId, hash));
     };
-    const installation = await installSetup(host, db, hashPassword, (id) =>
+    const installation = installSetup(host, db, usersStore, hashPassword, (id) =>
       history.local("account.bootstrap", id),
     );
     const security = installAuthSecurity(host, db, {
       lookup,
+      createUser: (username: string) =>
+        usersStore.manage({ action: "create", username, role: "user" }),
       verifyPassword: verify,
       dummy,
       hashPassword,
@@ -98,31 +103,31 @@ export default definePlugin({
           "SELECT auth_at FROM sessions WHERE hash=? AND user_id=? AND expires>?",
         )
         .get(digest(token), userId, Date.now()) as any;
-      const user = await lookup({ id: userId });
+      const user = usersStore.lookup({ id: userId });
       if (!row || row.auth_at < Date.now() - 300000)
         throw new HostError("reauth_required", "请验证身份后保存更改", 403);
       if (!user?.enabled || user.role !== "admin")
         throw new HostError("forbidden", "需要管理员身份", 403);
       return { id: user.id };
     });
-    installAdmin(host, db);
+    installAdmin(host, db, usersStore.lookup);
     host.provide("auth.bootstrap@1", async (input) => {
       let userId = input.userId;
       if (!userId) {
         const username = requiredString(input.username, "username", 64);
-        let user = await lookup({ username: username.toLowerCase() });
+        let user = usersStore.lookup({ username: username.toLowerCase() });
         if (!user)
-          user = await host.call<any>("users.manage@1", {
+          user = usersStore.manage({
             action: "create",
             username,
             role: "admin",
           });
-        if (user.role !== "admin" || !user.enabled)
+        if (user!.role !== "admin" || !user!.enabled)
           throw new HostError(
             "invalid_admin",
             "Bootstrap target must be an enabled administrator",
           );
-        userId = user.id;
+        userId = user!.id;
       }
       await setPassword(
         requiredString(userId, "userId"),
@@ -156,7 +161,7 @@ export default definePlugin({
               .get(digest(token), Date.now())
       ) as any;
       if (!row) return undefined;
-      const user = await lookup({ id: row.user_id });
+      const user = usersStore.lookup({ id: row.user_id });
       if (!user?.enabled) return undefined;
       if (
         !key &&
@@ -220,37 +225,60 @@ export default definePlugin({
         );
     };
     host.api({
+      method: "GET",
+      path: "/users",
+      access: "users.manage",
+      handle: async (request, ctx) => {
+        await requireAdmin(host, request, ctx, false);
+        return json(usersStore.manage({ action: "list" }));
+      },
+    });
+    host.api({
       method: "POST",
       path: "/users",
       access: "users.manage",
       handle: async (request, ctx) => {
-        requireSession(ctx.principal!);
-        security.requireRecent(request, ctx);
+        await requireAdmin(host, request, ctx);
         const body = await readObject(request);
-        // Validate and hash the initial password before creating user facts.
-        // A rejected password must never leave a passwordless account behind.
-        const hash = await hashPassword(
-          requiredString(body.password, "password", 1024),
-        );
-        const user = await host.call<any>("users.manage@1", {
-          action: "create",
-          username: body.username,
-          role: body.role ?? "user",
-          accountType: body.accountType,
-          parentId: body.parentId,
+        const hash =
+          body.password === undefined
+            ? undefined
+            : await hashPassword(
+                requiredString(body.password, "password", 1024),
+              );
+        const user = transaction(db, () => {
+          const created = usersStore.manage({
+            action: "create",
+            username: body.username,
+            role: body.role ?? "user",
+            accountType: body.accountType,
+            parentId: body.parentId,
+          })!;
+          if (hash)
+            db.prepare("INSERT INTO passwords VALUES(?,?)").run(
+              created.id,
+              hash,
+            );
+          return created;
         });
         adminTarget(ctx, user.id);
-        try {
-          db.prepare("INSERT INTO passwords VALUES(?,?)").run(user.id, hash);
-        } catch (error) {
-          await host.call("users.manage@1", {
-            action: "update",
-            id: user.id,
-            enabled: false,
-          });
-          throw error;
-        }
         return json(user, 201);
+      },
+    });
+    host.api({
+      method: "PATCH",
+      path: "/users",
+      access: "users.manage",
+      handle: async (request, ctx) => {
+        await requireAdmin(host, request, ctx);
+        const body = await readObject(request);
+        adminTarget(
+          ctx,
+          requiredString(body.id, "id"),
+          undefined,
+          typeof body.reason === "string" ? body.reason : undefined,
+        );
+        return json(usersStore.manage({ ...body, action: "update" }));
       },
     });
     function admit({
@@ -309,9 +337,9 @@ export default definePlugin({
       method: "GET",
       path: "/me",
       access: "authenticated",
-      handle: async (_request, ctx) =>
+      handle: (_request, ctx) =>
         json({
-          ...(await lookup({ id: ctx.principal!.id })),
+          ...usersStore.lookup({ id: ctx.principal!.id }),
           email: security.email(ctx.principal!.id),
         }),
     });
@@ -327,7 +355,7 @@ export default definePlugin({
           ![null, "zh-CN", "en-US"].includes(body.language as any)
         )
           throw new HostError("invalid_language", "Unsupported language");
-        const user = await host.call<any>("users.manage@1", {
+        const user = usersStore.manage({
           action: "preferences",
           id: ctx.principal!.id,
           language: body.language,

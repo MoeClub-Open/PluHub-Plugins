@@ -7,12 +7,12 @@ export const subscriptionProviders: SubscriptionKind[] = [
   "grok",
 ];
 export const subscriptionApi = (provider: SubscriptionKind) =>
-  "/api/plugins/official.upstream-" + provider;
+  "/api/plugins/official.subscriptions/" + provider;
 export async function installedSubscriptionProviders(host: UIHost) {
   const extensions = await host.request<Extension[]>("/api/host/extensions");
-  return subscriptionProviders.filter((provider) =>
-    extensions.some((e) => e.id === "official.upstream-" + provider),
-  );
+  return extensions.some((e) => e.id === "official.subscriptions")
+    ? [...subscriptionProviders]
+    : [];
 }
 export async function listSubscriptionAccounts(host: UIHost, personal = false) {
   const providers = await installedSubscriptionProviders(host);

@@ -1,9 +1,7 @@
 import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import React from "react";
-import type { CatalogModel } from "@pluhub/contracts/ai";
 import { ModelLogo } from "../../lib/ui/model-logo.js";
 import { RankingTable } from "./ranking-table.js";
-import { Prices } from "./prices.js";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type {
   Leaderboard,
@@ -21,15 +19,12 @@ const date = (value: number) =>
   new Date(value).toLocaleDateString(getLocale(), { timeZone: "UTC" });
 
 function Page({ host }: { host: UIHost }) {
-  const [view, setView] = React.useState<"models" | "prices" | "users">(
+  const [view, setView] = React.useState<"models" | "users">(
     "models",
   );
   const kind: RankingKind = view === "users" ? "users" : "models";
   const [query, setQuery] = React.useState("");
   const [provider, setProvider] = React.useState("");
-  const [catalog, setCatalog] = React.useState<CatalogModel[]>([]);
-  const [catalogError, setCatalogError] = React.useState("");
-  const [catalogBusy, setCatalogBusy] = React.useState(true);
   const [copyStatus, setCopyStatus] = React.useState("");
   const [range, setRange] = React.useState<RankingRange>("7d");
   const [metric, setMetric] = React.useState<RankingMetric>("tokens");
@@ -37,25 +32,6 @@ function Page({ host }: { host: UIHost }) {
   const [data, setData] = React.useState<Leaderboard>();
   const [busy, setBusy] = React.useState(true);
   const [error, setError] = React.useState("");
-  React.useEffect(() => {
-    const controller = new AbortController();
-    setCatalogBusy(true);
-    setCatalogError("");
-    void host
-      .request<CatalogModel[]>("/api/plugins/official.leaderboard/prices", {
-        signal: controller.signal,
-      })
-      .then((value) => {
-        if (!controller.signal.aborted) setCatalog(value);
-      })
-      .catch((failure) => {
-        if (!controller.signal.aborted) setCatalogError(failure.message);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setCatalogBusy(false);
-      });
-    return () => controller.abort();
-  }, [host, version]);
   React.useEffect(() => {
     if (!copyStatus) return;
     const timer = setTimeout(() => setCopyStatus(""), 2500);
@@ -107,7 +83,7 @@ function Page({ host }: { host: UIHost }) {
   const rows = current?.rows.filter(matches) ?? [];
   const providers = [
     ...new Set(
-      (view === "prices" ? catalog : (current?.rows ?? []))
+      (current?.rows ?? [])
         .map((row) => row.provider)
         .filter((value): value is string => !!value),
     ),
@@ -121,34 +97,28 @@ function Page({ host }: { host: UIHost }) {
     <div className="leaderboard">
       <style>{styles}</style>
       <PageHeading title={tr("排行榜")}>
-        {view !== "prices" && (
-          <>
-            <Select
-              aria-label={tr("排行榜时间范围")}
-              value={range}
-              onChange={(event) => setRange(event.target.value as RankingRange)}
-            >
-              <option value="7d">{tr("近 7 天")}</option>
-              <option value="30d">{tr("近 30 天")}</option>
-              <option value="all">{tr("累计")}</option>
-            </Select>
-            <Select
-              aria-label={tr("排行榜排序")}
-              value={metric}
-              onChange={(event) =>
-                setMetric(event.target.value as RankingMetric)
-              }
-            >
-              <option value="tokens">{tr("按 Token 用量")}</option>
-              <option value="requests">{tr("按调用次数")}</option>
-            </Select>
-          </>
-        )}
+        <Select
+          aria-label={tr("排行榜时间范围")}
+          value={range}
+          onChange={(event) => setRange(event.target.value as RankingRange)}
+        >
+          <option value="7d">{tr("近 7 天")}</option>
+          <option value="30d">{tr("近 30 天")}</option>
+          <option value="all">{tr("累计")}</option>
+        </Select>
+        <Select
+          aria-label={tr("排行榜排序")}
+          value={metric}
+          onChange={(event) => setMetric(event.target.value as RankingMetric)}
+        >
+          <option value="tokens">{tr("按 Token 用量")}</option>
+          <option value="requests">{tr("按调用次数")}</option>
+        </Select>
         <button
           className="secondary icon-button"
           aria-label={tr("刷新排行榜")}
           title={tr("刷新排行榜")}
-          disabled={view === "prices" ? catalogBusy : busy}
+          disabled={busy}
           onClick={() => setVersion((value) => value + 1)}
         >
           <Icon name="refresh" size={16} />
@@ -159,7 +129,7 @@ function Page({ host }: { host: UIHost }) {
         role="tablist"
         aria-label={tr("排行榜分类")}
       >
-        {(["models", "prices", "users"] as const).map((tab) => (
+        {(["models", "users"] as const).map((tab) => (
           <button
             key={tab}
             role="tab"
@@ -175,15 +145,15 @@ function Page({ host }: { host: UIHost }) {
               )
                 return;
               event.preventDefault();
-              const tabs = ["models", "prices", "users"] as const;
+              const tabs = ["models", "users"] as const;
               const index = tabs.indexOf(view);
               const next =
                 tabs[
                   event.key === "Home"
                     ? 0
                     : event.key === "End"
-                      ? 2
-                      : (index + (event.key === "ArrowRight" ? 1 : 2)) % 3
+                      ? 1
+                      : (index + 1) % 2
                 ];
               changeView(next);
               event.currentTarget.parentElement
@@ -191,25 +161,12 @@ function Page({ host }: { host: UIHost }) {
                 ?.focus();
             }}
           >
-            <Icon
-              name={
-                tab === "users"
-                  ? "users"
-                  : tab === "prices"
-                    ? "money"
-                    : "models"
-              }
-              size={16}
-            />
-            {tab === "users"
-              ? tr("用户排行")
-              : tab === "prices"
-                ? tr("价格排行")
-                : tr("模型排行")}
+            <Icon name={tab === "users" ? "users" : "models"} size={16} />
+            {tab === "users" ? tr("用户排行") : tr("模型排行")}
           </button>
         ))}
       </div>
-      <Notice message={view === "prices" ? catalogError : error} />
+      <Notice message={error} />
       <span className="leaderboard-copy-status" role="status">
         {copyStatus}
       </span>
@@ -217,7 +174,7 @@ function Page({ host }: { host: UIHost }) {
         id="leaderboard-panel"
         role="tabpanel"
         aria-labelledby={"leaderboard-tab-" + view}
-        aria-busy={view === "prices" ? catalogBusy : busy}
+        aria-busy={busy}
       >
         {view !== "users" && (
           <div className="leaderboard-filters">
@@ -245,17 +202,7 @@ function Page({ host }: { host: UIHost }) {
             </Select>
           </div>
         )}
-        {view === "prices" ? (
-          <Prices
-            models={catalog.filter((model) =>
-              matches({ ...model, modelId: model.id }),
-            )}
-            busy={catalogBusy}
-            error={catalogError}
-            copy={copy}
-          />
-        ) : (
-          <>
+        <>
             <div className="leaderboard-summary">
               <div>
                 <span>{tr("Token 用量")}</span>
@@ -369,8 +316,7 @@ function Page({ host }: { host: UIHost }) {
                 )}
               </div>
             )}
-          </>
-        )}
+        </>
       </section>
     </div>
   );

@@ -261,7 +261,6 @@ export function navigation(
   const searchEntries = managementMode
     ? [
         { path: "/admin", title: tr("全站总览") },
-        { path: "/settings", title: tr("系统设置") },
         ...allowed.filter((e) => !e.public),
       ]
     : [

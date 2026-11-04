@@ -1,13 +1,5 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHmac,
-  randomBytes,
-  timingSafeEqual,
-} from "node:crypto";
-import { readFileSync, writeFileSync, chmodSync } from "node:fs";
-import { join } from "node:path";
-import { HostError } from "@pluhub/sdk";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { openVault } from "../../../lib/security/vault.js";
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 export function base32(bytes: Uint8Array) {
   let bits = 0,
@@ -68,52 +60,18 @@ export function matchTotp(
   }
 }
 export function authVault(directory: string, requireExisting = false) {
-  const file = join(directory, "security.key");
-  let key: Buffer;
-  try {
-    key = readFileSync(file);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    if (requireExisting)
-      throw new HostError(
-        "invalid_config",
-        "Authentication encryption key is missing; restore security.key from backup",
-      );
-    key = randomBytes(32);
-    writeFileSync(file, key, { flag: "wx", mode: 0o600 });
-  }
-  chmodSync(file, 0o600);
-  if (key.length !== 32)
-    throw new HostError(
-      "invalid_config",
-      "Invalid authentication encryption key",
-    );
+  const vault = openVault({
+    directory,
+    file: "security.key",
+    requireExisting,
+    missingMessage:
+      "Authentication encryption key is missing; restore security.key from backup",
+    invalidMessage: "Invalid authentication encryption key",
+  });
   return {
-    close: () => {
-      key.fill(0);
-    },
-    hash: (value: string) =>
-      createHmac("sha256", key).update(value).digest("hex"),
-    encrypt: (value: string, aad: string) => {
-      const iv = randomBytes(12),
-        cipher = createCipheriv("aes-256-gcm", key, iv);
-      cipher.setAAD(Buffer.from(aad));
-      return Buffer.concat([
-        iv,
-        cipher.update(value, "utf8"),
-        cipher.final(),
-        cipher.getAuthTag(),
-      ]).toString("base64");
-    },
-    decrypt: (value: string, aad: string) => {
-      const bytes = Buffer.from(value, "base64"),
-        cipher = createDecipheriv("aes-256-gcm", key, bytes.subarray(0, 12));
-      cipher.setAAD(Buffer.from(aad));
-      cipher.setAuthTag(bytes.subarray(-16));
-      return Buffer.concat([
-        cipher.update(bytes.subarray(12, -16)),
-        cipher.final(),
-      ]).toString("utf8");
-    },
+    close: vault.close,
+    hash: vault.hash,
+    encrypt: vault.encryptText,
+    decrypt: vault.decryptText,
   };
 }

@@ -2,7 +2,8 @@ import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { Dialog, PageHeading } from "../../lib/ui/components.js";
-import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
+import { mountPage, Notice } from "../../lib/ui/mount.js";
+import { usePluginConfig } from "../../lib/ui/plugin-config.js";
 import { t as tr } from "../../lib/ui/i18n.js";
 import type { EpayMethod } from "./config.js";
 import type { PaymentSecrets } from "./secrets.js";
@@ -14,14 +15,10 @@ const types: Record<string, string> = {
   wxpay: "微信支付",
   qqpay: "QQ 钱包",
 };
-const findPlugin = (config: any) =>
-  config.plugins.find((p: any) =>
-    /\/(?:official\.)?payments-epay$/.test(p.path.replaceAll("\\", "/")),
-  );
 
 function Page({ host }: { host: UIHost }) {
-  const data = useLoad<any>(() => host.request("/api/host/config"));
-  const settings = data.data ? (findPlugin(data.data)?.config ?? {}) : {};
+  const data = usePluginConfig(host, "official.payments-epay");
+  const settings = data.data ?? {};
   const methods: EpayMethod[] = settings.methods ?? [];
   const [editor, setEditor] = React.useState<EpayMethod>();
   const [removing, setRemoving] = React.useState<EpayMethod>();
@@ -49,38 +46,29 @@ function Page({ host }: { host: UIHost }) {
             : method,
         );
       }
-      const config = await host.request<any>("/api/host/config");
-      const plugin = findPlugin(config);
-      if (!plugin) throw new Error(tr("支付插件未安装"));
-      const next = {
-        ...plugin.config,
+      await data.save((current) => ({
+        ...current,
         enabled,
         methods: nextMethods,
         nextMethodId: nextNumericId(
           nextMethods.map((method) => method.id),
-          plugin.config.nextMethodId,
+          current?.nextMethodId,
         ),
-      };
-      next.secretRefs = [
-        ...new Set(
-          nextMethods.flatMap((m) =>
-            [m.keyRef, m.privateKeyRef, m.platformPublicKeyRef].filter(
-              (reference) =>
-                typeof reference === "string" &&
-                reference.startsWith("secret:"),
+        secretRefs: [
+          ...new Set(
+            nextMethods.flatMap((m) =>
+              [m.keyRef, m.privateKeyRef, m.platformPublicKeyRef].filter(
+                (reference) =>
+                  typeof reference === "string" &&
+                  reference.startsWith("secret:"),
+              ),
             ),
           ),
-        ),
-      ];
-      plugin.config = next;
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
-      });
+        ],
+      }));
       setEditor(undefined);
       setRemoving(undefined);
       setMessage(tr("已保存"));
-      data.reload();
     } catch (error) {
       setMessage((error as Error).message);
     } finally {

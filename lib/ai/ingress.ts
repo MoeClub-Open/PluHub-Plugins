@@ -1,4 +1,4 @@
-import { definePlugin, readObject, HostError } from "@pluhub/sdk";
+import { readObject, HostError, type Host } from "@pluhub/sdk";
 import type { Protocol, AIRequest, AIPlan } from "@pluhub/contracts/ai";
 import { decode, protocolError } from "./protocols.js";
 import { clientSession } from "./session.js";
@@ -6,9 +6,7 @@ import { channelScope } from "./channel-scope.js";
 import { capturePricingContext } from "../commerce/expression.js";
 import { executeIngress } from "./ingress-response.js";
 import { beginObservation, planObservation, observation } from "./telemetry.js";
-export function createIngress(protocol: Protocol) {
-  return definePlugin({
-    setup(host) {
+export function installIngress(host: Host, protocol: Protocol) {
       host.provide("ai.ingress." + protocol + "@1", () => ({
         protocol,
         features: ["text", "tools", "stream", "usage"],
@@ -79,11 +77,12 @@ export function createIngress(protocol: Protocol) {
           if (delegated) ctx.state.set("auth.preflight", decoded.model);
           observation(ctx)!.model = decoded.model;
           observation(ctx)!.stream = decoded.stream;
-          await host.call(
-            "ai.request-limits@1",
-            { action: "preflight", principal: ctx.principal, context: ctx },
-            ctx.signal,
-          );
+          if (host.hasCapability("ai.request-limits@1"))
+            await host.call(
+              "ai.request-limits@1",
+              { action: "preflight", principal: ctx.principal, context: ctx },
+              ctx.signal,
+            );
           ctx.state.set(
             "ai.plan",
             await host.call<AIPlan>(
@@ -139,6 +138,4 @@ export function createIngress(protocol: Protocol) {
           return executeIngress(host, ctx, decoded, plan, protocol);
         },
       });
-    },
-  });
 }

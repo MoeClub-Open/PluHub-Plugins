@@ -3,11 +3,9 @@ import { t as tr } from "../../lib/ui/i18n.js";
 
 export function ExpressionPrices({
   source,
-  multiplier,
   formatPrice,
 }: {
   source: string;
-  multiplier: number;
   formatPrice: (value?: number) => string;
 }) {
   const names: Record<string, string> = {
@@ -45,8 +43,7 @@ export function ExpressionPrices({
                 <thead>
                   <tr>
                     <th>{tr("计价项目")}</th>
-                    <th>{tr("原价 · USD")}</th>
-                    <th>{tr("扣费价 · USD")}</th>
+                    <th>{tr("价格 · USD")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -61,7 +58,6 @@ export function ExpressionPrices({
                           : (names[name] ?? name) + " / 1M"}
                       </td>
                       <td>{formatPrice(rate)}</td>
-                      <td>{formatPrice(rate * multiplier)}</td>
                     </tr>
                   ))}
                 </tbody>

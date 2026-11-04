@@ -17,12 +17,52 @@ import { MediaPage } from "./media-ui.js";
 import { readChatStream } from "./chat-stream.js";
 import {
   chatStorageKey,
-  readChat,
-  saveChat,
+  chatSessionTitle,
+  createChatSession,
+  readChatStore,
+  saveChatStore,
   type Message,
   type ChatMeta,
   type ChatSession,
+  type ChatStore,
 } from "./session.js";
+
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_MESSAGE_IMAGES = 4;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error(tr("读取图片失败")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function effortLabel(value: string) {
+  return tr(
+    value === "none"
+      ? "关闭"
+      : value === "minimal"
+        ? "最低"
+        : value === "low"
+          ? "低"
+          : value === "medium"
+            ? "中"
+            : value === "high"
+              ? "高"
+              : value === "xhigh"
+                ? "很高"
+                : "最高",
+  );
+}
+
 function Answer({
   message,
   streaming,
@@ -46,13 +86,20 @@ function Answer({
           <RichText text={message.reasoning} streaming={streaming} />
         </details>
       )}
+      {!!message.images?.length && (
+        <div className="chat-message-images">
+          {message.images.map((src, index) => (
+            <img key={index} src={src} alt={tr("附图")} />
+          ))}
+        </div>
+      )}
       {message.content ? (
         message.role === "assistant" ? (
           <RichText text={message.content} streaming={streaming} />
         ) : (
           <p className="chat-user-text">{message.content}</p>
         )
-      ) : (
+      ) : message.images?.length ? null : (
         <p className="muted" role="status">
           {tr(
             message.incomplete
@@ -107,7 +154,14 @@ function ChatPage({
   onBusy: (value: boolean) => void;
 }) {
   const [storageKey] = React.useState(chatStorageKey);
-  const [initial] = React.useState(() => readChat(storageKey));
+  const [initialStore] = React.useState(() => readChatStore(storageKey));
+  const initial =
+    initialStore.sessions.find((s) => s.sessionId === initialStore.activeId) ??
+    initialStore.sessions[0]!;
+  const [sessions, setSessions] = React.useState<ChatSession[]>(
+    initialStore.sessions,
+  );
+  const [activeId, setActiveId] = React.useState(initial.sessionId);
   const [channel, setChannel] = React.useState(initial.channel);
   const channels = useLoad<any[]>(() =>
     host.request("/api/plugins/official.ai-router/channels").catch(() => []),
@@ -132,6 +186,8 @@ function ChatPage({
   const [maxTokens, setMaxTokens] = React.useState(initial.maxTokens);
   const [effort, setEffort] = React.useState(initial.effort ?? "");
   const efforts = selectedModel?.reasoningEfforts ?? ["low", "medium", "high"];
+  const [images, setImages] = React.useState<string[]>([]);
+  const fileInput = React.useRef<HTMLInputElement>(null);
   const follow = React.useRef(true);
   const [away, setAway] = React.useState(false);
   const [messages, setMessages] = React.useState<Message[]>(initial.messages);
@@ -143,10 +199,12 @@ function ChatPage({
   const controller = React.useRef<AbortController | null>(null);
   const session = React.useRef(initial.sessionId);
   const transcript = React.useRef<HTMLDivElement>(null);
-  const latest = React.useRef<ChatSession>(initial);
-  latest.current = {
-    version: 2,
+  const currentSession: ChatSession = {
+    version: 3,
     sessionId: session.current,
+    updatedAt:
+      sessions.find((item) => item.sessionId === session.current)?.updatedAt ??
+      Date.now(),
     channel,
     model,
     modelChannel,
@@ -164,25 +222,48 @@ function ChatPage({
         )
       : messages,
   };
+  const mergedSessions = React.useMemo(
+    () =>
+      sessions.some((item) => item.sessionId === currentSession.sessionId)
+        ? sessions.map((item) =>
+            item.sessionId === currentSession.sessionId ? currentSession : item,
+          )
+        : [currentSession, ...sessions].slice(0, 20),
+    [
+      sessions,
+      currentSession.sessionId,
+      channel,
+      model,
+      modelChannel,
+      prompt,
+      system,
+      temperature,
+      maxTokens,
+      effort,
+      messages,
+      meta,
+      busy,
+    ],
+  );
+  const latestStore = React.useRef<ChatStore>({
+    version: 3,
+    activeId,
+    sessions: mergedSessions,
+  });
+  latestStore.current = {
+    version: 3,
+    activeId,
+    sessions: mergedSessions,
+  };
   React.useEffect(() => {
-    const timer = setTimeout(() => saveChat(storageKey, latest.current), 250);
+    const timer = setTimeout(
+      () => saveChatStore(storageKey, latestStore.current),
+      250,
+    );
     return () => clearTimeout(timer);
-  }, [
-    channel,
-    model,
-    modelChannel,
-    prompt,
-    system,
-    temperature,
-    maxTokens,
-    effort,
-    messages,
-    meta,
-    busy,
-    storageKey,
-  ]);
+  }, [mergedSessions, activeId, storageKey]);
   React.useEffect(() => {
-    const save = () => saveChat(storageKey, latest.current);
+    const save = () => saveChatStore(storageKey, latestStore.current);
     window.addEventListener("pagehide", save);
     return () => {
       save();
@@ -223,12 +304,109 @@ function ChatPage({
     for (const child of element.children) observer.observe(child);
     return () => observer.disconnect();
   }, [messages.length]);
+
+  function clearUrlSelection() {
+    const rawQuery = location.hash.split("?")[1];
+    if (!rawQuery) return;
+    const params = new URLSearchParams(rawQuery);
+    if (!params.has("channel") && !params.has("model")) return;
+    params.delete("channel");
+    params.delete("model");
+    const suffix = params.toString();
+    history.replaceState(
+      history.state,
+      "",
+      "#/playground" + (suffix ? "?" + suffix : ""),
+    );
+  }
+
+  function applySession(target: ChatSession, nextSessions: ChatSession[]) {
+    clearUrlSelection();
+    session.current = target.sessionId;
+    setSessions(nextSessions);
+    setActiveId(target.sessionId);
+    setChannel(target.channel);
+    setModel(target.model);
+    setModelChannel(target.modelChannel);
+    setPrompt(target.prompt);
+    setSystem(target.system);
+    setTemperature(target.temperature);
+    setMaxTokens(target.maxTokens);
+    setEffort(target.effort ?? "");
+    setMessages(target.messages);
+    setMeta(target.meta);
+    setImages([]);
+    setError("");
+    follow.current = true;
+    setAway(false);
+  }
+
+  function startNewSession() {
+    const created = createChatSession({
+      channel,
+      model,
+      modelChannel,
+      system,
+      temperature,
+      maxTokens,
+      effort,
+    });
+    applySession(created, [created, ...mergedSessions].slice(0, 20));
+  }
+
+  function deleteCurrentSession() {
+    const remaining = mergedSessions.filter(
+      (item) => item.sessionId !== activeId,
+    );
+    if (!remaining.length) {
+      const fresh = createChatSession({
+        channel,
+        model,
+        modelChannel,
+        system,
+        temperature,
+        maxTokens,
+        effort,
+      });
+      applySession(fresh, [fresh]);
+      return;
+    }
+    applySession(remaining[0]!, remaining);
+  }
+
+  async function attachFiles(files: File[]) {
+    if (!files.length) return;
+    if (images.length + files.length > MAX_MESSAGE_IMAGES) {
+      setError(tr("单条消息最多附加 4 张图片"));
+      return;
+    }
+    for (const file of files) {
+      if (!ALLOWED_IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
+        setError(tr("图片仅支持 PNG、JPEG、GIF、WebP，且单张不超过 10 MB"));
+        return;
+      }
+    }
+    try {
+      const loaded = await Promise.all(files.map(readFileAsDataUrl));
+      setImages((prev) => [...prev, ...loaded].slice(0, MAX_MESSAGE_IMAGES));
+      setError("");
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   async function send(e: React.FormEvent) {
     e.preventDefault();
-    if (busy || !prompt.trim() || !selectedModel) return;
+    if (busy || (!prompt.trim() && !images.length) || !selectedModel) return;
+    const sentImages = images.length ? [...images] : undefined;
     const history = [
       ...messages.filter((m) => !m.incomplete),
-      { role: "user" as const, content: prompt, createdAt: Date.now() },
+      {
+        role: "user" as const,
+        content: prompt,
+        ...(sentImages ? { images: sentImages } : {}),
+        createdAt: Date.now(),
+      },
     ];
     const answer = {
       role: "assistant" as const,
@@ -238,8 +416,16 @@ function ChatPage({
     };
     follow.current = true;
     setAway(false);
+    setSessions((prev) =>
+      prev.map((item) =>
+        item.sessionId === session.current
+          ? { ...item, updatedAt: Date.now() }
+          : item,
+      ),
+    );
     setMessages([...history, { ...answer, content: "" }]);
     setPrompt("");
+    setImages([]);
     setBusy(true);
     setError("");
     setMeta({});
@@ -265,7 +451,18 @@ function ChatPage({
           model,
           messages: [
             ...(system ? [{ role: "system", content: system }] : []),
-            ...history.map(({ role, content }) => ({ role, content })),
+            ...history.map(({ role, content, images: msgImages }) => ({
+              role,
+              content: msgImages?.length
+                ? [
+                    ...(content ? [{ type: "text", text: content }] : []),
+                    ...msgImages.map((url) => ({
+                      type: "image_url",
+                      image_url: { url },
+                    })),
+                  ]
+                : content,
+            })),
           ],
           stream: true,
           ...(effort && efforts.includes(effort as any)
@@ -374,6 +571,26 @@ function ChatPage({
       )}
       <div className="chat-toolbar">
         <label>
+          {tr("历史对话")}
+          <Select
+            aria-label={tr("选择对话")}
+            value={activeId}
+            disabled={busy}
+            onChange={(e) => {
+              const next = mergedSessions.find(
+                (item) => item.sessionId === e.target.value,
+              );
+              if (next) applySession(next, mergedSessions);
+            }}
+          >
+            {mergedSessions.map((item) => (
+              <option key={item.sessionId} value={item.sessionId}>
+                {chatSessionTitle(item) || tr("新对话")}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label>
           {tr("模型来源")}
           <Select
             aria-label={tr("对话模型来源")}
@@ -404,15 +621,24 @@ function ChatPage({
           <button
             className="secondary"
             disabled={busy}
-            onClick={() => {
-              session.current = crypto.randomUUID();
-              setMessages([]);
-              setMeta({});
-              setError("");
-            }}
+            onClick={startNewSession}
           >
             <Icon name="plus" size={16} />
             {tr("新建对话")}
+          </button>
+          <button
+            className="secondary"
+            disabled={
+              busy ||
+              (mergedSessions.length <= 1 &&
+                !messages.length &&
+                !prompt.trim() &&
+                !images.length)
+            }
+            onClick={deleteCurrentSession}
+          >
+            <Icon name="delete" size={15} />
+            {tr("删除对话")}
           </button>
         </div>
       </div>
@@ -487,12 +713,45 @@ function ChatPage({
             </button>
           )}
           <form className="chat-composer" onSubmit={send}>
+            {!!images.length && (
+              <div className="chat-attachments">
+                {images.map((src, index) => (
+                  <div key={index} className="chat-attachment">
+                    <img src={src} alt={tr("附图")} />
+                    <button
+                      type="button"
+                      className="ghost"
+                      aria-label={tr("移除图片")}
+                      disabled={busy}
+                      onClick={() =>
+                        setImages((prev) => prev.filter((_, i) => i !== index))
+                      }
+                    >
+                      <Icon name="close" size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <textarea
               aria-label={tr("消息内容")}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={tr("输入消息…")}
               maxLength={64000}
+              onPaste={(event) => {
+                const pasted = Array.from(event.clipboardData?.items ?? [])
+                  .filter(
+                    (item) =>
+                      item.kind === "file" && ALLOWED_IMAGE_TYPES.has(item.type),
+                  )
+                  .map((item) => item.getAsFile())
+                  .filter((file): file is File => Boolean(file));
+                if (pasted.length) {
+                  event.preventDefault();
+                  void attachFiles(pasted);
+                }
+              }}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
@@ -504,9 +763,43 @@ function ChatPage({
                 }
               }}
             />
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              hidden
+              onChange={(event) => {
+                const picked = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                void attachFiles(picked);
+              }}
+            />
             <div className="chat-composer-bottom">
+              <button
+                type="button"
+                className="secondary chat-attach-btn"
+                disabled={busy || images.length >= MAX_MESSAGE_IMAGES}
+                onClick={() => fileInput.current?.click()}
+              >
+                <Icon name="plus" size={14} />
+                {tr("添加图片")}
+              </button>
               <kbd aria-hidden="true">Enter ↵ · Shift + Enter</kbd>
               <div className="chat-composer-actions">
+                <Select
+                  aria-label={tr("思考强度")}
+                  value={efforts.includes(effort as any) ? effort : ""}
+                  disabled={busy}
+                  onChange={(e) => setEffort(e.target.value)}
+                >
+                  <option value="">{tr("思考：默认")}</option>
+                  {efforts.map((value) => (
+                    <option value={value} key={value}>
+                      {effortLabel(value)}
+                    </option>
+                  ))}
+                </Select>
                 <Select
                   aria-label={tr("选择模型")}
                   value={selection}
@@ -546,7 +839,9 @@ function ChatPage({
                 ) : (
                   <button
                     type="submit"
-                    disabled={!prompt.trim() || !selectedModel}
+                    disabled={
+                      (!prompt.trim() && !images.length) || !selectedModel
+                    }
                   >
                     {tr("发送")}
                     <Icon name="arrow" size={15} />
@@ -571,35 +866,6 @@ function ChatPage({
                 onChange={(e) => setSystem(e.target.value)}
                 placeholder={tr("可选：设定模型的角色或回答方式")}
               />
-            </label>
-            <label>
-              {tr("思考强度")}
-              <Select
-                value={efforts.includes(effort as any) ? effort : ""}
-                disabled={busy}
-                onChange={(e) => setEffort(e.target.value)}
-              >
-                <option value="">{tr("模型默认")}</option>
-                {efforts.map((value) => (
-                  <option value={value} key={value}>
-                    {tr(
-                      value === "none"
-                        ? "关闭"
-                        : value === "minimal"
-                          ? "最低"
-                          : value === "low"
-                            ? "低"
-                            : value === "medium"
-                              ? "中"
-                              : value === "high"
-                                ? "高"
-                                : value === "xhigh"
-                                  ? "很高"
-                                  : "最高",
-                    )}
-                  </option>
-                ))}
-              </Select>
             </label>
             <label>
               Temperature

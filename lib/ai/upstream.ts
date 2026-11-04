@@ -1,6 +1,6 @@
 import { upstreamKey } from "./upstream-key.js";
 import { upstreamRejection, prepareBeforeGeneration } from "./rejection.js";
-import { definePlugin, HostError, requiredString } from "@pluhub/sdk";
+import { HostError, requiredString, type Host } from "@pluhub/sdk";
 import type { Protocol, AIRequest, Upstream } from "@pluhub/contracts/ai";
 import { encodeRequest, decodeResult, resultEvents } from "./protocols.js";
 import { discoverApiModels } from "./model-directory.js";
@@ -11,9 +11,7 @@ import {
   requestPath,
   upstreamUrl,
 } from "./upstream-interfaces.js";
-export function createUpstream(protocol: Protocol) {
-  return definePlugin({
-    setup(host) {
+export function installUpstream(host: Host, protocol: Protocol) {
       host.provide(
         "ai.upstream-models." + protocol + "@1",
         (input: { upstream: Upstream; secret?: string }, signal) => {
@@ -133,6 +131,4 @@ export function createUpstream(protocol: Protocol) {
           })();
         },
       );
-    },
-  });
 }

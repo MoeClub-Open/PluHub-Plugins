@@ -2,34 +2,38 @@ import type { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { HostError, requiredString, type Host } from "@pluhub/sdk";
 import { transaction } from "../../lib/storage/sqlite.js";
+import type { UserRecord } from "./users-store.js";
 
 export const setupMigration =
   "CREATE TABLE setup_admin(id TEXT PRIMARY KEY,username TEXT NOT NULL,hash TEXT NOT NULL);";
-export async function installSetup(
+
+export function installSetup(
   host: Host,
   db: DatabaseSync,
+  usersStore: {
+    lookup: (input: any) => UserRecord | undefined;
+    manage: (input: any) => any;
+  },
   hashPassword: (password: string) => Promise<string>,
   created: (userId: string) => void = () => {},
 ) {
-  // A durable intent lets startup finish a crash between the two plugins' writes.
   for (const pending of db
     .prepare("SELECT * FROM setup_admin")
     .all() as any[]) {
-    const user = await host.call<any>("users.lookup@1", { id: pending.id });
+    const user = usersStore.lookup({ id: pending.id });
     const inserted = transaction(db, () => {
       let added = false;
       if (user?.role === "admin" && user.username === pending.username)
-        added = !!db.prepare("INSERT OR IGNORE INTO passwords VALUES(?,?)").run(
-          pending.id,
-          pending.hash,
-        ).changes;
+        added = !!db
+          .prepare("INSERT OR IGNORE INTO passwords VALUES(?,?)")
+          .run(pending.id, pending.hash).changes;
       db.prepare("DELETE FROM setup_admin WHERE id=?").run(pending.id);
       return added;
     });
     if (inserted) created(pending.id);
   }
-  const initialized = () =>
-    host.call<boolean>("users.manage@1", { action: "has-admin" });
+  const initialized = async () =>
+    Boolean(usersStore.manage({ action: "has-admin" }));
   let busy = false;
   host.provide("auth.setup@1", async (input) => {
     if (input?.action === "status") return { initialized: await initialized() };
@@ -55,24 +59,9 @@ export async function installSetup(
         requiredString(input.password, "password", 1024),
       );
       const id = randomUUID();
-      db.prepare("INSERT INTO setup_admin VALUES(?,?,?)").run(
-        id,
-        username,
-        hash,
-      );
-      try {
-        await host.call("users.manage@1", {
-          action: "create-initial-admin",
-          id,
-          username,
-        });
-      } catch (error) {
-        db.prepare("DELETE FROM setup_admin WHERE id=?").run(id);
-        throw error;
-      }
       transaction(db, () => {
+        usersStore.manage({ action: "create-initial-admin", id, username });
         db.prepare("INSERT INTO passwords VALUES(?,?)").run(id, hash);
-        db.prepare("DELETE FROM setup_admin WHERE id=?").run(id);
       });
       created(id);
       return { created: true };

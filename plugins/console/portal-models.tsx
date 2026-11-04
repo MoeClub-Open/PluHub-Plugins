@@ -29,12 +29,8 @@ export function PortalModels({
   ).slice(0, selected.length ? 8 : 5);
   const price = (model: CatalogModel, kind: "input" | "output") => {
     if (model.pricing?.mode === "expression") return t("阶梯计价");
-    const base =
-      model.billing?.[kind] ??
-      (kind === "input" ? model.inputPrice : model.outputPrice);
-    if (base === undefined) return "—";
-    const value =
-      base * (model.billing?.multiplier ?? model.consumptionMultiplier ?? 1);
+    const value = kind === "input" ? model.inputPrice : model.outputPrice;
+    if (value === undefined) return "—";
     return (
       "$" +
       new Intl.NumberFormat(getLocale(), {

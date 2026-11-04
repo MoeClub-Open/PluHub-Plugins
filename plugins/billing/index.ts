@@ -1,7 +1,6 @@
 import { settleRequest, recoverRequestSettlements } from "./settlement.js";
 import { personalRequestPricing } from "./personal-fee.js";
 import type { RequestContext } from "@pluhub/sdk";
-import { installRequestCharges } from "./request-charges.js";
 import { consumptionSource } from "../../lib/commerce/consumption.js";
 import { join } from "node:path";
 import {
@@ -17,6 +16,7 @@ import { integer } from "../../lib/commerce/money.js";
 import { reserveCost } from "../../lib/commerce/pricing.js";
 import { installPriceQuote } from "./quote.js";
 import { mediaInputBound } from "../../lib/ai/media.js";
+import { estimateInputTokens } from "../../lib/ai/input-tokens.js";
 import { observation } from "../../lib/ai/telemetry.js";
 import { requireAdmin, adminTarget } from "../../lib/admin/access.js";
 import { installBillingAdmin } from "./admin.js";
@@ -41,6 +41,7 @@ export default definePlugin({
       "CREATE INDEX ledger_user_id ON ledger(user_id,id);",
       paymentMigration,
       "ALTER TABLE reservations ADD COLUMN budget TEXT; ALTER TABLE reservations ADD COLUMN reported_usage TEXT;",
+      "ALTER TABLE reservations ADD COLUMN started INTEGER NOT NULL DEFAULT 1;",
     ]);
     host.cleanup(() => db.close());
     function wallet(userId: string, create = true) {
@@ -87,7 +88,6 @@ export default definePlugin({
     }
     installBillingAdmin(host, db, wallet);
     installBillingHistory(host, db);
-    installRequestCharges(host, db);
     installPriceQuote(host);
     host.validateConfig(validateOutputBudget);
     function post(userId: string, amount: number, source: string) {
@@ -174,7 +174,6 @@ export default definePlugin({
           "Model has no billing price",
           503,
         );
-      // Conservative UTF-8 byte bound plus per-message/tool framing; actual provider usage is authoritative.
       let prepared = plan.preparedRequest ?? request;
       let budget: ReturnType<typeof outputBudget>["budget"] | undefined;
       if (!personal) {
@@ -190,12 +189,7 @@ export default definePlugin({
         ? 0
         : prepared.operation
           ? mediaInputBound(prepared)
-          : Buffer.byteLength(
-              JSON.stringify({
-                messages: prepared.messages,
-                tools: prepared.tools,
-              }),
-            ) + 1024;
+          : estimateInputTokens(prepared.messages, prepared.tools);
       const state = observation(ctx);
       if (state && !personal) {
         state.pricing = pricing;
@@ -218,7 +212,7 @@ export default definePlugin({
             402,
           );
         db.prepare(
-          "INSERT INTO reservations(id,user_id,amount,status,created_at,pricing,budget) VALUES(?,?,?,'reserved',?,?,?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,amount=excluded.amount,status='reserved',created_at=excluded.created_at,pricing=excluded.pricing,budget=excluded.budget,actual=NULL,receipt=NULL,reported_usage=NULL,note=NULL WHERE reservations.status='released'",
+          "INSERT INTO reservations(id,user_id,amount,status,created_at,pricing,budget,started) VALUES(?,?,?,'reserved',?,?,?,0) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,amount=excluded.amount,status='reserved',created_at=excluded.created_at,pricing=excluded.pricing,budget=excluded.budget,started=0,actual=NULL,receipt=NULL,reported_usage=NULL,note=NULL WHERE reservations.status='released'",
         ).run(
           ctx.id,
           userId,
@@ -232,13 +226,39 @@ export default definePlugin({
     }
     host.provide(
       "billing.admit@1",
-      ({ context, retry }: { context: RequestContext; retry?: boolean }) =>
-        admit(context, retry),
+      ({
+        action,
+        context,
+        retry,
+      }: {
+        action?: "admit" | "start";
+        context: RequestContext;
+        retry?: boolean;
+      }) => {
+        if (action === "start") {
+          if (context.state.get("billing.reserved"))
+            db.prepare(
+              "UPDATE reservations SET started=1 WHERE id=? AND status='reserved'",
+            ).run(context.id);
+          return;
+        }
+        return admit(context, retry);
+      },
     );
     host.hook({
       id: "reserve",
       phase: "Admission",
       handle: (ctx) => admit(ctx),
+    });
+    host.hook({
+      id: "start",
+      phase: "Streaming",
+      handle(ctx) {
+        if (ctx.state.get("billing.reserved"))
+          db.prepare(
+            "UPDATE reservations SET started=1 WHERE id=? AND status='reserved'",
+          ).run(ctx.id);
+      },
     });
     host.hook({
       id: "settle",
@@ -253,14 +273,18 @@ export default definePlugin({
           !ctx.state.get("ai.executionStarted") ||
           ctx.state.get("ai.executionRejected")
         ) {
+          const note = ctx.state.get("ai.executionRejected")
+            ? "Upstream rejected before generation"
+            : null;
           db.prepare(
             "UPDATE reservations SET status='released',note=? WHERE id=?",
-          ).run(
-            ctx.state.get("ai.executionRejected")
-              ? "Upstream rejected before generation"
-              : null,
-            ctx.id,
-          );
+          ).run(note, ctx.id);
+          ctx.state.set("billing.settlement", {
+            status: "released",
+            chargedMicros: 0,
+            receipt: null,
+            note,
+          });
           return;
         }
         const state = observation(ctx);
@@ -274,7 +298,18 @@ export default definePlugin({
               }
             : {}),
         });
+        const settled = db
+          .prepare("SELECT actual,receipt,note FROM reservations WHERE id=?")
+          .get(ctx.id) as
+          | { actual: number; receipt: string | null; note: string | null }
+          | undefined;
         ctx.state.set("billing.receipt", receipt);
+        ctx.state.set("billing.settlement", {
+          status: "settled",
+          chargedMicros: settled?.actual ?? receipt.amount,
+          receipt: settled?.receipt ?? JSON.stringify(receipt),
+          note: settled?.note ?? null,
+        });
       },
     });
     host.api({

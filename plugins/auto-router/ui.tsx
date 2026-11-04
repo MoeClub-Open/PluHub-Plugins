@@ -9,6 +9,7 @@ import type {
 } from "@pluhub/contracts/routing";
 import type { ReasoningEffort } from "@pluhub/contracts/ai";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
+import { usePluginConfig } from "../../lib/ui/plugin-config.js";
 import { PageHeading, Dialog, Empty } from "../../lib/ui/components.js";
 const api = "/api/plugins/official.auto-router";
 const levels: ReasoningEffort[] = [
@@ -29,14 +30,9 @@ const fresh = (): RoutingProfile => ({
   minConfidence: 0.65,
   preserveClientEffort: true,
 });
-const find = (c: any, name: string) =>
-  c.plugins.find((p: any) =>
-    new RegExp("/(?:official\\.)?" + name + "$").test(
-      p.path.replaceAll("\\", "/"),
-    ),
-  );
 function Page({ host }: { host: UIHost }) {
-  const config = useLoad<any>(() => host.request("/api/host/config"));
+  const config = usePluginConfig(host, "official.auto-router");
+  const routerConfig = usePluginConfig(host, "official.ai-router");
   const targets = useLoad<any[]>(() => host.request(api + "/targets"));
   const [selected, setSelected] = React.useState(
     new URLSearchParams(host.page?.split("?")[1]).get("profile") ?? "",
@@ -48,10 +44,8 @@ function Page({ host }: { host: UIHost }) {
   const [busy, setBusy] = React.useState(false);
   const [task, setTask] = React.useState("");
   const [result, setResult] = React.useState<any>();
-  const profiles = config.data
-    ? (find(config.data, "auto-router")?.config.profiles ?? {})
-    : {};
-  const router = config.data ? find(config.data, "ai-router")?.config : undefined;
+  const profiles = config.data?.profiles ?? {};
+  const router = routerConfig.data;
   const decisionTargetRows = Object.entries(router?.models ?? {}).flatMap(([id, value]) => {
     const model = value as any;
     const channel = router?.upstreams?.[model.upstream];
@@ -74,7 +68,7 @@ function Page({ host }: { host: UIHost }) {
   const decisionTargets = [...uniqueTargets.values()];
   React.useEffect(() => {
     if (config.data) {
-      const p = find(config.data, "auto-router")?.config.profiles ?? {};
+      const p = config.data.profiles ?? {};
       const id = selected || Object.keys(p)[0] || "";
       setSelected(id);
       setDraft(p[id] ? structuredClone(p[id]) : fresh());
@@ -109,9 +103,6 @@ function Page({ host }: { host: UIHost }) {
     setBusy(true);
     try {
       if (!selected) throw new Error(tr("请先新建一个策略"));
-      const c = await host.request<any>("/api/host/config");
-      const plugin = find(c, "auto-router");
-      if (!plugin) throw new Error(tr("自动路由插件尚未安装"));
       const saved = structuredClone(draft);
       if (!saved.name?.trim()) delete saved.name;
       if (saved.mode !== "manual" && saved.decision.kind !== "rules" &&
@@ -124,16 +115,11 @@ function Page({ host }: { host: UIHost }) {
         if (!matched.length || matched.some((item) => !item.priced))
           throw new Error(tr("请选择已配置价格的决策模型"));
       }
-      plugin.config = {
-        ...plugin.config,
-        profiles: { ...plugin.config.profiles, [selected]: saved },
-      };
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(c),
-      });
+      await config.save((current) => ({
+        ...current,
+        profiles: { ...(current?.profiles ?? {}), [selected]: saved },
+      }));
       setMessage(tr("已保存"));
-      config.reload();
       if (host.slot !== "channel.settings") host.refresh();
     } catch (e) {
       setMessage((e as Error).message);
@@ -163,7 +149,7 @@ function Page({ host }: { host: UIHost }) {
       {host.slot !== "channel.settings" && (
         <PageHeading title={tr("自动路由")} />
       )}
-      <Notice message={message || config.error || targets.error} />
+      <Notice message={message || config.error || routerConfig.error || targets.error} />
       <div className="section-heading">
         <label>
           {tr("路由策略")}

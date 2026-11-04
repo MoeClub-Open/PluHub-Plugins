@@ -79,7 +79,7 @@ export function ModelPriceFields({ model }: { model?: ModelRoute }) {
     <>
       {rate(
         "webSearchPrice",
-        tr("网页搜索原价 · USD / 次"),
+        tr("网页搜索 · USD / 次"),
         model?.pricing?.webSearch,
       )}
       <label>
@@ -96,21 +96,21 @@ export function ModelPriceFields({ model }: { model?: ModelRoute }) {
       </label>
       {mode === "expression" ? (
         <>
-          {rate("inputPrice", tr("输入原价 / 百万 Token"), model?.inputPrice)}
-          {rate("outputPrice", tr("输出原价 / 百万 Token"), model?.outputPrice)}
+          {rate("inputPrice", tr("输入价格 / 百万 Token"), model?.inputPrice)}
+          {rate("outputPrice", tr("输出价格 / 百万 Token"), model?.outputPrice)}
           <ExpressionPriceFields model={model} />
         </>
       ) : mode === "request" ? (
         rate(
           "requestPrice",
-          tr("每次原价 · USD"),
+          tr("每次价格 · USD"),
           model?.pricing?.request,
           true,
         )
       ) : (
         <>
-          {rate("inputPrice", tr("输入原价 / 百万 Token"), model?.inputPrice)}
-          {rate("outputPrice", tr("输出原价 / 百万 Token"), model?.outputPrice)}
+          {rate("inputPrice", tr("输入价格 / 百万 Token"), model?.inputPrice)}
+          {rate("outputPrice", tr("输出价格 / 百万 Token"), model?.outputPrice)}
           <details className="full">
             <summary>{tr("缓存与阶梯价格")}</summary>
             <div className="form-grid">
@@ -138,13 +138,13 @@ export function ModelPriceFields({ model }: { model?: ModelRoute }) {
                   </label>
                   {rate(
                     "tierInput",
-                    tr("输入原价 / 百万 Token"),
+                    tr("输入价格 / 百万 Token"),
                     tier.input,
                     true,
                   )}
                   {rate(
                     "tierOutput",
-                    tr("输出原价 / 百万 Token"),
+                    tr("输出价格 / 百万 Token"),
                     tier.output,
                     true,
                   )}

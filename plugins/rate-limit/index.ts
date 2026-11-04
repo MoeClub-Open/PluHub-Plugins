@@ -7,6 +7,7 @@ import {
 } from "@pluhub/sdk";
 import type { AIRequest, AIPlan } from "@pluhub/contracts/ai";
 import type { ChannelRequestLimit, RequestLimitRule } from "@pluhub/contracts/workflow";
+import { estimateInputTokens } from "../../lib/ai/input-tokens.js";
 import { observation } from "../../lib/ai/telemetry.js";
 import { throttle } from "./throttle.js";
 type Rule = RequestLimitRule;
@@ -128,10 +129,8 @@ export default definePlugin({
       const prepared = plan.preparedRequest ?? request;
       const tokens = coordinator
         ? 0
-        : Buffer.byteLength(JSON.stringify(prepared.messages)) +
-          Buffer.byteLength(JSON.stringify(prepared.tools)) +
-          (prepared.maxTokens ?? 4096) +
-          1024;
+        : estimateInputTokens(prepared.messages, prepared.tools) +
+          (prepared.maxTokens ?? 4096);
       const previous = retry
         ? new Set<string>(
             (ctx.state.get("limits.rules") as string[] | undefined) ?? [],
@@ -156,9 +155,9 @@ export default definePlugin({
     }
     function reserveWorkflow(ctx: RequestContext, policies: ChannelRequestLimit[], channelId?: string) {
       const request = ctx.state.get("ai.request") as AIRequest;
-      const tokens = Buffer.byteLength(JSON.stringify(request.messages)) +
-        Buffer.byteLength(JSON.stringify(request.tools)) +
-        (request.maxTokens ?? 4096) + 1024;
+      const tokens =
+        estimateInputTokens(request.messages, request.tools) +
+        (request.maxTokens ?? 4096);
       const previous = (ctx.state.get("limits.workflowRules") as Set<string> | undefined) ?? new Set<string>();
       const allRules: [string, Rule][] = policies.map((policy) => [
         JSON.stringify(["graph", policy.channel, policy.node]), policy.rule,

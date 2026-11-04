@@ -8,8 +8,6 @@ export type Model = {
   model: string;
   inputPrice: string;
   outputPrice: string;
-  upstreamInputPrice: string;
-  upstreamOutputPrice: string;
   pricingSource?: string;
   operations?: ModelRoute["operations"];
 };
@@ -18,14 +16,10 @@ export const emptyModel = (): Model => ({
   model: "",
   inputPrice: "",
   outputPrice: "",
-  upstreamInputPrice: "",
-  upstreamOutputPrice: "",
 });
 const prices = {
-  inputPrice: "输入原价",
-  outputPrice: "输出原价",
-  upstreamInputPrice: "上游输入报价",
-  upstreamOutputPrice: "上游输出报价",
+  inputPrice: "输入价格",
+  outputPrice: "输出价格",
 } as const;
 
 export function PersonalModels({
@@ -162,7 +156,7 @@ export function PersonalModels({
               )
             }
           >
-            {tr("匹配平台原价")}
+            {tr("匹配平台价格")}
           </button>
           <div className="personal-models">
             <table>

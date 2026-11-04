@@ -1,4 +1,4 @@
-import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
+import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { useLoad, Notice } from "../../lib/ui/mount.js";
@@ -17,30 +17,6 @@ import {
   money,
   type Summary,
 } from "../../lib/ui/components.js";
-type RecentRequest = {
-  id: string;
-  model: string | null;
-  status: "success" | "error" | "cancelled";
-  latency_ms: number | null;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  created_at: number;
-  user_name: string | null;
-  key_name: string | null;
-  key_id: string | null;
-  effort: string | null;
-};
-const outcome = {
-  get success() {
-    return tr("成功");
-  },
-  get error() {
-    return tr("失败");
-  },
-  get cancelled() {
-    return tr("已取消");
-  },
-};
 export function Dashboard({
   client,
   management,
@@ -66,18 +42,8 @@ export function Dashboard({
         : client.request("/api/plugins/official.model-catalog/models"),
     [management],
   );
-  const recent = useLoad<{ data: RecentRequest[]; total: number }>(
-    () =>
-      client.request(
-        "/api/plugins/official.observability/requests?limit=5&hours=" +
-          hours +
-          (management ? "" : "&scope=me"),
-      ),
-    [hours, management],
-  );
   function refresh() {
     stats.reload();
-    recent.reload();
   }
   React.useEffect(() => {
     const timer = setInterval(refresh, 30000);
@@ -223,99 +189,6 @@ export function Dashboard({
           )}
         </section>
       </div>
-      <section className="recent-requests" aria-label={tr("最近调用")}>
-        <div className="panel-heading">
-          <h2>{tr("最近调用")}</h2>
-          <a className="text-link" href="#/activity">
-            {tr("查看全部")}
-            <Icon name="arrow" size={14} />
-          </a>
-        </div>
-        <Notice
-          message={recent.error ? tr("最近调用暂不可用：") + recent.error : ""}
-        />
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">{tr("用户 / API Key")}</th>
-                <th scope="col">{tr("模型")}</th>
-                <th scope="col">{tr("状态")}</th>
-                <th scope="col" className="numeric">
-                  {tr("耗时")}
-                </th>
-                <th scope="col" className="numeric">
-                  {tr("输入 Token")}
-                </th>
-                <th scope="col" className="numeric">
-                  {tr("输出 Token")}
-                </th>
-                <th scope="col" className="numeric">
-                  {tr("调用时间")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.data?.data.map((request) => (
-                <tr key={request.id}>
-                  <td>
-                    <strong>{request.user_name || tr("未知用户")}</strong>
-                    <small>
-                      {request.key_name ||
-                        (request.key_id ? tr("名称不可用") : tr("控制台会话"))}
-                    </small>
-                  </td>
-                  <td>
-                    <strong>{request.model || "—"}</strong>
-                    <small>
-                      {tr("思考强度")}: {request.effort || "—"}
-                    </small>
-                  </td>
-                  <td>
-                    <span
-                      className={
-                        "badge " +
-                        (request.status === "success"
-                          ? "ready"
-                          : request.status === "error"
-                            ? "error"
-                            : "")
-                      }
-                    >
-                      {outcome[request.status] ?? request.status}
-                    </span>
-                  </td>
-                  <td className="numeric">{latency(request.latency_ms)}</td>
-                  <td className="numeric">{number(request.input_tokens)}</td>
-                  <td className="numeric">{number(request.output_tokens)}</td>
-                  <td className="numeric muted">
-                    <time dateTime={new Date(request.created_at).toISOString()}>
-                      {new Date(request.created_at).toLocaleString(
-                        getLocale(),
-                        {
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
-                        },
-                      )}
-                    </time>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!recent.data && !recent.error && (
-            <p className="empty-inline" role="status">
-              {tr("正在加载调用记录…")}
-            </p>
-          )}
-          {recent.data?.total === 0 && (
-            <p className="empty-inline">{tr("还没有调用记录。")}</p>
-          )}
-        </div>
-      </section>
       {!management && (
         <section className="endpoint-strip" aria-label={tr("API 接入")}>
           <Icon name="channels" size={18} />

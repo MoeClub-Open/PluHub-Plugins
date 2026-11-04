@@ -129,10 +129,7 @@ function Page({ host }: { host: UIHost }) {
         ...new Map(
           (loaded.data ?? [])
             .filter((m) => m.channel)
-            .map((m) => [
-              m.channel!.id,
-              { ...m.channel!, consumptionMultiplier: m.consumptionMultiplier },
-            ]),
+            .map((m) => [m.channel!.id, m.channel!]),
         ).values(),
       ]
     : (channels.data ?? []);
@@ -204,7 +201,7 @@ function Page({ host }: { host: UIHost }) {
           {channelOptions.map((item) => (
             <option key={item.id} value={item.id}>
               {item.scope === "personal" ? tr("个人 · ") : ""}
-              {item.name} · ×{item.consumptionMultiplier ?? 1}
+              {item.name}
             </option>
           ))}
         </Select>
@@ -252,7 +249,7 @@ function Page({ host }: { host: UIHost }) {
               ? tr("加载失败")
               : tr("正在加载模型…")}
         </span>
-        <span>{tr("扣费价格 · 美元 / 百万 Token")}</span>
+        <span>{tr("价格 · 美元 / 百万 Token")}</span>
       </div>
       {loaded.data && models.length === 0 ? (
         <Empty
@@ -279,10 +276,6 @@ function Page({ host }: { host: UIHost }) {
             <section className="catalog-channel" key={section.id}>
               <div className="section-heading catalog-channel-heading">
                 <h2>{section.models[0]?.channel?.name ?? tr("平台模型")}</h2>
-                <span className="feature-pill">
-                  {tr("渠道消耗倍率")} ×
-                  {section.models[0]?.consumptionMultiplier ?? 1}
-                </span>
                 <span className="muted">
                   {tr("{0} 个模型", { "0": textValue(section.models.length) })}
                 </span>
@@ -291,7 +284,7 @@ function Page({ host }: { host: UIHost }) {
                 <div className="catalog-list-head" aria-hidden="true">
                   <span>{tr("模型")}</span>
                   <span>{tr("能力")}</span>
-                  <span>{tr("扣费价格")}</span>
+                  <span>{tr("价格")}</span>
                   <span>{tr("操作")}</span>
                 </div>
                 {section.models.map((model) => (
@@ -336,23 +329,6 @@ function Page({ host }: { host: UIHost }) {
                                 ),
                               )}
                             </strong>
-                            {consumptionPrice(
-                              model,
-                              model.pricing?.mode === "request"
-                                ? "request"
-                                : "input",
-                            ) !==
-                              (model.pricing?.mode === "request"
-                                ? model.pricing.request
-                                : model.inputPrice) && (
-                              <del title={tr("原价")}>
-                                {price(
-                                  model.pricing?.mode === "request"
-                                    ? model.pricing.request
-                                    : model.inputPrice,
-                                )}
-                              </del>
-                            )}
                             <span>
                               {model.pricing?.mode === "request"
                                 ? tr("USD / 次")
@@ -364,12 +340,6 @@ function Page({ host }: { host: UIHost }) {
                               <strong>
                                 {price(consumptionPrice(model, "output"))}
                               </strong>
-                              {consumptionPrice(model, "output") !==
-                                model.outputPrice && (
-                                <del title={tr("原价")}>
-                                  {price(model.outputPrice)}
-                                </del>
-                              )}
                               <span>{tr("输出")}</span>
                             </div>
                           )}
@@ -422,10 +392,6 @@ function Page({ host }: { host: UIHost }) {
               <div>
                 <dt>{tr("渠道")}</dt>
                 <dd>{selected.channel?.name ?? tr("平台模型")}</dd>
-              </div>
-              <div>
-                <dt>{tr("渠道消耗倍率")}</dt>
-                <dd>×{selected.consumptionMultiplier ?? 1}</dd>
               </div>
               {selected.contextWindow && (
                 <div>
@@ -501,12 +467,7 @@ function Page({ host }: { host: UIHost }) {
               <dl className="catalog-detail-facts">
                 <div>
                   <dt>{tr("网页搜索 · USD / 次")}</dt>
-                  <dd>
-                    {price(
-                      selected.pricing.webSearch *
-                        (selected.consumptionMultiplier ?? 1),
-                    )}
-                  </dd>
+                  <dd>{price(selected.pricing.webSearch)}</dd>
                 </div>
               </dl>
             )}

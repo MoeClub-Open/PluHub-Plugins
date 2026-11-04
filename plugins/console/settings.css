@@ -38,30 +38,6 @@
   padding: 2px 4px;
   border-radius: 3px;
 }
-.settings-category-links a {
-  background: transparent;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border);
-  padding: 7px 0;
-  line-height: 1.4;
-}
-.settings-category-links a:last-child {
-  border-bottom: 0;
-}
-.settings-category-links a:hover {
-  background: var(--subtle);
-  color: var(--accent);
-}
-.settings-category-heading h2 {
-  font-size: 14px;
-}
-.settings-category-icon {
-  background: transparent;
-  border: 0;
-}
-.settings-category-links {
-  gap: 0;
-}
 .brand-links {
   display: flex;
   align-items: center;
@@ -621,9 +597,5 @@ textarea.code.issued-token {
     justify-self: end;
     white-space: normal;
     font-size: 11px;
-  }
-  .settings-category-links a {
-    font-size: 12px;
-    gap: 6px;
   }
 }

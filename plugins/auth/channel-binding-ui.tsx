@@ -6,7 +6,6 @@ export type KeyChannel = {
   id: string;
   name: string;
   scope: string;
-  consumptionMultiplier?: number;
 };
 export function ChannelBinding({
   channels,

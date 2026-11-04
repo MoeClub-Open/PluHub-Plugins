@@ -6,6 +6,7 @@ import { SecurityProviderForm } from "../../lib/ui/security-settings.js";
 import { Keys } from "./keys-ui.js";
 import { Account } from "./account-ui.js";
 import { KeyAdmin } from "./admin-ui.js";
+import { UsersPage } from "./users-ui.js";
 function Settings({ host }: { host: UIHost }) {
   return (
     <>
@@ -18,11 +19,13 @@ export const mount = (element: HTMLElement, host: UIHost) =>
   mountPage(
     element,
     host,
-    host.page === "/settings/access-keys"
-      ? KeyAdmin
-      : host.page === "/settings/auth"
-        ? Settings
-        : host.page === "/account"
-          ? Account
-          : Keys,
+    host.page === "/users"
+      ? UsersPage
+      : host.page === "/settings/access-keys"
+        ? KeyAdmin
+        : host.page === "/settings/auth"
+          ? Settings
+          : host.page === "/account"
+            ? Account
+            : Keys,
   );

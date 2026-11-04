@@ -5,7 +5,6 @@ import {
   changeWorkflowConnection,
   removeFlowNodes,
 } from "../lib/ui/channel-graph-operations.js";
-import { migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
 import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { runWorkflow } from "../lib/ai/channel-graph.js";
 
@@ -145,15 +144,15 @@ it("respects a request branch when filtering the connected provider paths", () =
   ).toBe("b");
 });
 
-it("migrates the old entry and disconnects one provider without removing its siblings", () => {
-  const flow = migrateWorkflowConditions({
+it("disconnects one provider without removing its siblings", () => {
+  const flow: ChannelWorkflow = {
     entry: "start",
     nodes: [
-      { id: "start", type: "start", next: "a" },
+      { id: "start", type: "start", next: ["a"] },
       { id: "a", type: "provider" },
       { id: "b", type: "provider" },
     ],
-  });
+  };
   const entry = changeWorkflowConnection(
     flow.nodes[0]!,
     "next",

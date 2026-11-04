@@ -3,9 +3,9 @@
   "id": "official.auth",
   "category": "identity",
   "name": "账号认证",
-  "description": "管理密码、会话、API Key 和多因素验证。",
+  "description": "管理用户资料、管理员权限、密码、会话、API Key 和多因素验证。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.34",
+  "version": "0.1.0-alpha.35",
   "host": ">=0.1.0-alpha.1 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -18,10 +18,18 @@
     "auth.reset-factors@1",
     "auth.admin@1",
     "auth.security-history@1",
-    "auth.key-names@1"
+    "auth.key-names@1",
+    "users.lookup@1",
+    "users.manage@1",
+    "users.directory@1",
+    "users.log-scope@1"
   ],
-  "requires": ["users.lookup@1", "users.manage@1"],
-  "permissions": ["api.register", "identity.provide", "hooks.register"],
+  "requires": [],
+  "permissions": [
+    "api.register",
+    "identity.provide",
+    "hooks.register"
+  ],
   "configReload": "snapshot",
   "configSchema": {
     "type": "object",
@@ -125,6 +133,11 @@
         "public": false,
         "group": "security",
         "order": 30
+      },
+      {
+        "title": "用户管理",
+        "path": "/users",
+        "public": false
       }
     ]
   },

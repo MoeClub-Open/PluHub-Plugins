@@ -1,5 +1,3 @@
-import { consumptionSourceSql } from "./charges.js";
-import { attachCharges, consumptionSummary } from "./charges.js";
 import { attachRequestLabels } from "./request-labels.js";
 import { join } from "node:path";
 import { definePlugin, HostError, json } from "@pluhub/sdk";
@@ -14,6 +12,11 @@ import {
   priceUsage,
 } from "../../lib/commerce/pricing.js";
 import { fixedPricing } from "../../lib/commerce/expression.js";
+const unroutedSql =
+  "(status IN ('error','cancelled') AND upstream IS NULL AND billing_mode IS NULL AND input_tokens IS NULL AND pricing_json IS NULL)";
+const consumptionSourceSql = `COALESCE(consumption_source, CASE WHEN ${unroutedSql} THEN 'unrouted' ELSE 'unknown' END)`;
+const exemptSql =
+  `((consumption_source IN ('byoapi','byosub','personal') AND COALESCE(billing_mode,'')<>'personal-fee') OR billing_mode IN ('personal','disabled','workflow') OR ${unroutedSql})`;
 export default definePlugin({
   setup(host) {
     const db = openDatabase(join(host.dataDir, "requests.sqlite"), [
@@ -38,6 +41,7 @@ export default definePlugin({
        ALTER TABLE requests ADD COLUMN workflow_node_id TEXT;
        CREATE INDEX requests_parent ON requests(parent_request_id,created_at);`,
       "ALTER TABLE requests DROP COLUMN generation_ms;",
+      "ALTER TABLE requests ADD COLUMN charged_micro_usd INTEGER; ALTER TABLE requests ADD COLUMN billing_status TEXT; ALTER TABLE requests ADD COLUMN billing_receipt TEXT; ALTER TABLE requests ADD COLUMN billing_note TEXT;",
     ]);
     host.cleanup(() => db.close());
     host.provide("observability.rankings@1", (input) =>
@@ -138,6 +142,7 @@ export default definePlugin({
     host.hook({
       id: "record",
       phase: "Finalize",
+      after: ["official.billing:settle"],
       handle(ctx) {
         const state = observation(ctx);
         if (!state) return;
@@ -197,7 +202,6 @@ export default definePlugin({
                 "mode",
                 "request",
                 "webSearch",
-                "multiplier",
                 "tiers",
                 "expression",
                 "context",
@@ -245,11 +249,55 @@ export default definePlugin({
         } catch {
           /* Invalid usage has no usage-based estimate; Billing posts the reserved amount. */
         }
+        const billingMode =
+          (ctx.state.get("billing.mode") as string | undefined) ??
+          (workflow ? "workflow" : null);
+        const settlement = ctx.state.get("billing.settlement") as
+          | {
+              status: string;
+              chargedMicros: number | null;
+              receipt: string | null;
+              note: string | null;
+            }
+          | undefined;
+        const personal =
+          ["byoapi", "byosub", "personal"].includes(
+            state.consumptionSource ?? "",
+          ) || billingMode === "personal";
+        const notStarted =
+          ["error", "cancelled"].includes(status) &&
+          !state.upstream &&
+          !billingMode &&
+          state.usage?.input == null &&
+          !prices;
+        const exempt =
+          (personal && billingMode !== "personal-fee") ||
+          billingMode === "disabled" ||
+          workflow ||
+          notStarted ||
+          (!settlement &&
+            ["error", "cancelled"].includes(status) &&
+            !ctx.state.get("billing.reserved"));
+        const chargedMicros =
+          settlement?.chargedMicros ?? (exempt ? 0 : null);
+        const billingStatus =
+          settlement?.status ??
+          (notStarted
+            ? "not_started"
+            : workflow
+              ? "workflow"
+              : personal && billingMode !== "personal-fee"
+                ? "personal"
+                : billingMode === "disabled"
+                  ? "disabled"
+                  : exempt
+                    ? "not_started"
+                    : "unknown");
         let recorded = false;
         try {
           transaction(db, () => {
             db.prepare(
-              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,billing_mode,consumption_source,user_name,key_name,upstream_response_model,parent_request_id,workflow_node_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "INSERT INTO requests(id,user_id,key_id,created_at,model,upstream,protocol,status,http_status,latency_ms,first_token_ms,input_tokens,output_tokens,cost_micro_usd,stream,error_code,routing,usage_json,pricing_json,billing_mode,consumption_source,user_name,key_name,upstream_response_model,parent_request_id,workflow_node_id,charged_micro_usd,billing_status,billing_receipt,billing_note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ).run(
               ctx.id,
               ctx.principal?.id ?? null,
@@ -272,8 +320,7 @@ export default definePlugin({
               state.routing ? JSON.stringify(state.routing) : null,
               usageDetails,
               prices,
-              (ctx.state.get("billing.mode") as string | undefined) ??
-                (workflow ? "workflow" : null),
+              billingMode,
               state.consumptionSource ?? null,
               typeof ctx.principal?.attributes?.username === "string"
                 ? ctx.principal.attributes.username
@@ -284,6 +331,12 @@ export default definePlugin({
               state.upstreamResponseModel ?? null,
               ctx.parent?.requestId ?? null,
               ctx.parent?.nodeId ?? null,
+              chargedMicros !== null && Number.isSafeInteger(chargedMicros)
+                ? chargedMicros
+                : null,
+              billingStatus,
+              settlement?.receipt ?? null,
+              settlement?.note ?? null,
             );
             recordRanking(db, {
               at: state.startedAt,
@@ -463,6 +516,44 @@ export default definePlugin({
         users: allowed.users,
       };
     }
+    function presentRows(rows: Record<string, any>[]): Record<string, any>[] {
+      return rows.map((row) => {
+        const personal =
+          ["byoapi", "byosub", "personal"].includes(row.consumption_source) ||
+          row.billing_mode === "personal";
+        const notStarted =
+          ["error", "cancelled"].includes(row.status) &&
+          !row.upstream &&
+          !row.billing_mode &&
+          row.input_tokens == null &&
+          !row.pricing_json;
+        const workflow = row.billing_mode === "workflow";
+        const exempt =
+          (personal && row.billing_mode !== "personal-fee") ||
+          row.billing_mode === "disabled" ||
+          workflow ||
+          notStarted;
+        return {
+          ...row,
+          consumption_source:
+            row.consumption_source ?? (notStarted ? "unrouted" : "unknown"),
+          charged_micro_usd: row.charged_micro_usd ?? (exempt ? 0 : null),
+          billing_status:
+            row.billing_status ??
+            (exempt
+              ? notStarted
+                ? "not_started"
+                : workflow
+                  ? "workflow"
+                  : personal
+                    ? "personal"
+                    : "disabled"
+              : "unknown"),
+          billing_receipt: row.billing_receipt ?? undefined,
+          billing_note: row.billing_note ?? undefined,
+        };
+      });
+    }
     const guardExport = exportGuard();
     host.api({
       method: "GET",
@@ -502,7 +593,6 @@ export default definePlugin({
           "estimated_cost_micro_usd",
           "consumption_source",
           "charged_micro_usd",
-          "held_micro_usd",
           "billing_status",
           "stream",
           "error_code",
@@ -511,10 +601,8 @@ export default definePlugin({
           "pluhub-requests.csv",
           columns,
           (
-            await attachCharges(
-              host,
+            presentRows(
               await attachRequestLabels(host, rows, f.users, ctx.signal),
-              ctx.signal,
             )
           ).map((row) =>
             columns.map(
@@ -552,10 +640,8 @@ export default definePlugin({
           )
           .all(parentId, parent.user_id) as Record<string, any>[];
         return json({
-          data: await attachCharges(
-            host,
+          data: presentRows(
             await attachRequestLabels(host, rows, allowed.users, ctx.signal),
-            ctx.signal,
           ),
         });
       },
@@ -590,15 +676,13 @@ export default definePlugin({
           )
           .all(...f.params, limit, offset);
         return json({
-          data: await attachCharges(
-            host,
+          data: presentRows(
             await attachRequestLabels(
               host,
               rows as Record<string, any>[],
               f.users,
               ctx.signal,
             ),
-            ctx.signal,
           ),
           total,
           limit,
@@ -653,15 +737,36 @@ export default definePlugin({
             `SELECT model,COUNT(*) requests,SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)) tokens FROM requests WHERE ${rootFilter(f)} GROUP BY model ORDER BY requests DESC LIMIT 6`,
           )
           .all(...f.params);
+        const providerScope = providerCallFilter(f);
+        const consumption = db
+          .prepare(
+            `SELECT ${consumptionSourceSql} source,
+            COUNT(*) requests, COALESCE(SUM(input_tokens),0) inputTokens,
+            COALESCE(SUM(output_tokens),0) outputTokens, COUNT(input_tokens) usageKnownRequests,
+            COUNT(cost_micro_usd) pricedRequests, SUM(cost_micro_usd)/1000000.0 estimatedCostUSD
+            FROM requests WHERE ${providerScope} GROUP BY source`,
+          )
+          .all(...f.params);
+        const walletStats = db
+          .prepare(
+            `SELECT COUNT(*) total, COUNT(charged_micro_usd) known, COALESCE(SUM(charged_micro_usd),0) charged
+            FROM requests WHERE ${providerScope} AND NOT COALESCE(${exemptSql},0)`,
+          )
+          .get(...f.params) as { total: number; known: number; charged: number };
         return json({
           ...summary,
           ...usage,
-          ...(await consumptionSummary(
-            host,
-            db,
-            { sql: providerCallFilter(f), params: f.params },
-            ctx.signal,
-          )),
+          consumption,
+          wallet: {
+            chargedUSD:
+              walletStats.total === 0 || walletStats.known > 0
+                ? walletStats.charged / 1000000
+                : null,
+            unknownRequests: Math.max(
+              0,
+              walletStats.total - walletStats.known,
+            ),
+          },
           series,
           models,
           retentionDays,

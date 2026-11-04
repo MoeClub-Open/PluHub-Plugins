@@ -7,14 +7,15 @@ import {
 
 function fixture() {
   const db = new DatabaseSync(":memory:");
-  db.exec(`CREATE TABLE reservations(id TEXT PRIMARY KEY,user_id TEXT,amount INTEGER,status TEXT,actual INTEGER,pricing TEXT,reported_usage TEXT,receipt TEXT,note TEXT);
+  db.exec(`CREATE TABLE reservations(id TEXT PRIMARY KEY,user_id TEXT,amount INTEGER,status TEXT,started INTEGER NOT NULL DEFAULT 1,actual INTEGER,pricing TEXT,reported_usage TEXT,receipt TEXT,note TEXT);
     CREATE TABLE ledger(source TEXT UNIQUE,amount INTEGER);`);
-  const add = (id: string, status = "reserved", usage?: object) => {
+  const add = (id: string, status = "reserved", usage?: object, started = 1) => {
     db.prepare(
-      "INSERT INTO reservations(id,user_id,amount,status,pricing,reported_usage) VALUES(?,'alice',100,?,?,?)",
+      "INSERT INTO reservations(id,user_id,amount,status,started,pricing,reported_usage) VALUES(?,'alice',100,?,?,?,?)",
     ).run(
       id,
       status,
+      started,
       JSON.stringify({ input: 1, output: 2 }),
       usage ? JSON.stringify(usage) : null,
     );
@@ -69,6 +70,27 @@ it("finishes historical reviews and interrupted reservations exactly once", () =
     expect(
       f.db.prepare("SELECT COUNT(*) n,SUM(amount) amount FROM ledger").get(),
     ).toMatchObject({ n: 2, amount: -140 });
+  } finally {
+    f.db.close();
+  }
+});
+
+it("releases unstarted reservations on recovery without charging the wallet", () => {
+  const f = fixture();
+  try {
+    f.add("unstarted", "reserved", undefined, 0);
+    f.add("started", "reserved", undefined, 1);
+    recoverRequestSettlements(f.db, f.post);
+    const unstarted = f.db
+      .prepare("SELECT status,note FROM reservations WHERE id='unstarted'")
+      .get() as any;
+    expect(unstarted).toMatchObject({
+      status: "released",
+      note: "Interrupted before generation",
+    });
+    expect(
+      f.db.prepare("SELECT COUNT(*) n,SUM(amount) amount FROM ledger").get(),
+    ).toMatchObject({ n: 1, amount: -100 });
   } finally {
     f.db.close();
   }

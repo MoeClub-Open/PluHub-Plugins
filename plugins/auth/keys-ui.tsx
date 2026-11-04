@@ -30,8 +30,9 @@ export function Keys({ host }: { host: UIHost }) {
   const [status, setStatus] = React.useState("all");
   const [page, setPage] = React.useState(1),
     [size, setSize] = React.useState(10);
+  const hashParams = new URLSearchParams(location.hash.split("?")[1]);
   const [dialog, setDialog] = React.useState(
-      new URLSearchParams(location.hash.split("?")[1]).get("create") === "1",
+      hashParams.get("create") === "1" || !!hashParams.get("channel"),
     ),
     [revoke, setRevoke] = React.useState<Key>();
   const [token, setToken] = React.useState(""),
@@ -42,15 +43,14 @@ export function Keys({ host }: { host: UIHost }) {
   const channelNames = useLoad<KeyChannel[]>(() =>
     host.request("/api/plugins/official.ai-router/channels"),
   );
-  const initialChannel =
-    new URLSearchParams(location.hash.split("?")[1]).get("channel") ?? "";
+  const initialChannel = hashParams.get("channel") ?? "";
   const channelLabel = (id?: string) => {
     if (!id) return tr("平台默认路由");
     const channel = channelNames.data?.find((entry) => entry.id === id);
     return channel
       ? channel.scope === "personal"
         ? channel.name + " · " + tr("个人渠道")
-        : `${channel.name} · ×${channel.consumptionMultiplier ?? 1}`
+        : channel.name
       : tr("绑定渠道不可用");
   };
   const expired = (key: Key) =>

@@ -141,7 +141,6 @@ export async function resolveRoute(
   options: {
     physicalOnly?: boolean;
     allowedChannelIds?: readonly string[];
-    consumptionMultiplier?: number;
     protocolPolicy?: WorkflowResult["protocolPolicy"];
     /** Supplied only by the trusted workflow execution capability after admission. */
     runWorkflow?: (
@@ -227,7 +226,6 @@ export async function resolveRoute(
   let sessionChannel = input.channelId;
   let providerNodeId: string | undefined;
   let recordResponseModel = false;
-  let consumptionMultiplier: number | undefined;
   let protocolPolicy = options.protocolPolicy ?? input.protocolPolicy;
   while (path.length < 32) {
     signal.throwIfAborted();
@@ -269,8 +267,6 @@ export async function resolveRoute(
       );
     if (!bindingChecked) {
       sessionChannel ??= route.upstream;
-      consumptionMultiplier =
-        options.consumptionMultiplier ?? upstream.consumptionMultiplier ?? 1;
       bindingChecked = true;
     }
     let connection: Upstream = upstream;
@@ -626,7 +622,6 @@ export async function resolveRoute(
               decisionToken,
               principalId: input.principalId,
               allowedChannelIds: allowedChannels,
-              consumptionMultiplier,
               ingressProtocol: input.ingressProtocol,
               protocolPolicy,
               pricingContext: input.pricingContext,
@@ -659,8 +654,6 @@ export async function resolveRoute(
           (m) =>
             m.inputPrice === pricing.inputPrice &&
             m.outputPrice === pricing.outputPrice &&
-            m.effectiveInputPrice === pricing.effectiveInputPrice &&
-            m.effectiveOutputPrice === pricing.effectiveOutputPrice &&
             JSON.stringify(m.pricing) === JSON.stringify(pricing.pricing),
         );
       resolved = {
@@ -674,14 +667,7 @@ export async function resolveRoute(
         upstreamId: route.upstream,
         targetModelId: model,
         recordResponseModel,
-        ...(knownPrice
-          ? {
-              pricing: routePricing(pricing, {
-                ...upstream,
-                consumptionMultiplier,
-              }),
-            }
-          : {}),
+        ...(knownPrice ? { pricing: routePricing(pricing) } : {}),
       };
       const effort = prepared?.reasoning?.effort;
       if (

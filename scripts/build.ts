@@ -8,6 +8,14 @@ const jsepLicense = await readFile(
   new URL("../node_modules/jsep/LICENSE", import.meta.url),
   "utf8",
 );
+const sharedUiExternals = [
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "react-dom",
+  "react-dom/client",
+  "@pluhub/ui-sdk",
+];
 const expressionLicense: Plugin = {
   name: "billing-expression-license",
   setup(builder) {
@@ -62,6 +70,7 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
       target: "es2023",
       jsx: "automatic",
       minify: true,
+      external: sharedUiExternals,
       plugins: [expressionLicense],
       banner: ["model-catalog", "console", "leaderboard"].includes(entry.name)
         ? {
@@ -77,6 +86,26 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
       loader: { ".svg": "text" },
       define: { "process.env.NODE_ENV": '"production"' },
     });
+  if (entry.name === "console") {
+    await build({
+      entryPoints: {
+        "vendor-react": "react",
+        "vendor-jsx-runtime": "react/jsx-runtime",
+        "vendor-react-dom": "react-dom",
+        "vendor-react-dom-client": "react-dom/client",
+        "vendor-ui-sdk": "@pluhub/ui-sdk",
+      },
+      outdir: out,
+      splitting: true,
+      chunkNames: "chunk-vendor-[hash]",
+      bundle: true,
+      platform: "browser",
+      format: "esm",
+      target: "es2023",
+      minify: true,
+      define: { "process.env.NODE_ENV": '"production"' },
+    });
+  }
   if (entry.name === "playground")
     await build({
       entryPoints: [resolve(directory, "ui.css")],

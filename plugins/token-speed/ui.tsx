@@ -4,6 +4,7 @@ import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
+import { updatePluginConfig } from "../../lib/ui/plugin-config.js";
 function Page({ host }: { host: UIHost }) {
   const status = useLoad<any>(() =>
     host.request("/api/plugins/official.token-speed/status"),
@@ -27,22 +28,17 @@ function Page({ host }: { host: UIHost }) {
   async function save() {
     setBusy(true);
     try {
-      const c = await host.request<any>("/api/host/config");
-      const p = c.plugins.find((p: any) =>
-        /\/(?:official\.)?token-speed$/.test(p.path.replaceAll("\\", "/")),
-      );
-      if (!p) throw new Error(tr("TPS 插件尚未安装"));
-      p.config = { ...p.config, tokenizers: JSON.parse(definitions) };
-      if (enabled)
-        p.config.default = {
-          tps: rate,
-          tokenizer,
-          ...(aggregate ? { aggregateTps: aggregate } : {}),
-        };
-      else delete p.config.default;
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(c),
+      const tokenizers = JSON.parse(definitions);
+      await updatePluginConfig(host, "official.token-speed", (current) => {
+        const next: Record<string, any> = { ...current, tokenizers };
+        if (enabled)
+          next.default = {
+            tps: rate,
+            tokenizer,
+            ...(aggregate ? { aggregateTps: aggregate } : {}),
+          };
+        else delete next.default;
+        return next;
       });
       setMessage(tr("已保存"));
       status.reload();

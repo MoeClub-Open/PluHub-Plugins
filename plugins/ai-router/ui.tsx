@@ -6,6 +6,7 @@ import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
 import { ChannelTable } from "./channel-table.js";
 import { ChannelModels, type ChannelModel } from "./channel-models.js";
 import { ModelEditor } from "./model-editor.js";
+import { ChannelCreateDialog } from "./channel-create-dialog.js";
 import {
   availableModelId,
   discoveredModelRoute,
@@ -13,13 +14,10 @@ import {
 } from "./model-config.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { channelEditorTarget } from "../../lib/ui/channel-location.js";
-import {
-  defaultChannelFlow,
-  channelProviderNodes,
-} from "../../lib/ai/channel-config.js";
+import { channelProviderNodes } from "../../lib/ai/channel-config.js";
 import { setChannelState } from "../../lib/ai/channel-list.js";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
-import { PageHeading, Icon, Empty, Dialog } from "../../lib/ui/components.js";
+import { PageHeading, Icon, Empty } from "../../lib/ui/components.js";
 type Router = {
   upstreams: Record<string, Upstream>;
   models: Record<string, ModelRoute>;
@@ -182,38 +180,6 @@ function Page({ host }: { host: UIHost }) {
     }
   }
   const existing = dialog ? upstreams[dialog.id] : undefined;
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const text = (key: string) => String(f.get(key) ?? "").trim();
-    if (!dialog) return;
-    let id = dialog.id;
-    try {
-      await save((r) => {
-        if (!dialog.id) {
-          let next = BigInt(r.nextChannelId ?? "1");
-          for (const current of Object.keys(r.upstreams)) {
-            if (!/^\d+$/.test(current)) continue;
-            const candidate = BigInt(current) + 1n;
-            if (candidate > next) next = candidate;
-          }
-          id = String(next);
-          r.nextChannelId = String(next + 1n);
-        }
-        if (!dialog.id && Object.hasOwn(r.upstreams, id))
-          throw new Error(tr("该 ID 已存在，请使用不同的 ID。"));
-        r.upstreams[id] = {
-          ...(existing ?? {}),
-          name: text("name"),
-          enabled: existing ? existing.enabled !== false : false,
-          flow: existing?.flow ?? defaultChannelFlow(),
-          consumptionMultiplier: Number(text("consumptionMultiplier") || 1),
-          priority: Number(text("priority") || 0),
-        };
-      });
-      openGraph(id);
-    } catch {}
-  }
   const modelDialogs = (
     <>
       {modelChannel && (
@@ -398,6 +364,10 @@ function Page({ host }: { host: UIHost }) {
             tests={tests}
             edit={(id) => setDialog({ id })}
             graph={openGraph}
+            manageModels={(id) => {
+              setModelNodeId("");
+              setModelChannel(id);
+            }}
             toggle={(id, enabled) =>
               mutate((r) => setChannelState(r.upstreams, [id], enabled))
             }
@@ -456,8 +426,7 @@ function Page({ host }: { host: UIHost }) {
                 <tr>
                   <th>{tr("公开模型 / 名称")}</th>
                   <th>{tr("渠道")}</th>
-                  <th>{tr("原价 · USD")}</th>
-                  <th>{tr("渠道消耗倍率")}</th>
+                  <th>{tr("价格 · USD")}</th>
                   <th>{tr("状态")}</th>
                   <th>{tr("操作")}</th>
                 </tr>
@@ -486,9 +455,6 @@ function Page({ host }: { host: UIHost }) {
                           </small>
                         </>
                       )}
-                    </td>
-                    <td>
-                      ×{upstreams[m.upstream]?.consumptionMultiplier ?? 1}
                     </td>
                     <td>
                       <span
@@ -562,64 +528,16 @@ function Page({ host }: { host: UIHost }) {
       {modelDialogs}
 
       {dialog && (
-        <Dialog
-          title={dialog.id ? tr("编辑渠道") : tr("添加渠道")}
-          close={() => {
-            if (!busy) setDialog(undefined);
-          }}
-        >
-          <form onSubmit={submit} key={dialog.id}>
-            <Notice message={message} />
-            <div className="form-grid">
-              <label className="full">
-                {tr("显示名称")}
-                <input
-                  name="name"
-                  defaultValue={existing?.name ?? ""}
-                  maxLength={128}
-                  placeholder={tr("便于识别的名称（可选）")}
-                />
-              </label>
-              <label>
-                {tr("优先级")}
-                <input
-                  name="priority"
-                  type="number"
-                  min="-1000000"
-                  max="1000000"
-                  step="1"
-                  defaultValue={existing?.priority ?? 0}
-                  required
-                />
-              </label>
-              <label>
-                {tr("渠道消耗倍率")}
-                <input
-                  name="consumptionMultiplier"
-                  type="number"
-                  min="0"
-                  max="1000"
-                  step="any"
-                  defaultValue={existing?.consumptionMultiplier ?? 1}
-                  required
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => setDialog(undefined)}
-              >
-                {tr("取消")}
-              </button>
-              <button disabled={busy}>
-                {busy ? tr("保存中…") : tr("保存并编辑流程")}
-              </button>
-            </div>
-          </form>
-        </Dialog>
+        <ChannelCreateDialog
+          key={dialog.id || "new"}
+          host={host}
+          channelId={dialog.id}
+          existing={existing}
+          busy={busy}
+          save={save}
+          openGraph={openGraph}
+          close={() => setDialog(undefined)}
+        />
       )}
     </>
   );

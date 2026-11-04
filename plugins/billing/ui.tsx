@@ -2,6 +2,7 @@ import { t as tr, textValue, getLocale } from "../../lib/ui/i18n.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
+import { updatePluginConfig } from "../../lib/ui/plugin-config.js";
 import { PageHeading, Stat } from "../../lib/ui/components.js";
 import { BillingAdmin } from "./admin-ui.js";
 import { RequestBillingSettings } from "./request-settings-ui.js";
@@ -22,15 +23,10 @@ function Page({ host }: { host: UIHost }) {
   async function enableBilling() {
     setBusy(true);
     try {
-      const config = await host.request<any>("/api/host/config");
-      const plugin = config.plugins.find((p: any) =>
-        /\/(?:official\.)?billing$/.test(p.path.replaceAll("\\", "/")),
-      );
-      plugin.config = { ...plugin.config, enabled: !wallet.data.enabled };
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
-      });
+      await updatePluginConfig(host, "official.billing", (current) => ({
+        ...current,
+        enabled: !wallet.data.enabled,
+      }));
       wallet.reload();
       setMessage(tr("计费状态已更新"));
     } catch (e) {
@@ -41,7 +37,7 @@ function Page({ host }: { host: UIHost }) {
   }
   return (
     <>
-      <PageHeading title={settings ? tr("计费设置") : tr("用量与账单")}>
+      <PageHeading title={settings ? tr("计费设置") : tr("账单明细")}>
         {wallet.data && !wallet.data.enabled && (
           <span className="badge">{tr("余额扣费未启用")}</span>
         )}

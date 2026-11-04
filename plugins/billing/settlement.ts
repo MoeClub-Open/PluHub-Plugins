@@ -98,8 +98,19 @@ export function settleRequest(
 export function recoverRequestSettlements(db: DatabaseSync, post: Post) {
   const rows = db
     .prepare("SELECT * FROM reservations WHERE status IN ('reserved','review')")
-    .all() as (Reservation & { reported_usage?: string; note?: string })[];
+    .all() as (Reservation & {
+    status: string;
+    started?: number;
+    reported_usage?: string;
+    note?: string;
+  })[];
   for (const row of rows) {
+    if (row.status === "reserved" && row.started === 0 && !row.reported_usage) {
+      db.prepare(
+        "UPDATE reservations SET status='released',note='Interrupted before generation' WHERE id=?",
+      ).run(row.id);
+      continue;
+    }
     let usage: Usage | undefined;
     try {
       usage = row.reported_usage ? JSON.parse(row.reported_usage) : undefined;

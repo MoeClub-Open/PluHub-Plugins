@@ -50,7 +50,7 @@ export function createSubscriptionOAuth(
   kind: SubscriptionKind,
   existing: (id: string, owner: string) => SubscriptionToken,
 ) {
-  const callbackPath = `/api/plugins/official.upstream-${kind}/oauth/callback`;
+  const callbackPath = `/api/plugins/official.subscriptions/${kind}/oauth/callback`;
   const flows = new Map<string, Flow>();
   const stop = new AbortController();
   const signal = (flow: Flow) =>

@@ -13,7 +13,7 @@ import {
   pageQuery,
 } from "../../lib/admin/access.js";
 
-export function installAdmin(host: Host, db: DatabaseSync) {
+export function installAdmin(host: Host, db: DatabaseSync, lookup: (input: any) => any) {
   host.api({
     method: "GET",
     path: "/admin/user",
@@ -24,7 +24,7 @@ export function installAdmin(host: Host, db: DatabaseSync) {
         new URL(request.url).searchParams.get("userId"),
         "userId",
       );
-      const user = await host.call<any>("users.lookup@1", { id: userId });
+      const user = lookup({ id: userId });
       if (!user) throw new HostError("not_found", "用户不存在", 404);
       const count = (table: string, clause = "", args: any[] = []) =>
         Number(
@@ -147,7 +147,7 @@ export function installAdmin(host: Host, db: DatabaseSync) {
         undefined,
         typeof body.reason === "string" ? body.reason : undefined,
       );
-      if (!(await host.call("users.lookup@1", { id: userId })))
+      if (!(lookup({ id: userId })))
         throw new HostError("not_found", "用户不存在", 404);
       const removed = db
         .prepare("DELETE FROM sessions WHERE user_id=?")
@@ -170,7 +170,7 @@ export function installAdmin(host: Host, db: DatabaseSync) {
         undefined,
         typeof body.reason === "string" ? body.reason : undefined,
       );
-      const user = await host.call<any>("users.lookup@1", { id: userId });
+      const user = lookup({ id: userId });
       if (!user) throw new HostError("not_found", "用户不存在", 404);
       if (body.confirmUsername !== user.username)
         throw new HostError(

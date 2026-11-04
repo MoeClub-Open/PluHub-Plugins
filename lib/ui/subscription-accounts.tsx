@@ -401,10 +401,19 @@ export function SubscriptionAccounts(props: {
       ? Promise.resolve([props.provider])
       : installedSubscriptionProviders(props.host),
   );
-  const [selected, setSelected] = React.useState<SubscriptionKind | "">(
-    props.provider ?? "",
-  );
-  const provider = selected || available.data?.[0];
+  const [selected, setSelected] = React.useState<SubscriptionKind | "">(() => {
+    if (props.provider) return props.provider;
+    const requested = new URLSearchParams(location.hash.split("?")[1]).get(
+      "provider",
+    );
+    return requested && Object.hasOwn(providers, requested)
+      ? (requested as SubscriptionKind)
+      : "";
+  });
+  const provider =
+    selected && (!available.data || available.data.includes(selected))
+      ? selected
+      : available.data?.[0];
   return (
     <>
       <Notice message={available.error} />

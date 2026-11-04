@@ -5,7 +5,6 @@ import type {
   Upstream,
   PersonalChannel,
 } from "@pluhub/contracts/ai";
-import { routePricing } from "../../lib/commerce/pricing.js";
 import { routeKindForProtocol } from "../../lib/ai/decision-route-kind.js";
 import { modelVisible } from "./model-visibility.js";
 import type { BillingCustomerStatus } from "@pluhub/contracts/commerce";
@@ -22,14 +21,33 @@ export interface CatalogScope {
   routeKind?: "chat" | "systemone" | "luna" | "jev";
 }
 
-function supportsKind(
-  channel: Upstream,
-  kind: NonNullable<CatalogScope["routeKind"]>,
-) {
-  if (!channel.flow) return kind === routeKindForProtocol(channel.protocol);
+function routeReachable(
+  routeId: string,
+  upstreams: Record<string, Upstream>,
+  models: Record<string, ModelRoute>,
+  kind?: CatalogScope["routeKind"],
+  routeSeen = new Set<string>(),
+): boolean {
+  if (routeSeen.has(routeId)) return false;
+  const route = models[routeId];
+  const channel = route && upstreams[route.upstream];
+  if (!route || route.enabled === false || !channel || channel.enabled === false)
+    return false;
+  if (!channel.flow)
+    return !kind || kind === routeKindForProtocol(channel.protocol);
   const flow = channel.flow;
   const nodes = new Map(flow.nodes.map((node) => [node.id, node]));
   const seen = new Set<string>();
+  const nextRoutes = new Set(routeSeen).add(routeId);
+  function targetReachable(target: string): boolean {
+    if (Object.hasOwn(models, target))
+      return routeReachable(target, upstreams, models, kind, nextRoutes);
+    return Object.entries(models).some(
+      ([id, m]) =>
+        (m.publicModel ?? id) === target &&
+        routeReachable(id, upstreams, models, kind, nextRoutes),
+    );
+  }
   function visit(id: string): boolean {
     if (!id || seen.has(id)) return false;
     seen.add(id);
@@ -37,6 +55,7 @@ function supportsKind(
     if (!node) return false;
     if (node.type === "provider") {
       if (
+        !kind ||
         flow.bindings?.some(
           (binding) =>
             binding.target === id && binding.input === "upstream.protocol",
@@ -49,14 +68,19 @@ function supportsKind(
         (!!node.fallback && visit(node.fallback))
       );
     }
-    if (node.type === "response") return kind === "chat";
-    // Delegated targets are resolved and checked after selection.
-    if (
-      node.type === "upstream" ||
-      node.type === "routing" ||
-      node.type === "platform"
-    )
-      return true;
+    if (node.type === "response") return !kind || kind === "chat";
+    if (node.type === "upstream") {
+      if (
+        flow.bindings?.some(
+          (binding) => binding.target === id && binding.input === "target",
+        )
+      )
+        return node.allowedTargets?.length
+          ? node.allowedTargets.some(targetReachable)
+          : true;
+      return targetReachable(node.target);
+    }
+    if (node.type === "routing" || node.type === "platform") return true;
     if (node.type === "branch") return visit(node.yes) || visit(node.no);
     if (node.type === "start") return node.next.some(visit);
     return "next" in node ? visit(node.next) : false;
@@ -73,12 +97,9 @@ function catalog(
   const models = (config.models ?? {}) as Record<string, ModelRoute>;
   return Object.entries(models)
     .filter(
-      ([, m]) =>
+      ([id, m]) =>
         (!channelId || m.upstream === channelId) &&
-        m.enabled !== false &&
-        upstreams[m.upstream] &&
-        upstreams[m.upstream]!.enabled !== false &&
-        (!routeKind || supportsKind(upstreams[m.upstream]!, routeKind)),
+        routeReachable(id, upstreams, models, routeKind),
     )
     .map(([id, m]) => ({
       id: m.publicModel ?? id,
@@ -98,8 +119,6 @@ function catalog(
       inputPrice: m.inputPrice,
       outputPrice: m.outputPrice,
       pricing: m.pricing,
-      consumptionMultiplier: upstreams[m.upstream]?.consumptionMultiplier ?? 1,
-      billing: routePricing(m, upstreams[m.upstream]),
       operations: m.operations,
       features: [
         ...((m.operations ?? ["chat"]).includes("chat")

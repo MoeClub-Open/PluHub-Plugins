@@ -158,11 +158,12 @@ export function installJevIngress(host: Host) {
       const state = observation(ctx)!;
       state.model = input.model;
       state.stream = false;
-      await host.call(
-        "ai.request-limits@1",
-        { action: "preflight", principal: ctx.principal, context: ctx },
-        ctx.signal,
-      );
+      if (host.hasCapability("ai.request-limits@1"))
+        await host.call(
+          "ai.request-limits@1",
+          { action: "preflight", principal: ctx.principal, context: ctx },
+          ctx.signal,
+        );
       const plan = await host.call<AIPlan>(
         "ai.routing@3",
         {
@@ -204,6 +205,12 @@ export function installJevIngress(host: Host) {
       const request = ctx.state.get("ai.request") as AIRequest;
       const state = observation(ctx)!;
       ctx.state.set("ai.executionStarted", true);
+      if (host.hasCapability("billing.admit@1"))
+        await host.call(
+          "billing.admit@1",
+          { action: "start", context: ctx },
+          ctx.signal,
+        );
       for (;;) {
         try {
           const result = await host.call<JevResult>(

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AIRequest } from "@pluhub/contracts/ai";
-import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
+import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
 import { compileWorkflow, runWorkflow } from "../lib/ai/channel-graph.js";
-import { type LegacyWorkflowCondition, type LegacyChannelWorkflow, migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
 
 const signal = new AbortController().signal;
 const request: AIRequest = {
@@ -11,18 +10,6 @@ const request: AIRequest = {
   tools: [],
   stream: false,
 };
-
-function legacyFlow(condition: LegacyWorkflowCondition): LegacyChannelWorkflow {
-  return {
-    entry: "start",
-    nodes: [
-      { id: "start", type: "start", next: condition.id },
-      condition,
-      { id: "yes", type: "provider" },
-      { id: "no", type: "provider" },
-    ],
-  };
-}
 
 describe("workflow conditions", () => {
   it("requires a separate boolean input for a branch", () => {
@@ -41,68 +28,40 @@ describe("workflow conditions", () => {
     expect(runWorkflow("channel", flow, request, signal).providerId).toBe("yes");
   });
 
-  it.each([
-    [{ test: "hasTools" }, { ...request, webSearch: { type: "web_search", options: {} } }, {}],
-    [{ test: "stream" }, { ...request, stream: true }, {}],
-    [{ test: "textLengthAbove", value: 4 }, request, {}],
-    [{ test: "protocol", protocol: "anthropic" }, request, { ingressProtocol: "anthropic" }],
-    [{ test: "model", models: ["provider-*"], modelSource: "mapped" }, request, { mappedModel: "provider-v1" }],
-  ] as const)("preserves an existing %s condition after splitting it", (settings, input, context) => {
-    const flow = legacyFlow({ id: "choose", type: "condition", ...settings, yes: "yes", no: "no" });
-    const migrated = migrateWorkflowConditions(flow);
-    expect(migrated.nodes.find((node) => node.id === "choose")).toEqual({
-      id: "choose", type: "branch", condition: false, yes: "yes", no: "no",
-    });
-    expect(migrated.nodes.find((node) => node.id === "choose-compare")?.type).toBe("compare");
-    expect(migrated.bindings).toContainEqual({
-      source: "choose-compare", output: "result", target: "choose", input: "condition",
-    });
-    expect(migrateWorkflowConditions(migrated)).toBe(migrated);
-    expect(runWorkflow("channel", migrated, input as AIRequest, signal, context).providerId).toBe("yes");
-  });
+  it("evaluates start outputs for tools, stream, text length, protocol and mapped model", () => {
+    const lengthFlow: ChannelWorkflow = {
+      entry: "start",
+      nodes: [
+        { id: "start", type: "start", next: ["prompt"] },
+        { id: "prompt", type: "prompt", text: "system prompt", next: "choose" },
+        { id: "choose", type: "branch", condition: false, yes: "yes", no: "no" },
+        { id: "cmp", type: "compare", valueType: "number", operator: "gt", left: 0, right: 10 },
+        { id: "yes", type: "provider" },
+        { id: "no", type: "provider" },
+      ],
+      bindings: [
+        { source: "start", output: "textLength", target: "cmp", input: "left" },
+        { source: "cmp", output: "result", target: "choose", input: "condition" },
+      ],
+    };
+    expect(runWorkflow("channel", lengthFlow, request, signal).providerId).toBe("yes");
 
-  it.each([
-    [{ test: "hasTools" }, {}],
-    [{ test: "stream" }, {}],
-    [{ test: "textLengthAbove", value: 5 }, {}],
-    [{ test: "protocol", protocol: "anthropic" }, { ingressProtocol: "openai-chat" }],
-    [{ test: "model", models: ["provider-*"], modelSource: "mapped" }, { mappedModel: "other" }],
-  ] as const)("preserves the false branch of a migrated %s condition", (settings, context) => {
-    const flow = legacyFlow({ id: "choose", type: "condition", ...settings, yes: "yes", no: "no" });
-    expect(runWorkflow("channel", migrateWorkflowConditions(flow), request, signal, context).providerId).toBe("no");
-  });
-
-  it("migrates linked parameters and layout without changing the original or colliding IDs", () => {
-    const flow = legacyFlow({ id: "choose", type: "condition", test: "textLengthAbove", value: 0, yes: "yes", no: "no" });
-    flow.nodes.push(
-      { id: "limit", type: "value", valueType: "integer", value: 10 },
-      { id: "choose-compare", type: "value", valueType: "boolean", value: true },
-    );
-    flow.bindings = [{ source: "limit", output: "value", target: "choose", input: "value" }];
-    flow.layout = { choose: { x: 500, y: 100 } };
-    const migrated = migrateWorkflowConditions(flow);
-    expect(migrated.bindings).toContainEqual({
-      source: "limit", output: "value", target: "choose-compare-1", input: "right",
-    });
-    expect(migrated.layout?.["choose-compare-1"]).toEqual({ x: 130, y: 100 });
-    expect(flow.bindings[0]?.target).toBe("choose");
-    expect(runWorkflow("channel", migrated, request, signal).providerId).toBe("no");
-    expect(runWorkflow("channel", migrated, { ...request, messages: [{ role: "user", text: "longer than ten" }] }, signal).providerId).toBe("yes");
-  });
-
-  it("retains a linked condition type and model patterns when migrating", () => {
-    const flow = legacyFlow({ id: "choose", type: "condition", test: "stream", models: ["unused"], yes: "yes", no: "no" });
-    flow.nodes.push(
-      { id: "kind", type: "value", valueType: "string", value: "model" },
-      { id: "patterns", type: "value", valueType: "string[]", value: ["claude-*"] },
-    );
-    flow.bindings = [
-      { source: "kind", output: "value", target: "choose", input: "test" },
-      { source: "patterns", output: "value", target: "choose", input: "models" },
-    ];
-    const migrated = migrateWorkflowConditions(flow);
-    expect(runWorkflow("channel", migrated, request, signal).providerId).toBe("yes");
-    expect(runWorkflow("channel", migrated, { ...request, model: "other" }, signal).providerId).toBe("no");
+    const mappedFlow: ChannelWorkflow = {
+      entry: "start",
+      nodes: [
+        { id: "start", type: "start", next: ["choose"] },
+        { id: "choose", type: "branch", condition: false, yes: "yes", no: "no" },
+        { id: "cmp", type: "compare", valueType: "string", operator: "matches", left: "", right: ["provider-*"] },
+        { id: "yes", type: "provider" },
+        { id: "no", type: "provider" },
+      ],
+      bindings: [
+        { source: "start", output: "mappedModel", target: "cmp", input: "left" },
+        { source: "cmp", output: "result", target: "choose", input: "condition" },
+      ],
+    };
+    expect(runWorkflow("channel", mappedFlow, request, signal, { mappedModel: "provider-v1" }).providerId).toBe("yes");
+    expect(runWorkflow("channel", mappedFlow, request, signal, { mappedModel: "other" }).providerId).toBe("no");
   });
 
   it("composes typed comparison and boolean logic separately from branching", () => {
@@ -128,25 +87,24 @@ describe("workflow conditions", () => {
     expect(runWorkflow("channel", flow, { ...request, model: "other", stream: true }, signal).providerId).toBe("no");
   });
 
-  it("evaluates legacy request conditions after preceding request transformations", () => {
-    const flow = legacyFlow({ id: "choose", type: "condition", test: "textLengthAbove", value: 10, yes: "yes", no: "no" });
-    flow.nodes[0] = { id: "start", type: "start", next: "prompt" };
-    flow.nodes.push({ id: "prompt", type: "prompt", text: "system prompt", next: "choose" });
-    expect(runWorkflow("channel", migrateWorkflowConditions(flow), request, signal).providerId).toBe("yes");
-  });
-
   it("does not evaluate an unreachable conditional branch", () => {
-    const flow: LegacyChannelWorkflow = {
+    const flow: ChannelWorkflow = {
       entry: "start",
       nodes: [
-        { id: "start", type: "start", next: "first" },
-        { id: "first", type: "condition", test: "stream", yes: "yes", no: "second" },
-        { id: "second", type: "condition", test: "protocol", protocol: "anthropic", yes: "yes", no: "no" },
+        { id: "start", type: "start", next: ["first"] },
+        { id: "first", type: "branch", condition: false, yes: "yes", no: "second" },
+        { id: "second", type: "branch", condition: false, yes: "yes", no: "no" },
+        { id: "proto", type: "compare", valueType: "string", operator: "eq", left: "", right: "anthropic" },
         { id: "yes", type: "provider" },
         { id: "no", type: "provider" },
       ],
+      bindings: [
+        { source: "start", output: "stream", target: "first", input: "condition" },
+        { source: "start", output: "ingressProtocol", target: "proto", input: "left" },
+        { source: "proto", output: "result", target: "second", input: "condition" },
+      ],
     };
-    expect(runWorkflow("channel", migrateWorkflowConditions(flow), { ...request, stream: true }, signal).providerId).toBe("yes");
+    expect(runWorkflow("channel", flow, { ...request, stream: true }, signal).providerId).toBe("yes");
   });
 
   it("restricts dynamic redirect targets to the configured allowed models", () => {

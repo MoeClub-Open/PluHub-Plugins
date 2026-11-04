@@ -88,11 +88,12 @@ export function installWorkflowExecution(host: Host) {
         throw new HostError("invalid_workflow", "缺少已授权的流程计划", 400);
       ctx.state.delete("workflow.ready");
       const reserved = new Set<string>();
-      await host.call(
-        "ai.request-limits@1",
-        { action: "workflow", context: ctx, policies: [] },
-        signal,
-      );
+      if (host.hasCapability("ai.request-limits@1"))
+        await host.call(
+          "ai.request-limits@1",
+          { action: "workflow", context: ctx, policies: [] },
+          signal,
+        );
       const child = (
         path: string,
         body: unknown,
@@ -133,7 +134,11 @@ export function installWorkflowExecution(host: Host) {
                     ? "/v1/responses"
                     : targetProtocol === "anthropic"
                       ? "/v1/messages"
-                      : "/v1/chat/completions";
+                      : targetProtocol === "gemini"
+                        ? "/v1beta/models/" +
+                          encodeURIComponent(node.model) +
+                          ":generateContent"
+                        : "/v1/chat/completions";
                 const task = llmTask(node, source);
                 const body = await childJson(
                   await child(
@@ -150,14 +155,18 @@ export function installWorkflowExecution(host: Host) {
                 if (
                   result.calls.length ||
                   result.refusal ||
-                  result.reason !== "stop"
+                  (result.reason !== "stop" &&
+                    !(result.reason === "length" && result.text))
                 )
                   throw new HostError(
                     "workflow_node_incomplete",
                     "流程模型未返回完整文本",
                     502,
                   );
-                const usage = decodeUsage(targetProtocol, body.usage);
+                const usage = decodeUsage(
+                  targetProtocol,
+                  targetProtocol === "gemini" ? body.usageMetadata : body.usage,
+                );
                 return { text: result.text, ...(usage ? { usage } : {}) };
               },
               callJev: async (rawNode) => {
@@ -212,11 +221,12 @@ export function installWorkflowExecution(host: Host) {
               activeSignal,
               context,
               async (policy) => {
-                await host.call(
-                  "ai.request-limits@1",
-                  { action: "workflow", context: ctx, policies: [policy] },
-                  activeSignal,
-                );
+                if (host.hasCapability("ai.request-limits@1"))
+                  await host.call(
+                    "ai.request-limits@1",
+                    { action: "workflow", context: ctx, policies: [policy] },
+                    activeSignal,
+                  );
                 reserved.add(JSON.stringify([policy.channel, policy.node]));
               },
             );
@@ -238,7 +248,7 @@ export function installWorkflowExecution(host: Host) {
             (policy) =>
               !reserved.has(JSON.stringify([policy.channel, policy.node])),
           ) ?? [];
-        if (remaining.length)
+        if (remaining.length && host.hasCapability("ai.request-limits@1"))
           await host.call(
             "ai.request-limits@1",
             { action: "workflow", context: ctx, policies: remaining },

@@ -116,7 +116,7 @@ function harness(
   };
 }
 
-it("ranks routing candidates using request prices, channel multipliers and context tiers", async () => {
+it("ranks routing candidates using request prices, token rates and context tiers", async () => {
   for (const [prices, expected] of [
     [
       {
@@ -127,7 +127,7 @@ it("ranks routing candidates using request prices, channel multipliers and conte
     ],
     [
       {
-        fast: { input: 100, output: 100, multiplier: 0.001 },
+        fast: { input: 0.1, output: 0.1 },
         strong: { input: 1, output: 1 },
       },
       "fast",

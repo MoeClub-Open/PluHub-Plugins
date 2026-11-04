@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "id": "official.subscriptions",
+  "category": "upstream",
+  "name": "订阅账号接入",
+  "description": "管理 Codex、Claude、Antigravity 与 Grok 授权、订阅账号池与上游调用。",
+  "codeReload": "restart",
+  "version": "0.1.0-alpha.2",
+  "host": ">=0.1.0-alpha.17 <0.2.0-0",
+  "runtime": {
+    "kind": "native",
+    "entry": "dist/index.js"
+  },
+  "provides": [
+    "ai.upstream.codex@1",
+    "ai.subscription.codex@1",
+    "ai.media.codex@1",
+    "ai.upstream.claude-subscription@1",
+    "ai.subscription.claude-subscription@1",
+    "ai.upstream.antigravity@1",
+    "ai.subscription.antigravity@1",
+    "ai.upstream.grok@1",
+    "ai.subscription.grok@1"
+  ],
+  "requires": [
+    "http.transport@1"
+  ],
+  "optionalRequires": [
+    "credentials.resolve@1"
+  ],
+  "permissions": [
+    "secrets.read",
+    "api.register"
+  ],
+  "configReload": "snapshot",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "masterKeyRef": {
+        "type": "string",
+        "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
+      },
+      "secretRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
+        },
+        "uniqueItems": true
+      },
+      "oauth": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "codex": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
+              }
+            }
+          },
+          "claude-subscription": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
+              }
+            }
+          },
+          "antigravity": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
+              }
+            }
+          },
+          "grok": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authorizeUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "tokenUrl": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "redirectUri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "clientSecretRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^(?:env:[A-Z][A-Z0-9_]*|secret:[A-Za-z0-9][A-Za-z0-9_.-]*)$"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "title": "订阅账号",
+    "entry": "dist/ui.js",
+    "path": "/settings/subscriptions",
+    "public": false,
+    "group": "routing",
+    "order": 25
+  }
+}

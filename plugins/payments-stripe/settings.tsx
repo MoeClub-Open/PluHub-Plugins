@@ -3,29 +3,20 @@ import { t as tr } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
+import { mountPage, Notice } from "../../lib/ui/mount.js";
+import { usePluginConfig } from "../../lib/ui/plugin-config.js";
 import { PageHeading } from "../../lib/ui/components.js";
 export function paymentSettings() {
   function Page({ host }: { host: UIHost }) {
-    const data = useLoad<any>(() => host.request("/api/host/config"));
+    const data = usePluginConfig(host, "official.payments-stripe");
     const [busy, setBusy] = React.useState(false);
     const [message, setMessage] = React.useState("");
-    const find = (c: any) =>
-      c.plugins.find((p: any) =>
-        new RegExp("/(?:official\\.)?payments-stripe$").test(
-          p.path.replaceAll("\\", "/"),
-        ),
-      );
-    const settings = data.data ? (find(data.data)?.config ?? {}) : {};
+    const settings = data.data ?? {};
     async function save(e: React.FormEvent<HTMLFormElement>) {
       e.preventDefault();
       setBusy(true);
       const f = new FormData(e.currentTarget);
       try {
-        const config = await host.request<any>("/api/host/config");
-        const p = find(config);
-        if (!p) throw new Error(tr("支付插件未安装"));
-        const next: any = { enabled: f.get("enabled") === "on" };
         const fields = [
           "keyRef",
           "webhookSecretRef",
@@ -34,41 +25,40 @@ export function paymentSettings() {
         const entered: Record<string, string> = {};
         for (const k of fields) {
           const value = String(f.get(k) ?? "").trim();
-          if (value.startsWith("secret:")) next[k] = value;
-          else if (value) entered[k] = value;
-          else if (settings[k]) next[k] = settings[k];
+          if (value && !value.startsWith("secret:")) entered[k] = value;
         }
-        if (Object.keys(entered).length)
-          Object.assign(
-            next,
-            await host.request(
+        const storedSecrets = Object.keys(entered).length
+          ? await host.request<Record<string, string>>(
               "/api/plugins/official.payments-stripe/secrets",
               { method: "POST", body: JSON.stringify(entered) },
+            )
+          : {};
+        await data.save((current) => {
+          const next: any = { enabled: f.get("enabled") === "on" };
+          for (const k of fields) {
+            const value = String(f.get(k) ?? "").trim();
+            if (value.startsWith("secret:")) next[k] = value;
+            else if (storedSecrets[k]) next[k] = storedSecrets[k];
+            else if (current?.[k]) next[k] = current[k];
+          }
+          if (f.get("clearPrevious") === "on")
+            delete next.previousWebhookSecretRef;
+          next.portalEnabled = f.get("portalEnabled") === "on";
+          if (f.get("portalConfiguration"))
+            next.portalConfiguration = String(
+              f.get("portalConfiguration"),
+            ).trim();
+          next.livemode = f.get("livemode") === "true";
+          next.secretRefs = [
+            ...new Set(
+              fields
+                .map((k) => next[k])
+                .filter((value) => value?.startsWith("secret:")),
             ),
-          );
-        if (f.get("clearPrevious") === "on")
-          delete next.previousWebhookSecretRef;
-        next.portalEnabled = f.get("portalEnabled") === "on";
-        if (f.get("portalConfiguration"))
-          next.portalConfiguration = String(
-            f.get("portalConfiguration"),
-          ).trim();
-        next.livemode = f.get("livemode") === "true";
-        next.secretRefs = [
-          ...new Set(
-            fields
-              .filter((k) => k.endsWith("Ref"))
-              .map((k) => next[k])
-              .filter((value) => value?.startsWith("secret:")),
-          ),
-        ];
-        p.config = next;
-        await host.request("/api/host/config", {
-          method: "PUT",
-          body: JSON.stringify(config),
+          ];
+          return next;
         });
         setMessage(tr("已保存"));
-        data.reload();
       } catch (e) {
         setMessage((e as Error).message);
       } finally {

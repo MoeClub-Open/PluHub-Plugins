@@ -108,16 +108,17 @@ export function installDecisionIngress(host: Host) {
           source: config.kind,
           truncated: true,
         };
-      await host.call(
-        "ai.request-limits@1",
-        {
-          action: "early-admit",
-          context: ctx,
-          policies: scope.requestLimits,
-          channelId: scope.channelId,
-        },
-        signal,
-      );
+      if (host.hasCapability("ai.request-limits@1"))
+        await host.call(
+          "ai.request-limits@1",
+          {
+            action: "early-admit",
+            context: ctx,
+            policies: scope.requestLimits,
+            channelId: scope.channelId,
+          },
+          signal,
+        );
       const headers = new Headers({ "content-type": "application/json" });
       if (config.channelId) headers.set("x-pluhub-channel", config.channelId);
       const response = await host.dispatchChild(
@@ -201,11 +202,12 @@ export function installDecisionIngress(host: Host) {
       state.model = model;
       state.protocol = raw.kind;
       state.stream = false;
-      await host.call(
-        "ai.request-limits@1",
-        { action: "preflight", principal: ctx.principal, context: ctx },
-        ctx.signal,
-      );
+      if (host.hasCapability("ai.request-limits@1"))
+        await host.call(
+          "ai.request-limits@1",
+          { action: "preflight", principal: ctx.principal, context: ctx },
+          ctx.signal,
+        );
       const plan = await host.call<AIPlan>(
         "ai.routing@3",
         {
@@ -252,6 +254,12 @@ export function installDecisionIngress(host: Host) {
       const plan = ctx.state.get("ai.plan") as AIPlan;
       const state = observation(ctx)!;
       ctx.state.set("ai.executionStarted", true);
+      if (host.hasCapability("billing.admit@1"))
+        await host.call(
+          "billing.admit@1",
+          { action: "start", context: ctx },
+          ctx.signal,
+        );
       for (;;) {
         try {
           let result: DecisionResult;

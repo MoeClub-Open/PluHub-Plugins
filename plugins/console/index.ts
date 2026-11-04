@@ -1,7 +1,19 @@
 import { definePlugin, HostError } from "@pluhub/sdk";
+import manifest from "./manifest.json" with { type: "json" };
 import { readBranding, escapeHtml } from "./branding.js";
 import { readPortal, publicPortal, localizePortal } from "./portal.js";
 import { requestLocale } from "../../lib/ui/locale.js";
+const assetVersion = encodeURIComponent(manifest.version);
+const importMap = JSON.stringify({
+  imports: {
+    react: `/extensions/official.console/vendor-react.js?v=${assetVersion}`,
+    "react/jsx-runtime": `/extensions/official.console/vendor-jsx-runtime.js?v=${assetVersion}`,
+    "react/jsx-dev-runtime": `/extensions/official.console/vendor-jsx-runtime.js?v=${assetVersion}`,
+    "react-dom": `/extensions/official.console/vendor-react-dom.js?v=${assetVersion}`,
+    "react-dom/client": `/extensions/official.console/vendor-react-dom-client.js?v=${assetVersion}`,
+    "@pluhub/ui-sdk": `/extensions/official.console/vendor-ui-sdk.js?v=${assetVersion}`,
+  },
+});
 const google =
   "https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/";
 const geetest =
@@ -96,9 +108,15 @@ export default definePlugin({
                   ) +
                   '"><link rel="icon" href="' +
                   escapeHtml(brand.faviconUrl || "/favicon.ico") +
-                  '"><link rel="stylesheet" href="/extensions/official.console/ui.css"><script id="pluhub-branding" type="application/json">' +
+                  '"><link rel="stylesheet" href="/extensions/official.console/ui.css?v=' +
+                  assetVersion +
+                  '"><script type="importmap">' +
+                  importMap +
+                  '</script><script id="pluhub-branding" type="application/json">' +
                   bootstrap +
-                  '</script><div id="root"></div><script type="module">import { mount } from "/extensions/official.console/ui.js"; mount(document.getElementById("root"));</script></html>',
+                  '</script><div id="root"></div><script type="module">import { mount } from "/extensions/official.console/ui.js?v=' +
+                  assetVersion +
+                  '"; mount(document.getElementById("root"));</script></html>',
             {
               headers: {
                 "content-type": "text/html; charset=utf-8",

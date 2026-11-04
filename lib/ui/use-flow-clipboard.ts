@@ -1,7 +1,6 @@
 import React from "react";
 import type { Node, ReactFlowInstance } from "@xyflow/react";
 import type { ChannelWorkflow } from "@pluhub/contracts/workflow";
-import { migrateWorkflowConditions } from "@pluhub/contracts/workflow-migration";
 import {
   copyFlowSelection,
   pasteFlowSelection,
@@ -73,7 +72,7 @@ export function useFlowClipboard<N extends Node>({
     const next = pasteFlowSelection(currentFlow(), selection, position);
     if (!next) return;
     pendingSelection.current = next.ids;
-    update(migrateWorkflowConditions(next.flow));
+    update(next.flow);
     select(next.ids.at(-1)!);
   }
   function duplicate(ids = selectedIds()) {

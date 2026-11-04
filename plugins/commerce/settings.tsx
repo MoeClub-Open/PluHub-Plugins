@@ -2,7 +2,8 @@ import { t as tr, getLocale, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import { useLoad, Notice } from "../../lib/ui/mount.js";
+import { Notice } from "../../lib/ui/mount.js";
+import { usePluginConfig } from "../../lib/ui/plugin-config.js";
 import { Dialog, PageHeading } from "../../lib/ui/components.js";
 import { usdToMicros } from "../../lib/commerce/decimal.js";
 import { nextNumericId } from "../../lib/numeric-id.js";
@@ -24,16 +25,12 @@ export function ProductSettings({
   host: UIHost;
   onSave: () => void;
 }) {
-  const data = useLoad<any>(() => host.request("/api/host/config"));
+  const data = usePluginConfig(host, "official.commerce");
   const [editing, setEditing] = React.useState<Partial<Product>>();
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [removing, setRemoving] = React.useState<Product>();
-  const find = (c: any) =>
-    c.plugins.find((p: any) =>
-      /\/(?:official\.)?commerce$/.test(p.path.replaceAll("\\", "/")),
-    );
-  const settings = data.data ? (find(data.data)?.config ?? {}) : {};
+  const settings = data.data ?? {};
   const products: Product[] = settings.products ?? [];
   const price = (product: Product) =>
     new Intl.NumberFormat(getLocale(), {
@@ -45,47 +42,47 @@ export function ProductSettings({
     setBusy(true);
     const f = new FormData(e.currentTarget);
     try {
-      const config = await host.request<any>("/api/host/config");
-      const plugin = find(config);
       const paymentMicros = usdToMicros(String(f.get("payment")));
       if (paymentMicros < 10000 || paymentMicros % 10000)
         throw new Error(tr("支付金额必须为正数且最多两位小数"));
-      const productId =
-        editing?.id ??
-        nextNumericId(
-          (plugin.config.products ?? []).map((product: any) => product.id),
-          plugin.config.nextProductId,
-        );
       const mode = String(f.get("mode")) as Product["mode"];
-      const product = {
-        id: productId,
-        name: String(f.get("name")),
-        mode,
-        interval:
-          mode === "subscription" ? String(f.get("interval")) : "month",
-        currency: String(f.get("currency")),
-        paymentMinor: paymentMicros / 10000,
-        creditMicros: usdToMicros(String(f.get("credit"))),
-      };
-      const next = [...(plugin.config.products ?? [])];
-      const i = next.findIndex((p: any) => p.id === product.id);
-      if (i >= 0) next[i] = product;
-      else next.push(product);
-      plugin.config = {
-        ...plugin.config,
-        publicUrl: String(f.get("publicUrl")),
-        ...(!editing?.id && {
-          nextProductId: String(BigInt(productId) + 1n),
-        }),
-        products: next,
-      };
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
+      const creditMicros = usdToMicros(String(f.get("credit")));
+      const name = String(f.get("name"));
+      const interval =
+        mode === "subscription" ? String(f.get("interval")) : "month";
+      const currency = String(f.get("currency"));
+      const publicUrl = String(f.get("publicUrl"));
+      await data.save((current) => {
+        const productId =
+          editing?.id ??
+          nextNumericId(
+            (current?.products ?? []).map((product: any) => product.id),
+            current?.nextProductId,
+          );
+        const product = {
+          id: productId,
+          name,
+          mode,
+          interval,
+          currency,
+          paymentMinor: paymentMicros / 10000,
+          creditMicros,
+        };
+        const next = [...(current?.products ?? [])];
+        const i = next.findIndex((p: any) => p.id === product.id);
+        if (i >= 0) next[i] = product;
+        else next.push(product);
+        return {
+          ...current,
+          publicUrl,
+          ...(!editing?.id && {
+            nextProductId: String(BigInt(productId) + 1n),
+          }),
+          products: next,
+        };
       });
       setMessage(tr("已保存"));
       setEditing(undefined);
-      data.reload();
       onSave();
     } catch (e) {
       setMessage((e as Error).message);
@@ -96,18 +93,14 @@ export function ProductSettings({
   async function remove() {
     setBusy(true);
     try {
-      const config = await host.request<any>("/api/host/config");
-      const plugin = find(config);
-      plugin.config.products = plugin.config.products.filter(
-        (p: Product) => p.id !== removing?.id,
-      );
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
-      });
+      await data.save((current) => ({
+        ...current,
+        products: (current?.products ?? []).filter(
+          (p: Product) => p.id !== removing?.id,
+        ),
+      }));
       setRemoving(undefined);
       setMessage(tr("已保存"));
-      data.reload();
       onSave();
     } catch (e) {
       setMessage((e as Error).message);

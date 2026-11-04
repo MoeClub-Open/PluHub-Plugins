@@ -37,16 +37,31 @@ import {
   channelConnections,
   providerModel as resolveProviderModel,
 } from "../../lib/ai/channel-config.js";
-import { readNodeModels } from "./provider-models.js";
+import { readNodeModels, providerModelDirectory } from "./provider-models.js";
 import { keyReferences } from "../../lib/ai/upstream-key.js";
 import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 import { subscriptionDefaults } from "../../lib/ai/subscription-auth.js";
+import { installIngress } from "../../lib/ai/ingress.js";
+import { installUpstream } from "../../lib/ai/upstream.js";
+import { installMediaIngress } from "./media-ingress.js";
+import { installMediaUpstream } from "./media-upstream.js";
 import { installWorkflowProvider } from "./workflow-provider.js";
 import { installJevIngress } from "./jev-ingress.js";
 import { installDecisionIngress } from "./decision-ingress.js";
 import { installWorkflowExecution } from "./workflow-execution.js";
 export default definePlugin({
   setup(host) {
+    for (const protocol of [
+      "openai-chat",
+      "openai-responses",
+      "anthropic",
+      "gemini",
+    ] as const) {
+      installIngress(host, protocol);
+      installUpstream(host, protocol);
+    }
+    installMediaIngress(host);
+    installMediaUpstream(host);
     installConfiguration(host);
     installWorkflowProvider(host);
     installJevIngress(host);
@@ -65,7 +80,6 @@ export default definePlugin({
           protocol: channelConnections(u)[0]?.protocol,
           acceptsCredentials: channelConnections(u).length > 0,
           scope: "platform",
-          consumptionMultiplier: u.consumptionMultiplier ?? 1,
         }));
       const personal =
         input?.userId && host.hasCapability("ai.user-channels@1")
@@ -81,7 +95,6 @@ export default definePlugin({
                 c.upstream.protocol,
               acceptsCredentials: false,
               scope: "personal",
-              consumptionMultiplier: c.upstream.consumptionMultiplier ?? 1,
             }))
           : [];
       return [...platform, ...personal];
@@ -118,7 +131,6 @@ export default definePlugin({
             physicalOnly: true,
             protocolPolicy: input.protocolPolicy,
             allowedChannelIds: input.allowedChannelIds,
-            consumptionMultiplier: input.consumptionMultiplier,
           },
         );
         if (target.plan.kind !== "provider")
@@ -505,6 +517,33 @@ export default definePlugin({
       access: "host.manage",
       handle: async (request, ctx) => {
         const body = await readObject(request);
+        if (body.connection && typeof body.connection === "object") {
+          const conn = body.connection as Record<string, unknown>;
+          return json({
+            nodeId: "provider",
+            ...(await providerModelDirectory(
+              host,
+              {
+                protocol: requiredString(conn.protocol, "protocol") as any,
+                baseUrl:
+                  typeof conn.baseUrl === "string" ? conn.baseUrl : undefined,
+                subscriptionAccountIds: Array.isArray(
+                  conn.subscriptionAccountIds,
+                )
+                  ? conn.subscriptionAccountIds.map(String)
+                  : undefined,
+                authMode:
+                  conn.authMode === "cli" || conn.authMode === "siwc"
+                    ? conn.authMode
+                    : undefined,
+              },
+              ctx.signal,
+              typeof body.secret === "string" && body.secret.trim()
+                ? body.secret.trim()
+                : undefined,
+            )),
+          });
+        }
         return json(
           await readNodeModels(
             host,

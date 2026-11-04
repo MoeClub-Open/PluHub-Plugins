@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.61",
+  "version": "0.1.0-alpha.62",
   "host": ">=0.1.0-alpha.17 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -17,6 +17,21 @@
     "ai.catalog@3",
     "ai.channels@1",
     "ai.targets@1",
+    "ai.ingress.openai-chat@1",
+    "ai.ingress.openai-responses@1",
+    "ai.ingress.anthropic@1",
+    "ai.ingress.gemini@1",
+    "ai.ingress.openai-media@1",
+    "ai.upstream.openai-chat@1",
+    "ai.upstream.openai-responses@1",
+    "ai.upstream.anthropic@1",
+    "ai.upstream.gemini@1",
+    "ai.upstream-models.openai-chat@1",
+    "ai.upstream-models.openai-responses@1",
+    "ai.upstream-models.anthropic@1",
+    "ai.upstream-models.gemini@1",
+    "ai.media.openai-chat@1",
+    "ai.media.openai-responses@1",
     "ai.upstream.systemone@1",
     "ai.upstream.luna@1",
     "ai.upstream.jev@1",
@@ -267,7 +282,8 @@
                             "enum": [
                               "openai-chat",
                               "openai-responses",
-                              "anthropic"
+                              "anthropic",
+                              "gemini"
                             ]
                           },
                           "messages": {
@@ -909,11 +925,6 @@
                 }
               }
             },
-            "consumptionMultiplier": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1000
-            },
             "subscriptionAccountIds": {
               "type": "array",
               "minItems": 1,
@@ -1293,10 +1304,6 @@
   },
   "optionalRequires": [
     "http.transport@1",
-    "ai.upstream.openai-chat@1",
-    "ai.upstream.openai-responses@1",
-    "ai.upstream.anthropic@1",
-    "ai.upstream.gemini@1",
     "credentials.resolve@1",
     "auth.admit@1",
     "ai.decision-profile@1",
@@ -1314,12 +1321,6 @@
     "ai.subscription.antigravity@1",
     "ai.request-limits@1",
     "ai.output-pace@2",
-    "ai.upstream-models.openai-chat@1",
-    "ai.upstream-models.openai-responses@1",
-    "ai.upstream-models.anthropic@1",
-    "ai.upstream-models.gemini@1",
-    "ai.media.openai-chat@1",
-    "ai.media.openai-responses@1",
     "ai.upstream.grok@1",
     "ai.subscription.grok@1",
     "auth.admin@1",

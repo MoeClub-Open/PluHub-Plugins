@@ -9,7 +9,6 @@ import {
 } from "@pluhub/ui-sdk";
 import { useTheme } from "./theme.js";
 import { useLocale } from "../../lib/ui/language.js";
-import { LanguageMenu } from "./language-menu.js";
 import {
   internationalization,
   initializeLanguage,
@@ -22,10 +21,7 @@ import {
 } from "../../lib/ui/i18n.js";
 import { usePageTransition } from "./page-transition.js";
 import { AccountMenu } from "./account-menu.js";
-import { PluginActions } from "./plugin-actions.js";
-import { RegistryBrowser, PluginUpdates } from "./registry-ui.js";
 import { Dashboard } from "./dashboard.js";
-import { Login } from "./login.js";
 import {
   navigation,
   paymentMethodsPath,
@@ -39,28 +35,24 @@ import { SystemStatus } from "./system-status.js";
 import { AuditPage } from "./audit-ui.js";
 import { RuntimeLogs } from "./logs-ui.js";
 import { PaymentMethods } from "./payment-methods.js";
-import { SettingsHome, SettingsNavigation } from "./settings.js";
+import { SettingsNavigation } from "./settings.js";
 import { SettingsExtension } from "../../lib/ui/settings-extension.js";
 import { BrandMark, BrandingSettings, useBranding } from "./branding-ui.js";
 import { CommandSearch } from "./command-search.js";
 import { IdentityConfirmation } from "./identity-confirmation.js";
-import { Select } from "../../lib/ui/select.js";
-import {
-  filterPlugins,
-  pluginCategory,
-  pluginCategoryTitle,
-  pluginCategoryOptions,
-  pluginStates,
-} from "./plugin-list.js";
 import { Portal } from "./portal-ui.js";
 import { PortalSettings } from "./portal-settings.js";
-import { GatewayVisual } from "./gateway-visual.js";
 import { ThemeButton } from "./theme-button.js";
-import { defaultPortal, localizePortal, type PortalContent } from "./portal.js";
+import { defaultPortal, type PortalContent } from "./portal.js";
 import { Onboarding } from "./onboarding-ui.js";
 import { setupRedirect, type SetupState } from "./onboarding.js";
 import { Icon, PageHeading, Empty } from "../../lib/ui/components.js";
-import "./ui.css";
+import { AuthShell, BrandLinks, PublicExtension } from "./auth-shell.js";
+import { PluginsPage } from "./plugins-page.js";
+import "./tokens.css";
+import "./layout.css";
+import "./tables.css";
+import "./components.css";
 import "./management.css";
 import "./settings.css";
 import "./appearance.css";
@@ -75,58 +67,9 @@ import "./keys.css";
 import "./motion.css";
 import { en } from "../../lib/ui/locales/en.js";
 import { configureMessages } from "../../lib/ui/i18n.js";
+
 const auth = "/api/plugins/official.auth";
-function PublicExtension({
-  extension,
-  client,
-  containerRef,
-}: {
-  extension: Extension;
-  client: UIHost;
-  containerRef?: React.RefObject<HTMLDivElement | null>;
-}) {
-  const localTarget = React.useRef<HTMLDivElement>(null);
-  const target = containerRef ?? localTarget;
-  const [error, setError] = React.useState("");
-  React.useEffect(() => {
-    let canceled = false;
-    let dispose: (() => void) | undefined;
-    setError("");
-    if (target.current) {
-      const element = target.current;
-      void import(extension.url)
-        .then((mod: UIExtensionModule) => {
-          if (!canceled)
-            dispose = mod.mount(element, {
-              ...client,
-              page: extension.path,
-              authenticated: false,
-            });
-        })
-        .catch(() => {
-          if (!canceled) setError(tr("模型目录暂时无法加载，请重试。"));
-        });
-    }
-    return () => {
-      canceled = true;
-      dispose?.();
-    };
-  }, [extension.url, client]);
-  return (
-    <section className="portal-catalog">
-      {error ? (
-        <div role="alert">
-          {error}
-          <button className="secondary" onClick={() => client.refresh()}>
-            {tr("重试")}
-          </button>
-        </div>
-      ) : (
-        <div ref={target} />
-      )}
-    </section>
-  );
-}
+
 function Slot({
   name,
   client,
@@ -154,6 +97,7 @@ function Slot({
   }, [name, client, version]);
   return <div ref={element} />;
 }
+
 const pageIcons: Record<string, string> = {
   "/models": "models",
   "/playground": "chat",
@@ -176,13 +120,13 @@ const pageIcons: Record<string, string> = {
   "/plugins": "plugins",
   "/status": "activity",
 };
+
 function App() {
   const locale = useLocale();
   const [user, setUser] = React.useState<any>();
   const [loaded, setLoaded] = React.useState(false);
   const [extensions, setExtensions] = React.useState<Extension[]>([]);
   const [extensionsLoaded, setExtensionsLoaded] = React.useState(false);
-  const [plugins, setPlugins] = React.useState<any[]>([]);
   const [hash, setHash] = React.useState(location.hash.slice(1) || "/");
   const [portal, setPortal] = React.useState<PortalContent>(defaultPortal);
   const [publicLoaded, setPublicLoaded] = React.useState(false);
@@ -221,24 +165,17 @@ function App() {
     () => () => finishIdentity(new Error(tr("操作已取消"))),
     [hash, user?.id, finishIdentity],
   );
-  const [pluginQuery, setPluginQuery] = React.useState("");
-  const [pluginCategoryFilter, setPluginCategoryFilter] = React.useState("");
-  const [pluginStateFilter, setPluginStateFilter] = React.useState("");
-  const [updatePlugin, setUpdatePlugin] = React.useState<any>();
-  const [availableUpdates, setAvailableUpdates] = React.useState<Record<string, string>>({});
-  const [updateCheck, setUpdateCheck] = React.useState("");
   const theme = useTheme();
   const { dark } = theme;
   const page = React.useRef<HTMLDivElement>(null);
   const content = React.useRef<HTMLElement>(null);
-  const path = hash.split("?")[0];
+  const path = hash.split("?")[0] ?? "/";
   const client = React.useMemo(
     () =>
       createClient(
         () => setVersion((v) => v + 1),
         () => {
           setUser(null);
-          setPlugins([]);
           location.hash = "/login";
         },
         internationalization,
@@ -277,7 +214,6 @@ function App() {
     try {
       await client.request(auth + "/logout", { method: "POST" });
       setUser(null);
-      setPlugins([]);
       client.navigate("/login");
       setVersion((v) => v + 1);
     } catch (error) {
@@ -384,8 +320,17 @@ function App() {
   }, []);
   const admin = user?.role === "admin";
   React.useEffect(() => {
-    const destination = channelSettingsDestination(path!);
-    if (admin && destination && (destination === "/settings/traffic" || extensions.some((e) => e.path === "/channels")))
+    if (admin && path === "/settings") {
+      client.navigate("/admin");
+      return;
+    }
+    const destination = channelSettingsDestination(path);
+    if (
+      admin &&
+      destination &&
+      (destination === "/settings/traffic" ||
+        extensions.some((e) => e.path === "/channels"))
+    )
       client.navigate(destination);
   }, [admin, path, client, extensions]);
   const modelCatalog = extensions.find(
@@ -411,55 +356,13 @@ function App() {
     admin,
     path,
   );
-  React.useEffect(() => {
-    if (admin && path === "/plugins")
-      void client
-        .request<any[]>("/api/host/plugins")
-        .then(setPlugins)
-        .catch((e) => setMessage(e.message));
-  }, [admin, path, version, client]);
-  React.useEffect(() => {
-    if (!admin || path !== "/plugins") return;
-    let active = true;
-    setAvailableUpdates({});
-    setUpdateCheck(tr("正在检查插件更新…"));
-    void Promise.all([
-      client.request<any>("/api/host/registry/catalog"),
-      client.request<any[]>("/api/host/registry/sources"),
-    ]).then(([catalog, sources]) => {
-      if (!active) return;
-      const updates: Record<string, string> = {};
-      for (const item of catalog.plugins ?? [])
-        if (item.compatible && item.updateAvailable && !updates[item.manifest.id])
-          updates[item.manifest.id] = item.manifest.version;
-      setAvailableUpdates(updates);
-      const errors = (catalog.errors ?? []).map((item: any) => item.registryId).join(", ");
-      setUpdateCheck(errors
-        ? tr("部分注册源检查失败：{0}", { "0": errors })
-        : !sources.some((source) => {
-            if (source.enabled === false || source.builtin) return false;
-            try {
-              const url = new URL(source.url, window.location.href);
-              return url.origin !== window.location.origin || url.pathname !== "/registry/v1/index.json";
-            } catch {
-              return false;
-            }
-          })
-          ? tr("当前仅有内置插件目录，配置在线注册源后可检查新版本。")
-          : Object.keys(updates).length
-            ? tr("{0} 个插件有可用更新", { "0": String(Object.keys(updates).length) })
-            : tr("已检查插件更新"));
-    }, (error) => {
-      if (active) setUpdateCheck(tr("插件更新检查失败：{0}", { "0": (error as Error).message }));
-    });
-    return () => { active = false; };
-  }, [admin, path, version, client]);
   usePageTransition(
     path + ":" + (new URLSearchParams(hash.split("?")[1]).get("tab") ?? ""),
     loaded && publicLoaded && setupChecked && !!setupState,
     content,
     page,
   );
+  const mountKey = selected?.path === "/commerce" ? "/commerce" : hash;
   React.useEffect(() => {
     let dispose: (() => void) | undefined;
     let canceled = false;
@@ -497,7 +400,7 @@ function App() {
     loaded,
     publicLoaded,
     user,
-    hash,
+    mountKey,
     version,
     setupChecked,
     setupState?.required,
@@ -585,59 +488,20 @@ function App() {
     );
   if (!user)
     return (
-      <div className="auth-shell">
-        <header className="auth-header">
-          <a className="brand" href={portal.enabled ? "#/" : "#/login"}>
-            <BrandMark brand={brand} />
-            <span className="brand-name">{brand.name}</span>
-          </a>
-          <nav className="auth-navigation" aria-label={tr("公开导航")}>
-            <LanguageMenu />
-            <ThemeButton theme={theme} />
-            {modelCatalog && (
-              <a className="auth-home" href="#/models">
-                {tr("查看模型")}
-              </a>
-            )}
-          </nav>
-        </header>
-        <div className="login-layout">
-          <section className="login-story">
-            <div className="login-story-copy">
-              <h2 className="brand-login-title">
-                {brand.loginTitle ||
-                  localizePortal(portal, locale, brand.defaultLanguage).title}
-              </h2>
-              {brand.loginDescription && <p>{brand.loginDescription}</p>}
-            </div>
-            <GatewayVisual name={brand.name} example={false} />
-          </section>
-          <div className="login-panel">
-            <div
-              className="login-content"
-              ref={(element) => {
-                content.current = element;
-              }}
-            >
-              <Login
-                key={path === "/register" ? "register" : "login"}
-                register={path === "/register"}
-                client={client}
-                siteName={brand.name}
-                done={() => {
-                  client.navigate(loginDestination(hash));
-                  setVersion((v) => v + 1);
-                }}
-              />
-              <BrandLinks brand={brand} />
-            </div>
-          </div>
-        </div>
-        {brand.footerText && (
-          <footer className="auth-footer">{brand.footerText}</footer>
-        )}
-      </div>
+      <AuthShell
+        brand={brand}
+        portal={portal}
+        locale={locale}
+        path={path}
+        hash={hash}
+        theme={theme}
+        modelCatalog={!!modelCatalog}
+        client={client}
+        contentRef={content}
+        onAuthenticated={() => setVersion((v) => v + 1)}
+      />
     );
+  const consoleNav = consoleNavigation(personal, path);
   const nav = (items: Extension[]) =>
     items.map((e) => (
       <a
@@ -662,24 +526,43 @@ function App() {
         {e.title}
       </a>
     ));
-  const consoleNav = consoleNavigation(personal, path);
-  const categories = pluginCategoryOptions(plugins);
-  const visiblePlugins = filterPlugins(
-    plugins,
-    pluginQuery,
-    pluginCategoryFilter,
-    pluginStateFilter,
-  );
-  const pluginFiltersActive = !!(
-    pluginQuery ||
-    pluginCategoryFilter ||
-    pluginStateFilter
-  );
-  function resetPluginFilters() {
-    setPluginQuery("");
-    setPluginCategoryFilter("");
-    setPluginStateFilter("");
-  }
+  const hashParams = new URLSearchParams(hash.split("?")[1]);
+  const commerceTab =
+    hashParams.get("tab") ?? (hashParams.has("order") ? "orders" : "plans");
+  const walletTabs = [
+    ...(consoleNav.wallet.some((e) => e.path === "/billing")
+      ? [
+          {
+            key: "billing",
+            href: "#/billing",
+            label: tr("账单明细"),
+            active: path === "/billing",
+          },
+        ]
+      : []),
+    ...(consoleNav.wallet.some((e) => e.path === "/commerce")
+      ? [
+          {
+            key: "plans",
+            href: "#/commerce",
+            label: tr("充值购买"),
+            active: path === "/commerce" && commerceTab === "plans",
+          },
+          {
+            key: "subscriptions",
+            href: "#/commerce?tab=subscriptions",
+            label: tr("我的订阅"),
+            active: path === "/commerce" && commerceTab === "subscriptions",
+          },
+          {
+            key: "orders",
+            href: "#/commerce?tab=orders",
+            label: tr("订单历史"),
+            active: path === "/commerce" && commerceTab === "orders",
+          },
+        ]
+      : []),
+  ];
   return (
     <div className="layout">
       {mobile && (
@@ -709,43 +592,40 @@ function App() {
           <SettingsNavigation
             sections={sections}
             selectedPath={selected?.path}
-            home={path === "/settings"}
             management={management}
             overview={path === "/admin"}
           />
         ) : (
-          <>
-            <nav aria-label={tr("主导航")}>
-              <span className="nav-label">{tr("模型服务")}</span>
-              <a
-                href="#/console"
-                className={path === "/console" ? "active" : ""}
-                aria-current={path === "/console" ? "page" : undefined}
-              >
-                <Icon name="overview" />
-                {tr("总览")}
+          <nav aria-label={tr("主导航")}>
+            <span className="nav-label">{tr("模型服务")}</span>
+            <a
+              href="#/console"
+              className={path === "/console" ? "active" : ""}
+              aria-current={path === "/console" ? "page" : undefined}
+            >
+              <Icon name="overview" />
+              {tr("总览")}
+            </a>
+            {nav(consoleNav.tools)}
+            {consoleNav.account.length > 0 && (
+              <>
+                <span className="nav-label">{tr("我的账号")}</span>
+                {nav(consoleNav.account)}
+              </>
+            )}
+            {consoleNav.other.length > 0 && (
+              <>
+                <span className="nav-label">{tr("扩展")}</span>
+                {nav(consoleNav.other)}
+              </>
+            )}
+            {admin && (
+              <a href="#/admin">
+                <Icon name="settings" />
+                {tr("管理后台")}
               </a>
-              {nav(consoleNav.tools)}
-              {consoleNav.account.length > 0 && (
-                <>
-                  <span className="nav-label">{tr("我的账号")}</span>
-                  {nav(consoleNav.account)}
-                </>
-              )}
-              {consoleNav.other.length > 0 && (
-                <>
-                  <span className="nav-label">{tr("扩展")}</span>
-                  {nav(consoleNav.other)}
-                </>
-              )}
-              {admin && (
-                <a href="#/admin">
-                  <Icon name="settings" />
-                  {tr("管理后台")}
-                </a>
-              )}
-            </nav>
-          </>
+            )}
+          </nav>
         )}
         <Slot name="sidebar.footer" client={client} version={version} />
         <div className="sidebar-bottom">
@@ -755,7 +635,7 @@ function App() {
             extensions={extensions}
             theme={theme}
             logout={logout}
-            path={path!}
+            path={path}
           />
         </div>
       </aside>
@@ -770,18 +650,16 @@ function App() {
           >
             <Icon name="menu" />
           </button>
-          {consoleNav.walletActive && consoleNav.wallet.length > 1 && (
+          {consoleNav.walletActive && walletTabs.length > 1 && (
             <nav className="wallet-tabs" aria-label={tr("钱包功能")}>
-              {consoleNav.wallet.map((entry) => (
+              {walletTabs.map((entry) => (
                 <a
-                  key={entry.id}
-                  href={"#" + entry.path}
-                  className={path === entry.path ? "active" : ""}
-                  aria-current={path === entry.path ? "page" : undefined}
+                  key={entry.key}
+                  href={entry.href}
+                  className={entry.active ? "active" : ""}
+                  aria-current={entry.active ? "page" : undefined}
                 >
-                  {entry.path === "/billing"
-                    ? tr("余额与账单")
-                    : tr("充值与订阅")}
+                  {entry.label}
                 </a>
               ))}
             </nav>
@@ -802,10 +680,8 @@ function App() {
               <Slot name="dashboard.top" client={client} version={version} />
               <Dashboard key={version} client={client} management={false} />
             </>
-          ) : path === "/admin" && admin ? (
+          ) : (path === "/admin" || path === "/settings") && admin ? (
             <Dashboard key={version} client={client} management />
-          ) : path === "/settings" && admin ? (
-            <SettingsHome sections={sections} />
           ) : selected?.path === "/audit" && admin ? (
             <AuditPage client={client} />
           ) : selected?.path === "/logs" && admin ? (
@@ -813,193 +689,39 @@ function App() {
           ) : selected?.path === "/status" && admin ? (
             <SystemStatus client={client} />
           ) : selected?.path === "/plugins" && admin ? (
-            <>
-              <PluginUpdates key={version} client={client} />
-              <PageHeading title={tr("插件管理")}>
-                <button onClick={() => setUpdatePlugin({})}>
-                  <Icon name="plus" size={15} />
-                  {tr("在线安装")}
-                </button>
-                <span className="plugin-running">
-                  <i className="status-dot" />
-                  {plugins.filter((p) => p.state === "Active").length}{" "}
-                  {tr("个运行中")}
-                </span>
-                <button
-                  className="secondary"
-                  onClick={() => setVersion((v) => v + 1)}
-                >
-                  <Icon name="refresh" size={16} />
-                  {tr("检查更新")}
-                </button>
-              </PageHeading>
-              {updateCheck && <p className="muted" role="status">{updateCheck}</p>}
-              <div className="list-toolbar plugin-filters">
-                <input
-                  type="search"
-                  aria-label={tr("搜索插件")}
-                  placeholder={tr("搜索名称、ID、用途或分类")}
-                  value={pluginQuery}
-                  onChange={(e) => setPluginQuery(e.target.value)}
-                />
-                <Select
-                  aria-label={tr("插件分类")}
-                  value={pluginCategoryFilter}
-                  onChange={(e) => setPluginCategoryFilter(e.target.value)}
-                >
-                  <option value="">
-                    {tr("全部分类（{0}）", { "0": textValue(plugins.length) })}
-                  </option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.title}（{category.count}）
-                    </option>
-                  ))}
-                  {pluginCategoryFilter &&
-                    !categories.some((c) => c.id === pluginCategoryFilter) && (
-                      <option value={pluginCategoryFilter}>
-                        {pluginCategoryTitle(pluginCategoryFilter)}（0）
-                      </option>
-                    )}
-                </Select>
-                <Select
-                  aria-label={tr("插件状态")}
-                  value={pluginStateFilter}
-                  onChange={(e) => setPluginStateFilter(e.target.value)}
-                >
-                  <option value="">{tr("全部状态")}</option>
-                  {Object.entries(pluginStates)
-                    .filter(
-                      ([state]) =>
-                        plugins.some((plugin) => plugin.state === state) ||
-                        state === pluginStateFilter,
-                    )
-                    .map(([state, title]) => (
-                      <option key={state} value={state}>
-                        {title}
-                      </option>
-                    ))}
-                </Select>
-                {pluginFiltersActive && (
-                  <button className="ghost" onClick={resetPluginFilters}>
-                    {tr("清除筛选")}
-                  </button>
-                )}
-                <span className="plugin-result-count" role="status">
-                  {tr("显示 {0} / {1} 个插件", {
-                    "0": textValue(visiblePlugins.length),
-                    "1": textValue(plugins.length),
-                  })}
-                </span>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{tr("插件")}</th>
-                      <th>{tr("分类")}</th>
-                      <th>{tr("版本")}</th>
-                      <th>{tr("状态")}</th>
-                      <th>{tr("更新方式")}</th>
-                      <th>{tr("操作")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visiblePlugins.map((p) => (
-                      <tr key={p.id}>
-                        <td
-                          title={
-                            p.id.startsWith("official.")
-                              ? tr(
-                                  p.description || p.manifest.description || "",
-                                )
-                              : p.description || p.manifest.description
-                          }
-                        >
-                          <strong>
-                            {p.id.startsWith("official.")
-                              ? tr(p.name || p.manifest.name || p.id)
-                              : p.name || p.manifest.name || p.id}
-                          </strong>
-                          <small>
-                            <code>{p.id}</code>
-                          </small>
-                        </td>
-                        <td>
-                          <span className="badge">
-                            {pluginCategoryTitle(pluginCategory(p))}
-                          </span>
-                        </td>
-                        <td>
-                          <code>{p.version}</code>
-                          {availableUpdates[p.id] && <small>{tr("可更新至 {0}", { "0": availableUpdates[p.id] })}</small>}
-                        </td>
-                        <td>
-                          <span
-                            className={
-                              "badge " + (p.state === "Active" ? "ready" : "")
-                            }
-                          >
-                            {pluginStates[p.state] ?? p.state}
-                          </span>
-                        </td>
-                        <td
-                          title={
-                            p.manifest.configReload === "snapshot"
-                              ? tr("配置即时生效")
-                              : tr("配置需重启")
-                          }
-                        >
-                          <span
-                            className={
-                              "badge " +
-                              (p.codeReload === "parallel" ? "ready" : "")
-                            }
-                          >
-                            {p.codeReload === "parallel"
-                              ? tr("可热更新")
-                              : tr("重启应用")}
-                          </span>
-                        </td>
-                        <td>
-                          {availableUpdates[p.id] &&
-                            <button
-                              className="ghost"
-                              onClick={() => setUpdatePlugin(p)}
-                            >
-                              {tr("更新")}
-                            </button>
-                          }
-                          <PluginActions
-                            plugin={p}
-                            host={client}
-                            changed={() => setVersion((v) => v + 1)}
-                            report={setMessage}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {plugins.length > 0 && visiblePlugins.length === 0 && (
-                <Empty title={tr("没有匹配的插件")} />
-              )}
-            </>
+            <PluginsPage
+              client={client}
+              version={version}
+              onRefresh={() => setVersion((v) => v + 1)}
+              onMessage={setMessage}
+            />
           ) : (
             <React.Fragment
               key={
-                selected?.path === verificationPath ? verificationPath : hash
+                selected?.path === verificationPath
+                  ? verificationPath
+                  : mountKey
               }
             >
-              {section && !selected?.url && selected?.path !== paymentMethodsPath && (
-                <PageHeading title={selected?.title ?? section.title} />
-              )}
+              {section &&
+                !selected?.url &&
+                selected?.path !== paymentMethodsPath && (
+                  <PageHeading title={selected?.title ?? section.title} />
+                )}
               {selected?.path === "/settings/traffic" ? (
                 <div className="settings-content">
                   {["/rate-limit", "/token-speed"]
-                    .filter((target) => extensions.some((entry) => entry.path === target))
-                    .map((target) => <SettingsExtension key={target} host={client} path={target} slot="settings" />)}
+                    .filter((target) =>
+                      extensions.some((entry) => entry.path === target),
+                    )
+                    .map((target) => (
+                      <SettingsExtension
+                        key={target}
+                        host={client}
+                        path={target}
+                        slot="settings"
+                      />
+                    ))}
                 </div>
               ) : selected?.path === verificationPath ? (
                 <div className="settings-content">
@@ -1058,48 +780,10 @@ function App() {
           close={() => finishIdentity(new Error(tr("操作已取消")))}
         />
       )}
-      {updatePlugin && (
-        <RegistryBrowser
-          client={client}
-          installed={plugins}
-          focusId={updatePlugin.id}
-          close={() => setUpdatePlugin(undefined)}
-          done={() => {
-            setUpdatePlugin(undefined);
-            setVersion((v) => v + 1);
-            setMessage(tr("插件已更新"));
-          }}
-        />
-      )}
     </div>
   );
 }
-function BrandLinks({ brand }: { brand: import("./branding.js").Branding }) {
-  return (
-    <div className="brand-links">
-      {brand.websiteUrl && (
-        <a href={brand.websiteUrl} target="_blank" rel="noopener noreferrer">
-          {tr("官方网站")}
-        </a>
-      )}
-      {brand.supportEmail && (
-        <a href={"mailto:" + encodeURIComponent(brand.supportEmail)}>
-          {tr("联系支持")}
-        </a>
-      )}
-      {brand.termsUrl && (
-        <a href={brand.termsUrl} target="_blank" rel="noopener noreferrer">
-          {tr("服务条款")}
-        </a>
-      )}
-      {brand.privacyUrl && (
-        <a href={brand.privacyUrl} target="_blank" rel="noopener noreferrer">
-          {tr("隐私政策")}
-        </a>
-      )}
-    </div>
-  );
-}
+
 export function mount(element: HTMLElement, host?: UIHost) {
   configureMessages({ "en-US": en });
   if (!host?.page) initializeLanguage(getLocale());

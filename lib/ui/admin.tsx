@@ -81,6 +81,7 @@ export function AdminTable({
   children,
   version = 0,
   embedded = false,
+  fixedUserId,
 }: {
   host: UIHost;
   title: string;
@@ -92,19 +93,24 @@ export function AdminTable({
   children?: React.ReactNode;
   version?: number;
   embedded?: boolean;
+  fixedUserId?: string;
 }) {
   const users = useLoad<any[]>(() =>
-    host.request("/api/plugins/official.users/users"),
+    fixedUserId
+      ? Promise.resolve([])
+      : host.request("/api/plugins/official.auth/users"),
+    [fixedUserId],
   );
   const [user, setUser] = React.useState(
-      new URLSearchParams(location.hash.split("?")[1]).get("userId") ?? "",
+      fixedUserId ??
+        (new URLSearchParams(location.hash.split("?")[1]).get("userId") ?? ""),
     ),
     [q, setQ] = React.useState(""),
     [status, setStatus] = React.useState("");
   const [page, setPage] = React.useState(1),
     [size, setSize] = React.useState(20);
   const query = new URLSearchParams({
-    userId: user,
+    userId: fixedUserId ?? user,
     q,
     status,
     limit: String(size),
@@ -112,7 +118,7 @@ export function AdminTable({
   });
   const data = useLoad<any>(
     () => host.request(endpoint + "?" + query),
-    [user, q, status, page, size, version],
+    [fixedUserId ?? user, q, status, page, size, version],
   );
   React.useEffect(() => {
     if (data.data)
@@ -162,21 +168,23 @@ export function AdminTable({
             setPage(1);
           }}
         />
-        <Select
-          aria-label={tr("管理列表用户")}
-          value={user}
-          onChange={(e) => {
-            setUser(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">{tr("全部用户")}</option>
-          {users.data?.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.username}
-            </option>
-          ))}
-        </Select>
+        {!fixedUserId && (
+          <Select
+            aria-label={tr("管理列表用户")}
+            value={user}
+            onChange={(e) => {
+              setUser(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">{tr("全部用户")}</option>
+            {users.data?.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.username}
+              </option>
+            ))}
+          </Select>
+        )}
         {!!Object.keys(statuses).length && (
           <Select
             aria-label={tr("管理记录状态")}
@@ -199,7 +207,7 @@ export function AdminTable({
         <table>
           <thead>
             <tr>
-              <th>{tr("用户")}</th>
+              {!fixedUserId && <th>{tr("用户")}</th>}
               {columns.map((column) => (
                 <th key={column.title}>{column.title}</th>
               ))}
@@ -209,9 +217,11 @@ export function AdminTable({
           <tbody>
             {data.data?.items.map((row: any) => (
               <tr key={row.id ?? row.source}>
-                <td>
-                  <strong>{username(row.user_id)}</strong>
-                </td>
+                {!fixedUserId && (
+                  <td>
+                    <strong>{username(row.user_id)}</strong>
+                  </td>
+                )}
                 {columns.map((column) => (
                   <td key={column.title}>{column.render(row)}</td>
                 ))}
@@ -221,7 +231,7 @@ export function AdminTable({
             {!data.data?.items.length && (
               <tr>
                 <td
-                  colSpan={columns.length + (actions ? 2 : 1)}
+                  colSpan={columns.length + (actions ? 1 : 0) + (fixedUserId ? 0 : 1)}
                   className="empty-inline"
                 >
                   {data.data

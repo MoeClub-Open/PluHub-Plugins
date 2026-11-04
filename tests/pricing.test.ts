@@ -9,7 +9,7 @@ import { upstreamEvents, encodeStream } from "../lib/ai/streams.js";
 import { decode, decodeResult, encodeResult } from "../lib/ai/protocols.js";
 import type { Protocol, Usage } from "@pluhub/contracts/ai";
 
-it("prices cache subsets once, separates one-hour writes and multiplies exact decimals once", () => {
+it("prices cache subsets once, separates one-hour writes and rounds exact decimals once", () => {
   const receipt = priceUsage(
     {
       input: 1000,
@@ -25,31 +25,29 @@ it("prices cache subsets once, separates one-hour writes and multiplies exact de
       cacheRead: 0.3,
       cacheWrite: 3.75,
       cacheWrite1h: 6,
-      multiplier: 0.5,
     },
   );
-  // 600 + 1500 + 180 + 562.5 + 300 = 3142.5, times 0.5.
-  expect(receipt.amount).toBe(1572);
-  expect(receipt.originalAmount).toBe(3143);
+  // 600 + 1500 + 180 + 562.5 + 300 = 3142.5 -> 3143 micro-USD.
+  expect(receipt.amount).toBe(3143);
   expect(receipt.lines.map((line) => line.quantity)).toEqual([
     200, 100, 600, 150, 50,
   ]);
   expect(
     priceUsage(
       { input: 1, output: 1 },
-      { input: 0.1, output: 0.2, multiplier: 10 },
+      { input: 1, output: 2 },
     ).amount,
   ).toBe(3);
   expect(
     priceUsage(
       { input: 1, output: 0 },
-      { input: 1e-7, output: 0, multiplier: 10 },
+      { input: 1e-7, output: 0 },
     ).amount,
   ).toBe(1);
   expect(
     priceUsage(
       { input: 1000000, output: 0 },
-      { input: 0.1, output: 0, multiplier: 0 },
+      { input: 0, output: 0 },
     ).amount,
   ).toBe(0);
 });
@@ -82,11 +80,10 @@ it("supports per-request prices without token prices and preserves original rout
     pricing: { cacheRead: 0.3 },
   };
   const before = structuredClone(route);
-  expect(routePricing(route, { consumptionMultiplier: 0.4 })).toMatchObject({
+  expect(routePricing(route)).toMatchObject({
     input: 3,
     output: 15,
     cacheRead: 0.3,
-    multiplier: 0.4,
   });
   expect(route).toEqual(before);
   const pricing = routePricing({
@@ -95,9 +92,8 @@ it("supports per-request prices without token prices and preserves original rout
     pricing: { mode: "request", request: 0.001 },
   })!;
   expect(
-    priceUsage({ input: 5000, output: 6000 }, { ...pricing, multiplier: 0.5 })
-      .amount,
-  ).toBe(500);
+    priceUsage({ input: 5000, output: 6000 }, pricing).amount,
+  ).toBe(1000);
   expect(reserveCost(999999, 999999, pricing)).toBe(1000);
 });
 it("rejects invalid prices, overlapping cache usage, unsafe totals and overflows", () => {
@@ -268,9 +264,8 @@ it("uses Gemini's terminal usage snapshot and preserves empty-text signature par
     request.messages.flatMap((message) => message.reasoning ?? []),
   ).toEqual(result.reasoning!);
   expect(
-    priceUsage(result.usage, { input: 0.3, output: 2.5, multiplier: 0.2 })
-      .amount,
-  ).toBe(33);
+    priceUsage(result.usage, { input: 0.3, output: 2.5 }).amount,
+  ).toBe(164);
   expect(
     decodeResult("gemini", encodeResult("gemini", result), "demo").reasoning,
   ).toEqual(result.reasoning!);

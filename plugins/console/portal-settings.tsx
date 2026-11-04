@@ -10,14 +10,14 @@ import {
   portalTextFields,
   type PortalContent,
 } from "./portal.js";
-import { consoleEntry } from "./onboarding.js";
 import { Notice, useLoad } from "../../lib/ui/mount.js";
+import { usePluginConfig } from "../../lib/ui/plugin-config.js";
 import { featuredModelId } from "./portal-models.js";
 import { Select } from "../../lib/ui/select.js";
 import { Icon } from "../../lib/ui/components.js";
 
 export function PortalSettings({ host }: { host: UIHost }) {
-  const data = useLoad<any>(() => host.request("/api/host/config"));
+  const data = usePluginConfig(host, "official.console");
   const [draft, setDraft] = React.useState(defaultPortal);
   const [tab, setTab] = React.useState("hero");
   const catalog = useLoad<any[]>(() =>
@@ -27,13 +27,11 @@ export function PortalSettings({ host }: { host: UIHost }) {
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [language, setLanguage] = React.useState<Locale>(getLocale);
-  const defaultLanguage = readBranding(
-    consoleEntry(data.data ?? { plugins: [] })?.config ?? {},
-  ).defaultLanguage;
+  const defaultLanguage = readBranding(data.data ?? {}).defaultLanguage;
   const content = localizePortal(draft, language, defaultLanguage);
   React.useEffect(() => {
     if (data.data) {
-      const value = readPortal(consoleEntry(data.data)?.config ?? {});
+      const value = readPortal(data.data);
       setDraft(value);
       setSaved(value);
     }
@@ -61,14 +59,10 @@ export function PortalSettings({ host }: { host: UIHost }) {
     setBusy(true);
     setMessage("");
     try {
-      const config = await host.request<any>("/api/host/config");
-      const entry = consoleEntry(config);
-      if (!entry) throw new Error(tr("控制台插件不存在"));
-      const portal = readPortal({ ...entry.config, portal: draft });
-      entry.config = { ...entry.config, portal };
-      await host.request("/api/host/config", {
-        method: "PUT",
-        body: JSON.stringify(config),
+      let portal = draft;
+      await data.save((current) => {
+        portal = readPortal({ ...current, portal: draft });
+        return { ...current, portal };
       });
       setDraft(portal);
       setSaved(portal);

@@ -1,19 +1,16 @@
 import { t as tr } from "../../lib/ui/i18n.js";
-import React from "react";
 import type { Extension } from "@pluhub/ui-sdk";
-import { Empty, Icon, PageHeading } from "../../lib/ui/components.js";
-import { searchSettings, type SettingsSection } from "./navigation.js";
+import { Icon } from "../../lib/ui/components.js";
+import type { SettingsSection } from "./navigation.js";
 
 export function SettingsNavigation({
   sections,
   selectedPath,
-  home,
   management,
   overview,
 }: {
   sections: SettingsSection[];
   selectedPath?: string;
-  home: boolean;
   management: Extension[];
   overview: boolean;
 }) {
@@ -51,20 +48,12 @@ export function SettingsNavigation({
             {page.title}
           </a>
         ))}
-        <a
-          href="#/settings"
-          className={home ? "active" : ""}
-          aria-current={home ? "page" : undefined}
-        >
-          <Icon name="overview" />
-          {tr("设置总览")}
-        </a>
         {visible.map((section) => (
           <div className="settings-nav-section" key={section.id}>
-            <a className="settings-nav-title" href={"#" + section.path}>
+            <span className="nav-label settings-nav-title">
               <Icon name={section.icon} size={15} />
               {section.title}
-            </a>
+            </span>
             {section.pages.map((page) => (
               <a
                 key={page.id}
@@ -82,69 +71,6 @@ export function SettingsNavigation({
           </div>
         ))}
       </nav>
-    </>
-  );
-}
-
-export function SettingsHome({ sections }: { sections: SettingsSection[] }) {
-  const [query, setQuery] = React.useState("");
-  const visible = searchSettings(sections, query);
-  return (
-    <>
-      <PageHeading title={tr("系统设置")} />
-      <div className="settings-search-bar">
-        <Icon name="search" size={19} />
-        <input
-          type="search"
-          aria-label={tr("搜索全部设置")}
-          placeholder={tr("搜索支付、登录、TPS…")}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <span>
-          {visible.reduce((count, section) => count + section.pages.length, 0)}{" "}
-          {tr("项设置")}
-        </span>
-      </div>
-      <div className="settings-grid">
-        {visible.map((section) => (
-          <section className="card settings-category" key={section.id}>
-            <div className="settings-category-heading">
-              <span className="settings-category-icon">
-                <Icon name={section.icon} size={21} />
-              </span>
-              <div>
-                <h2>{section.title}</h2>
-              </div>
-            </div>
-            <div className="settings-category-links">
-              {section.pages.map((page) => (
-                <a href={"#" + page.path} key={page.id}>
-                  <span>{page.title}</span>
-                  <Icon name="arrow" size={15} />
-                </a>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
-      {!visible.length && (
-        <Empty
-          title={
-            sections.length ? tr("没有找到相关设置") : tr("暂无可配置的扩展")
-          }
-        >
-          {query ? (
-            <button className="secondary" onClick={() => setQuery("")}>
-              {tr("清除搜索")}
-            </button>
-          ) : (
-            <a className="button secondary" href="#/plugins">
-              {tr("管理插件")}
-            </a>
-          )}
-        </Empty>
-      )}
     </>
   );
 }
