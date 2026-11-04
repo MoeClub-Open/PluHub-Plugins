@@ -221,7 +221,7 @@ export function ProviderNodeSettings({
                           ))}
                         <a
                           href={
-                            "#/settings/subscriptions/" +
+                            "#/settings/subscriptions?provider=" +
                             node.upstream?.protocol
                           }
                         >
