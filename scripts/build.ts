@@ -89,10 +89,10 @@ for (const entry of await readdir(root, { withFileTypes: true })) {
   if (entry.name === "console") {
     await build({
       entryPoints: {
-        "vendor-react": "react",
-        "vendor-jsx-runtime": "react/jsx-runtime",
-        "vendor-react-dom": "react-dom",
-        "vendor-react-dom-client": "react-dom/client",
+        "vendor-react": resolve(directory, "vendor/react.ts"),
+        "vendor-jsx-runtime": resolve(directory, "vendor/jsx-runtime.ts"),
+        "vendor-react-dom": resolve(directory, "vendor/react-dom.ts"),
+        "vendor-react-dom-client": resolve(directory, "vendor/react-dom-client.ts"),
         "vendor-ui-sdk": "@pluhub/ui-sdk",
       },
       outdir: out,
