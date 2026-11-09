@@ -108,6 +108,20 @@
   margin: 4px 8px;
   min-height: 26px;
 }
+.flow-workspace.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--surface);
+}
+.flow-workspace.is-fullscreen .channel-flow-canvas {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
 .flow-node-settings {
   padding: 0 12px 10px;
   overflow: visible;

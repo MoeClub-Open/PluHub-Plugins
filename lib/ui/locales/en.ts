@@ -1,6 +1,8 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
   对外模型: "Published models",
+  全屏画布: "Fullscreen canvas",
+  退出全屏: "Exit fullscreen",
   应用到流程: "Apply to graph",
   创建并编辑流程: "Create and edit graph",
   配置模型映射: "Configure model mapping",

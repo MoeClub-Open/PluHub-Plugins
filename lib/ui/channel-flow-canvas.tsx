@@ -27,6 +27,8 @@ import {
   Undo2,
   Redo2,
   LayoutGrid,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { t as tr } from "./i18n.js";
 import {
@@ -555,6 +557,7 @@ function Canvas(props: CanvasProps) {
   const initialized = useNodesInitialized();
   const fitted = React.useRef(false);
   const container = React.useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = React.useState(false);
   const primary = React.useRef(props.selected);
   const pendingSelection = React.useRef<string[] | undefined>(undefined);
   const reconnecting = React.useRef<Edge | undefined>(undefined);
@@ -875,208 +878,238 @@ function Canvas(props: CanvasProps) {
           );
           select(flow.entry);
         },
-        toggle: (id) =>
+        toggle: (id) => {
+          const opening = !expanded.has(id);
           setExpanded((old) => {
             const next = new Set(old);
             if (next.has(id)) next.delete(id);
             else next.add(id);
             return next;
-          }),
-      }}
-    >
-      <div className="workflow-tools flow-history">
-        <button
-          className="secondary icon-button"
-          title={tr("撤销编辑") + " (Ctrl/Cmd+Z)"}
-          aria-label={tr("撤销编辑")}
-          disabled={props.disabled || !props.canUndo}
-          onClick={props.undo}
-        >
-          <Undo2 size={15} />
-        </button>
-        <button
-          className="secondary icon-button"
-          title={tr("重做编辑") + " (Ctrl/Cmd+Shift+Z / Ctrl+Y)"}
-          aria-label={tr("重做编辑")}
-          disabled={props.disabled || !props.canRedo}
-          onClick={props.redo}
-        >
-          <Redo2 size={15} />
-        </button>
-        <button
-          className="secondary"
-          disabled={props.disabled}
-          onClick={() => {
-            const sizes = new Map(
-              graph.getNodes().map((node) => [node.id, node.measured ?? {}]),
-            );
-            update({
-              ...flow,
-              layout: Object.fromEntries(
-                workflowNodePositions({ ...flow, layout: undefined }, sizes),
-              ),
-            });
+          });
+          if (opening)
             requestAnimationFrame(() =>
               requestAnimationFrame(() => {
-                void graph.fitView({ padding: 0.15 });
+                void graph.fitView({
+                  nodes: [{ id }],
+                  padding: 0.25,
+                  maxZoom: 1,
+                  duration: 200,
+                });
               }),
             );
-          }}
-        >
-          <LayoutGrid size={14} />
-          {tr("自动排列")}
-        </button>
-        <button
-          className="secondary"
-          disabled={props.disabled}
-          onClick={() =>
-            setExpanded(
-              expanded.size
-                ? new Set()
-                : new Set(flow.nodes.map((node) => node.id)),
-            )
-          }
-        >
-          {tr(expanded.size ? "收起全部参数" : "展开全部参数")}
-        </button>
-        {clipboard.warning && (
-          <span className="muted" role="status">
-            {clipboard.warning}
-          </span>
-        )}
-      </div>
-      <div
-        ref={container}
-        className="channel-flow-canvas"
-        aria-label={tr("渠道流程画布")}
-        tabIndex={0}
-        {...clipboard.handlers}
-        onPointerDownCapture={(event) => {
-          if (
-            !isFlowTextInput(event.target) &&
-            !(event.target as HTMLElement).closest(
-              "button, .flow-node-settings",
-            )
-          )
-            container.current?.focus({ preventScroll: true });
-        }}
-      >
-        <ReactFlow<FlowNode>
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          nodesDraggable={!props.disabled}
-          nodesConnectable={!props.disabled}
-          edgesReconnectable={!props.disabled}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={(_, node) => {
-            primary.current = node.id;
-            select(node.id);
-          }}
-          onPaneClick={() => {
-            primary.current = "";
-            select("");
-          }}
-          onNodeDragStop={(_, node, moved) => {
-            update({
-              ...flow,
-              layout: {
-                ...Object.fromEntries(positions),
-                ...Object.fromEntries(
-                  (moved.length ? moved : [node]).map((item) => [
-                    item.id,
-                    item.position,
-                  ]),
+        },
+      }}
+    >
+      <div className={"flow-workspace" + (fullscreen ? " is-fullscreen" : "")}>
+        <div className="workflow-tools flow-history">
+          <button
+            className="secondary icon-button"
+            title={tr("撤销编辑") + " (Ctrl/Cmd+Z)"}
+            aria-label={tr("撤销编辑")}
+            disabled={props.disabled || !props.canUndo}
+            onClick={props.undo}
+          >
+            <Undo2 size={15} />
+          </button>
+          <button
+            className="secondary icon-button"
+            title={tr("重做编辑") + " (Ctrl/Cmd+Shift+Z / Ctrl+Y)"}
+            aria-label={tr("重做编辑")}
+            disabled={props.disabled || !props.canRedo}
+            onClick={props.redo}
+          >
+            <Redo2 size={15} />
+          </button>
+          <button
+            className="secondary"
+            disabled={props.disabled}
+            onClick={() => {
+              const sizes = new Map(
+                graph.getNodes().map((node) => [node.id, node.measured ?? {}]),
+              );
+              update({
+                ...flow,
+                layout: Object.fromEntries(
+                  workflowNodePositions({ ...flow, layout: undefined }, sizes),
                 ),
-              },
-            });
-          }}
-          onConnect={(connection) => connect(connection)}
-          onReconnect={(edge, connection) => connect(connection, edge)}
-          onReconnectStart={(_, edge) => {
-            reconnecting.current = edge;
-          }}
-          onReconnectEnd={() => {
-            reconnecting.current = undefined;
-          }}
-          isValidConnection={validConnection}
-          onDelete={({ nodes: deleted, edges: links }) => {
-            if (props.disabled) return;
-            const next = removeFlowNodes(
-              { ...flow, layout: Object.fromEntries(positions) },
-              deleted.map((node) => node.id),
-            );
-            const removed = new Set(deleted.map((node) => node.id));
-            const disconnected = links.filter(
-              (edge) => !removed.has(edge.source) && !removed.has(edge.target),
-            );
-            update({
-              ...next,
-              bindings: next.bindings?.filter(
-                (binding) =>
-                  !disconnected.some(
-                    (edge) =>
-                      edge.sourceHandle?.startsWith("data:") &&
-                      edge.source === binding.source &&
-                      edge.sourceHandle.slice(5) === binding.output &&
-                      edge.target === binding.target &&
-                      edge.targetHandle?.slice(6) === binding.input,
-                  ),
-              ),
-              nodes: next.nodes.map((node) => {
-                return disconnected
-                  .filter(
-                    (edge) =>
-                      edge.source === node.id &&
-                      !edge.sourceHandle?.startsWith("data:"),
-                  )
-                  .reduce(
-                    (result, edge) =>
-                      changeWorkflowConnection(
-                        result,
-                        edge.sourceHandle as WorkflowPort,
-                        edge.target,
-                      ),
-                    node,
-                  );
-              }),
-            });
-            select(flow.entry);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            if (props.disabled) return;
-            const type = event.dataTransfer.getData(
-              "application/pluhub-node",
-            ) as WorkflowNode["type"];
-            if (type !== "start" && Object.hasOwn(workflowNodeLabels, type))
-              props.add(
-                type,
-                graph.screenToFlowPosition({
-                  x: event.clientX,
-                  y: event.clientY,
+              });
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                  void graph.fitView({ padding: 0.15 });
                 }),
               );
+            }}
+          >
+            <LayoutGrid size={14} />
+            {tr("自动排列")}
+          </button>
+          <button
+            className="secondary"
+            disabled={props.disabled}
+            onClick={() =>
+              setExpanded(
+                expanded.size
+                  ? new Set()
+                  : new Set(flow.nodes.map((node) => node.id)),
+              )
+            }
+          >
+            {tr(expanded.size ? "收起全部参数" : "展开全部参数")}
+          </button>
+          {clipboard.warning && (
+            <span className="muted" role="status">
+              {clipboard.warning}
+            </span>
+          )}
+          <button
+            className="secondary"
+            onClick={() => {
+              setFullscreen((value) => !value);
+              requestAnimationFrame(() =>
+                requestAnimationFrame(
+                  () => void graph.fitView({ padding: 0.15, maxZoom: 1 }),
+                ),
+              );
+            }}
+          >
+            {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {tr(fullscreen ? "退出全屏" : "全屏画布")}
+          </button>
+        </div>
+        <div
+          ref={container}
+          className="channel-flow-canvas"
+          aria-label={tr("渠道流程画布")}
+          tabIndex={0}
+          {...clipboard.handlers}
+          onPointerDownCapture={(event) => {
+            if (
+              !isFlowTextInput(event.target) &&
+              !(event.target as HTMLElement).closest(
+                "button, .flow-node-settings",
+              )
+            )
+              container.current?.focus({ preventScroll: true });
           }}
-          minZoom={0.2}
-          maxZoom={2}
-          panOnDrag={[1, 2]}
-          panActivationKeyCode="Space"
-          selectionOnDrag
-          selectionMode={SelectionMode.Partial}
-          deleteKeyCode={props.disabled ? null : ["Backspace", "Delete"]}
-          selectionKeyCode="Shift"
-          multiSelectionKeyCode={["Control", "Meta", "Shift"]}
-          proOptions={{ hideAttribution: true }}
         >
-          <Background gap={20} size={1} />
-          <Controls showInteractive={false} />
-        </ReactFlow>
+          <ReactFlow<FlowNode>
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            nodesDraggable={!props.disabled}
+            nodesConnectable={!props.disabled}
+            edgesReconnectable={!props.disabled}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={(_, node) => {
+              primary.current = node.id;
+              select(node.id);
+            }}
+            onPaneClick={() => {
+              primary.current = "";
+              select("");
+            }}
+            onNodeDragStop={(_, node, moved) => {
+              update({
+                ...flow,
+                layout: {
+                  ...Object.fromEntries(positions),
+                  ...Object.fromEntries(
+                    (moved.length ? moved : [node]).map((item) => [
+                      item.id,
+                      item.position,
+                    ]),
+                  ),
+                },
+              });
+            }}
+            onConnect={(connection) => connect(connection)}
+            onReconnect={(edge, connection) => connect(connection, edge)}
+            onReconnectStart={(_, edge) => {
+              reconnecting.current = edge;
+            }}
+            onReconnectEnd={() => {
+              reconnecting.current = undefined;
+            }}
+            isValidConnection={validConnection}
+            onDelete={({ nodes: deleted, edges: links }) => {
+              if (props.disabled) return;
+              const next = removeFlowNodes(
+                { ...flow, layout: Object.fromEntries(positions) },
+                deleted.map((node) => node.id),
+              );
+              const removed = new Set(deleted.map((node) => node.id));
+              const disconnected = links.filter(
+                (edge) =>
+                  !removed.has(edge.source) && !removed.has(edge.target),
+              );
+              update({
+                ...next,
+                bindings: next.bindings?.filter(
+                  (binding) =>
+                    !disconnected.some(
+                      (edge) =>
+                        edge.sourceHandle?.startsWith("data:") &&
+                        edge.source === binding.source &&
+                        edge.sourceHandle.slice(5) === binding.output &&
+                        edge.target === binding.target &&
+                        edge.targetHandle?.slice(6) === binding.input,
+                    ),
+                ),
+                nodes: next.nodes.map((node) => {
+                  return disconnected
+                    .filter(
+                      (edge) =>
+                        edge.source === node.id &&
+                        !edge.sourceHandle?.startsWith("data:"),
+                    )
+                    .reduce(
+                      (result, edge) =>
+                        changeWorkflowConnection(
+                          result,
+                          edge.sourceHandle as WorkflowPort,
+                          edge.target,
+                        ),
+                      node,
+                    );
+                }),
+              });
+              select(flow.entry);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (props.disabled) return;
+              const type = event.dataTransfer.getData(
+                "application/pluhub-node",
+              ) as WorkflowNode["type"];
+              if (type !== "start" && Object.hasOwn(workflowNodeLabels, type))
+                props.add(
+                  type,
+                  graph.screenToFlowPosition({
+                    x: event.clientX,
+                    y: event.clientY,
+                  }),
+                );
+            }}
+            minZoom={0.2}
+            maxZoom={2}
+            panOnDrag={[1, 2]}
+            panActivationKeyCode="Space"
+            selectionOnDrag
+            selectionMode={SelectionMode.Partial}
+            deleteKeyCode={props.disabled ? null : ["Backspace", "Delete"]}
+            selectionKeyCode="Shift"
+            multiSelectionKeyCode={["Control", "Meta", "Shift"]}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={20} size={1} />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </div>
       </div>
     </NodeContext.Provider>
   );
