@@ -669,6 +669,9 @@ export const en: Record<string, string> = {
   "创建订单来源 IP": "Order source IP",
   回调地址: "Callback URL",
   保存支付配置: "Save payment settings",
+  "人民币转换比例（CNY / USD）": "Conversion rate (CNY per USD)",
+  "人民币转换比例必须大于 0": "The CNY conversion rate must be greater than 0",
+  保存转换比例: "Save conversion rate",
   插件未安装: "Plugin is not installed",
   启用邮件发送: "Enable email sending",
   启用人机验证服务: "Enable human verification",
@@ -2420,8 +2423,7 @@ export const en: Record<string, string> = {
     "This model is outside your scope. Select another model or channel.",
   "请先选择至少一个可用的订阅账号。":
     "Select at least one available subscription account first.",
-  "请先填写上游地址与上游密钥。":
-    "Enter the upstream URL and API key first.",
+  "请先填写上游地址与上游密钥。": "Enter the upstream URL and API key first.",
   "请选择订阅账号，或点击「仅创建并编辑流程」进入画布配置。":
     "Select a subscription account, or click Create and edit workflow to configure on the canvas.",
   "请填写上游地址和密钥，或点击「仅创建并编辑流程」进入画布配置。":

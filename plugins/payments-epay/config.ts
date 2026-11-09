@@ -18,10 +18,19 @@ export type EpayMethod = {
 };
 export type EpayConfig = {
   enabled?: boolean;
+  usdToCny?: number;
   methods?: EpayMethod[];
   secretRefs?: string[];
 };
 export function validateEpayConfig(config: EpayConfig) {
+  if (
+    config.usdToCny !== undefined &&
+    (!Number.isFinite(config.usdToCny) || config.usdToCny <= 0)
+  )
+    throw new HostError(
+      "invalid_config",
+      "人民币转换比例必须大于 0",
+    );
   const ids = new Set<string>();
   for (const method of config.methods ?? []) {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(method.id) || ids.has(method.id))

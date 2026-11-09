@@ -13,6 +13,7 @@ import {
   supportsCheckout,
   paymentLabels,
   checkoutMethodKey,
+  checkoutProduct,
   type CheckoutMethod,
 } from "../../lib/commerce/checkout.js";
 import { ProductSettings } from "./settings.js";
@@ -92,9 +93,9 @@ function Page({ host }: { host: UIHost }) {
     if (!method)
       setMethodKey(methods.length ? checkoutMethodKey(methods[0]!) : "");
   }, [catalog.data, methodKey]);
-  const products = (catalog.data?.products ?? []).filter((p: any) =>
-    supportsCheckout(method, p.currency, p.mode),
-  );
+  const products = (catalog.data?.products ?? [])
+    .filter((p: any) => supportsCheckout(method, p.currency, p.mode))
+    .map((p: any) => checkoutProduct(method, p));
   const [appliedQuery, setAppliedQuery] = React.useState("");
   React.useEffect(() => {
     const timer = setTimeout(() => setAppliedQuery(query.trim()), 200);

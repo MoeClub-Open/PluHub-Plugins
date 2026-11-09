@@ -7,12 +7,31 @@ import {
   stripeVerify,
 } from "../lib/commerce/signatures.js";
 import { minorAmount } from "../lib/commerce/money.js";
+import { checkoutProduct } from "../lib/commerce/checkout.js";
 import { priceUsage } from "../lib/commerce/pricing.js";
 import { subscriptionRequest } from "../lib/ai/subscription.js";
 import { throttle } from "../plugins/rate-limit/throttle.js";
 import { nextPeriod } from "../plugins/commerce/period.js";
 import { decodeResult } from "../lib/ai/protocols.js";
 import { upstreamEvents } from "../lib/ai/streams.js";
+it("rounds converted checkout prices to cents without changing the catalog price or wallet credit", () => {
+  const product = {
+    id: "credit",
+    name: "Credit",
+    currency: "usd",
+    paymentMinor: 101,
+    creditMicros: 1000000,
+    mode: "payment" as const,
+  };
+  expect(
+    checkoutProduct(
+      { conversion: { from: "usd", to: "cny", rate: 7.5 } },
+      product,
+    ),
+  ).toEqual({ ...product, currency: "cny", paymentMinor: 758 });
+  expect(checkoutProduct(undefined, product)).toBe(product);
+  expect(product.currency).toBe("usd");
+});
 it("uses canonical unescaped Epay parameters and rejects signature algorithm substitution", () => {
   const input = {
     name: "a b&c",

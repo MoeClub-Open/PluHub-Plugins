@@ -21,6 +21,7 @@ import { nextPeriod } from "./period.js";
 import {
   supportsCheckout,
   checkoutMethods,
+  checkoutProduct,
 } from "../../lib/commerce/checkout.js";
 import { installOrderHistory } from "./history.js";
 import {
@@ -496,7 +497,8 @@ export default definePlugin({
           return json({ id: prior.id, url: prior.checkout_url });
         const id = prior?.id ?? randomUUID();
         if (prior) product = JSON.parse(prior.product);
-        else
+        else {
+          product = checkoutProduct(status, product);
           db.prepare(
             "INSERT INTO orders(id,user_id,provider,product,status,created_at,checkout_url,request_key,payment_method,payment_method_name,renewal) VALUES(?,?,?,?,'pending',?,NULL,?,?,?,?)",
           ).run(
@@ -510,6 +512,7 @@ export default definePlugin({
             method.name,
             status.renewal,
           );
+        }
         const existing = checkouts.get(id);
         if (existing) return json(await existing);
         const work = (async () => {

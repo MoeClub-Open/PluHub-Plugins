@@ -24,6 +24,20 @@ function Page({ host }: { host: UIHost }) {
   const [removing, setRemoving] = React.useState<EpayMethod>();
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
+  async function saveRate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const rate = Number(new FormData(event.currentTarget).get("usdToCny"));
+    setBusy(true);
+    setMessage("");
+    try {
+      await data.save((current) => ({ ...current, usdToCny: rate }));
+      setMessage(tr("已保存"));
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function commit(
     nextMethods: EpayMethod[],
     enabled = settings.enabled === true,
@@ -114,6 +128,23 @@ function Page({ host }: { host: UIHost }) {
             />
             {tr("启用支付渠道")}
           </label>
+          <form className="form-grid" onSubmit={saveRate}>
+            <label>
+              {tr("人民币转换比例（CNY / USD）")}
+              <input
+                key={settings.usdToCny}
+                name="usdToCny"
+                type="number"
+                min="0.000001"
+                step="any"
+                required
+                defaultValue={settings.usdToCny ?? 7}
+              />
+            </label>
+            <div className="form-actions">
+              <button disabled={busy}>{tr("保存转换比例")}</button>
+            </div>
+          </form>
           <div className="table-wrap">
             <table>
               <thead>

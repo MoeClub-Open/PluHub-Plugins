@@ -55,7 +55,8 @@ export default definePlugin({
           return {
             id: "epay",
             name: "易支付",
-            currencies: ["cny"],
+            currencies: ["usd", "cny"],
+            conversion: { from: "usd", to: "cny", rate: config.usdToCny ?? 7 },
             modes: ["payment", "subscription"],
             renewal: "manual",
             enabled: config.enabled === true && methods.length > 0,
@@ -71,7 +72,7 @@ export default definePlugin({
         if (input.product.currency !== "cny")
           throw new HostError(
             "unsupported_currency",
-            "Epay requires an explicitly priced CNY product",
+            "Epay checkout must be priced in CNY",
           );
         const notifyUrl = new URL(
           c.publicUrl.replace(/\/$/, "") +
