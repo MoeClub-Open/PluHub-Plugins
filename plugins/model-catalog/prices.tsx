@@ -3,6 +3,7 @@ import type { CatalogModel, TokenPrices } from "@pluhub/contracts/ai";
 import { t as tr, getLocale } from "../../lib/ui/i18n.js";
 import { number } from "../../lib/ui/components.js";
 import { ExpressionPrices } from "./expression-prices.js";
+import { effectiveRate } from "../../lib/commerce/pricing.js";
 
 export const formatPrice = (value?: number) =>
   value === undefined
@@ -15,22 +16,28 @@ export const formatPrice = (value?: number) =>
         }).format(value);
 export const consumptionPrice = (
   model: CatalogModel,
-  kind: "input" | "output" | "request",
+  kind: "input" | "output" | "request" | "webSearch",
 ) => {
-  if (model.pricing?.mode === "expression") return undefined;
-  return kind === "request"
-    ? model.pricing?.request
-    : kind === "input"
+  if (model.pricing?.mode === "expression" && kind !== "webSearch")
+    return undefined;
+  return effectiveRate(
+    kind === "input"
       ? model.inputPrice
-      : model.outputPrice;
+      : kind === "output"
+        ? model.outputPrice
+        : model.pricing?.[kind],
+    model.pricing?.multiplier,
+  );
 };
 
 export function ModelPrices({ model }: { model: CatalogModel }) {
+  const price = (value?: number) =>
+    formatPrice(effectiveRate(value, model.pricing?.multiplier));
   if (model.pricing?.mode === "expression")
     return (
       <ExpressionPrices
         source={model.pricing.expression!}
-        formatPrice={formatPrice}
+        formatPrice={price}
       />
     );
   const original = {
@@ -51,7 +58,7 @@ export function ModelPrices({ model }: { model: CatalogModel }) {
       .map(([key, label]) => (
         <tr key={key}>
           <td>{label} / 1M</td>
-          <td>{formatPrice(rates[key])}</td>
+          <td>{price(rates[key])}</td>
         </tr>
       ));
   return (
@@ -67,7 +74,7 @@ export function ModelPrices({ model }: { model: CatalogModel }) {
           {original.mode === "request" ? (
             <tr>
               <td>{tr("每次请求")}</td>
-              <td>{formatPrice(original.request)}</td>
+              <td>{price(original.request)}</td>
             </tr>
           ) : (
             <>

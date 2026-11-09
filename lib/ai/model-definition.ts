@@ -58,6 +58,7 @@ export function modelDefinition(input: ModelDefinition): ModelDefinition {
       throw new HostError("invalid_model", "Invalid model pricing");
     result.pricing = Object.fromEntries(
       [
+        "multiplier",
         "mode",
         "expression",
         "request",

@@ -1,5 +1,7 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  消耗倍率: "Consumption multiplier",
+  "基础价格 · USD": "Base price · USD",
   完整请求: "Complete request",
   已连接的上游未提供该模型: "The connected providers do not offer this model",
   请求入口需要有效且不重复的请求连线:

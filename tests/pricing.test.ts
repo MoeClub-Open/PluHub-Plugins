@@ -3,11 +3,77 @@ import {
   priceUsage,
   reserveCost,
   routePricing,
+  effectiveRate,
 } from "../lib/commerce/pricing.js";
 import { decodeUsage, encodeUsage } from "../lib/ai/usage.js";
 import { upstreamEvents, encodeStream } from "../lib/ai/streams.js";
 import { decode, decodeResult, encodeResult } from "../lib/ai/protocols.js";
 import type { Protocol, Usage } from "@pluhub/contracts/ai";
+
+it("applies a model multiplier to the complete charge before rounding and to reservation bounds", () => {
+  const pricing = {
+    input: 3,
+    output: 15,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+    cacheWrite1h: 6,
+    webSearch: 0.01,
+    multiplier: 0.5,
+  };
+  const receipt = priceUsage(
+    {
+      input: 1000,
+      output: 100,
+      cacheRead: 600,
+      cacheWrite: 200,
+      cacheWrite1h: 50,
+      webSearch: 2,
+    },
+    pricing,
+  );
+  expect(receipt.amount).toBe(11572);
+  expect(receipt.pricing.multiplier).toBe(0.5);
+  expect(receipt.lines.find((line) => line.kind === "input")?.rate).toBe(1.5);
+  expect(reserveCost(1000, 100, pricing, 2)).toBe(13750);
+  expect(
+    priceUsage(
+      { input: 1, output: 0 },
+      { input: 1.1, output: 0, multiplier: 0.8 },
+    ).amount,
+  ).toBe(1);
+  expect(effectiveRate(0.1, 0.2)).toBe(0.02);
+  for (const multiplier of [0, 0.5, 2]) {
+    const fixed = {
+      input: 0,
+      output: 0,
+      mode: "request" as const,
+      request: 0.02,
+      webSearch: 0.01,
+      multiplier,
+    };
+    expect(
+      priceUsage({ input: 10, output: 10, webSearch: 2 }, fixed).amount,
+    ).toBe(40000 * multiplier);
+    expect(reserveCost(1000, 100, fixed, 2)).toBe(40000 * multiplier);
+    const expression = {
+      input: 0,
+      output: 0,
+      mode: "expression" as const,
+      expression: 'tier("base", p * 3 + c * 15)',
+      webSearch: 0.01,
+      multiplier,
+      context: { at: 0, params: {}, headers: {} },
+    };
+    expect(
+      priceUsage({ input: 1000, output: 100, webSearch: 2 }, expression).amount,
+    ).toBe(24500 * multiplier);
+    expect(reserveCost(1000, 100, expression, 2)).toBe(24500 * multiplier);
+  }
+  for (const multiplier of [-1, NaN, Infinity])
+    expect(() =>
+      priceUsage({ input: 1, output: 0 }, { input: 1, output: 0, multiplier }),
+    ).toThrow();
+});
 
 it("prices cache subsets once, separates one-hour writes and rounds exact decimals once", () => {
   const receipt = priceUsage(
@@ -33,22 +99,13 @@ it("prices cache subsets once, separates one-hour writes and rounds exact decima
     200, 100, 600, 150, 50,
   ]);
   expect(
-    priceUsage(
-      { input: 1, output: 1 },
-      { input: 1, output: 2 },
-    ).amount,
+    priceUsage({ input: 1, output: 1 }, { input: 1, output: 2 }).amount,
   ).toBe(3);
   expect(
-    priceUsage(
-      { input: 1, output: 0 },
-      { input: 1e-7, output: 0 },
-    ).amount,
+    priceUsage({ input: 1, output: 0 }, { input: 1e-7, output: 0 }).amount,
   ).toBe(1);
   expect(
-    priceUsage(
-      { input: 1000000, output: 0 },
-      { input: 0, output: 0 },
-    ).amount,
+    priceUsage({ input: 1000000, output: 0 }, { input: 0, output: 0 }).amount,
   ).toBe(0);
 });
 it("uses whole-request context tiers with strict boundaries and reserves the worst cache/context rate", () => {
@@ -91,9 +148,7 @@ it("supports per-request prices without token prices and preserves original rout
     model: "m",
     pricing: { mode: "request", request: 0.001 },
   })!;
-  expect(
-    priceUsage({ input: 5000, output: 6000 }, pricing).amount,
-  ).toBe(1000);
+  expect(priceUsage({ input: 5000, output: 6000 }, pricing).amount).toBe(1000);
   expect(reserveCost(999999, 999999, pricing)).toBe(1000);
 });
 it("rejects invalid prices, overlapping cache usage, unsafe totals and overflows", () => {
@@ -263,9 +318,9 @@ it("uses Gemini's terminal usage snapshot and preserves empty-text signature par
   expect(
     request.messages.flatMap((message) => message.reasoning ?? []),
   ).toEqual(result.reasoning!);
-  expect(
-    priceUsage(result.usage, { input: 0.3, output: 2.5 }).amount,
-  ).toBe(164);
+  expect(priceUsage(result.usage, { input: 0.3, output: 2.5 }).amount).toBe(
+    164,
+  );
   expect(
     decodeResult("gemini", encodeResult("gemini", result), "demo").reasoning,
   ).toEqual(result.reasoning!);

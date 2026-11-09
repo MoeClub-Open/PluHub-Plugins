@@ -312,6 +312,10 @@ function Page({ host }: { host: UIHost }) {
                         ))}
                     </div>
                     <div className="model-row-prices">
+                      <div>
+                        <strong>{model.pricing?.multiplier ?? 1}×</strong>
+                        <span>{tr("消耗倍率")}</span>
+                      </div>
                       {model.pricing?.mode === "expression" ? (
                         <div>
                           <strong>{tr("动态定价")}</strong>
@@ -455,6 +459,12 @@ function Page({ host }: { host: UIHost }) {
               </div>
             </dl>
             <ModelPrices model={selected} />
+            <dl className="catalog-detail-facts">
+              <div>
+                <dt>{tr("消耗倍率")}</dt>
+                <dd>{selected.pricing?.multiplier ?? 1}×</dd>
+              </div>
+            </dl>
             {selected.requestFee !== undefined && selected.requestFee > 0 && (
               <dl className="catalog-detail-facts">
                 <div>
@@ -467,7 +477,7 @@ function Page({ host }: { host: UIHost }) {
               <dl className="catalog-detail-facts">
                 <div>
                   <dt>{tr("网页搜索 · USD / 次")}</dt>
-                  <dd>{price(selected.pricing.webSearch)}</dd>
+                  <dd>{price(consumptionPrice(selected, "webSearch"))}</dd>
                 </div>
               </dl>
             )}

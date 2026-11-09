@@ -5,7 +5,7 @@ import type {
   ModelRoute,
   TokenPrices,
 } from "@pluhub/contracts/ai";
-import { decimal, add, multiply, rounded } from "./decimal.js";
+import { decimal, add, multiply, rounded, numeric } from "./decimal.js";
 import { compileExpression } from "./expression-program.js";
 import { expressionCost, expressionDollars } from "./expression.js";
 
@@ -31,6 +31,7 @@ export function validRate(
   return value;
 }
 export function validatePricing(price: RequestPricing) {
+  if (price.multiplier !== undefined) validRate(price.multiplier, "multiplier");
   if (price.webSearch !== undefined)
     validRate(price.webSearch, "web search price");
   for (const key of rateKeys) {
@@ -82,6 +83,15 @@ export function validatePricing(price: RequestPricing) {
       if (key === "input" || key === "output" || tier[key] !== undefined)
         validRate(tier[key], key);
   }
+}
+/** Effective displayed rate; charge arithmetic keeps the full decimal value until final rounding. */
+export function effectiveRate(
+  value: number | undefined,
+  multiplier = 1,
+): number | undefined {
+  return value === undefined
+    ? undefined
+    : numeric(multiply(decimal(value), decimal(multiplier)));
 }
 export function routePricing(route: ModelRoute): RequestPricing | undefined {
   if (
@@ -147,6 +157,7 @@ export function priceUsage(
 ): UsagePriceReceipt {
   validatePricing(pricing);
   validateUsage(usage);
+  const multiplier = decimal(pricing.multiplier ?? 1);
   if (pricing.mode === "expression") {
     const result = expressionCost(usage, pricing);
     const total = add(
@@ -157,7 +168,7 @@ export function priceUsage(
       ),
     );
     return {
-      amount: rounded(total),
+      amount: rounded(multiply(total, multiplier)),
       mode: result.mode,
       tier: result.tier,
       expression: pricing.expression,
@@ -168,14 +179,20 @@ export function priceUsage(
         {
           kind: "expression",
           quantity: 1,
-          rate: expressionDollars(result.amount),
+          rate: effectiveRate(
+            expressionDollars(result.amount),
+            pricing.multiplier,
+          )!,
         },
         ...(usage.webSearch
           ? [
               {
                 kind: "webSearch",
                 quantity: usage.webSearch,
-                rate: pricing.webSearch ?? 0,
+                rate: effectiveRate(
+                  pricing.webSearch ?? 0,
+                  pricing.multiplier,
+                )!,
               },
             ]
           : []),
@@ -192,7 +209,13 @@ export function priceUsage(
   const mode = pricing.mode ?? "tokens";
   const lines =
     mode === "request"
-      ? [{ kind: pricing.purpose === "personal-fee" ? "serviceFee" : "request", quantity: 1, rate: pricing.request! }]
+      ? [
+          {
+            kind: pricing.purpose === "personal-fee" ? "serviceFee" : "request",
+            quantity: 1,
+            rate: pricing.request!,
+          },
+        ]
       : [
           {
             kind: "input",
@@ -235,12 +258,15 @@ export function priceUsage(
     lines.push({ kind: "webSearch", quantity: usage.webSearch, rate });
   }
   return {
-    amount: rounded(total),
+    amount: rounded(multiply(total, multiplier)),
     mode,
     ...(tierAbove === undefined ? {} : { tierAbove }),
     usage: structuredClone(usage),
     pricing: structuredClone(pricing),
-    lines,
+    lines: lines.map((line) => ({
+      ...line,
+      rate: effectiveRate(line.rate, pricing.multiplier)!,
+    })),
   };
 }
 /** Prepaid bound covers every configured context tier and cache-write premium. */
@@ -253,12 +279,15 @@ export function reserveCost(
   validatePricing(pricing);
   if (pricing.mode === "expression")
     return rounded(
-      add(
-        expressionCost({ input, output }, pricing, true).amount,
-        multiply(
-          decimal(pricing.webSearch ?? 0),
-          decimal(webSearch * 1_000_000),
+      multiply(
+        add(
+          expressionCost({ input, output }, pricing, true).amount,
+          multiply(
+            decimal(pricing.webSearch ?? 0),
+            decimal(webSearch * 1_000_000),
+          ),
         ),
+        decimal(pricing.multiplier ?? 1),
       ),
     );
   if (pricing.mode === "request")

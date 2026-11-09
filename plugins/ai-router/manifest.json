@@ -5,7 +5,7 @@
   "name": "渠道管理",
   "description": "管理渠道、模型映射和可视化功能组合。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.66",
+  "version": "0.1.0-alpha.67",
   "host": ">=0.1.0-alpha.18 <0.2.0-0",
   "runtime": {
     "kind": "native",
@@ -1179,6 +1179,11 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
+                "multiplier": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
                 "mode": {
                   "enum": ["tokens", "request", "expression"]
                 },

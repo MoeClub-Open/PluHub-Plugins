@@ -426,7 +426,7 @@ function Page({ host }: { host: UIHost }) {
                 <tr>
                   <th>{tr("公开模型 / 名称")}</th>
                   <th>{tr("渠道")}</th>
-                  <th>{tr("价格 · USD")}</th>
+                  <th>{tr("基础价格 · USD")}</th>
                   <th>{tr("状态")}</th>
                   <th>{tr("操作")}</th>
                 </tr>
@@ -455,6 +455,9 @@ function Page({ host }: { host: UIHost }) {
                           </small>
                         </>
                       )}
+                      <small>
+                        {tr("消耗倍率")} · {m.pricing?.multiplier ?? 1}×
+                      </small>
                     </td>
                     <td>
                       <span

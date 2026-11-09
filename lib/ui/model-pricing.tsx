@@ -12,7 +12,11 @@ const labels = () => ({
 });
 export function readModelPricing(f: FormData): ModelPricing | undefined {
   const search = String(f.get("webSearchPrice") ?? "").trim();
-  const extra = search ? { webSearch: Number(search) } : {};
+  const multiplier = Number(f.get("pricingMultiplier") ?? 1);
+  const extra = {
+    ...(search ? { webSearch: Number(search) } : {}),
+    ...(multiplier !== 1 ? { multiplier } : {}),
+  };
   const mode = String(f.get("billingMode") ?? "tokens") as NonNullable<
     ModelPricing["mode"]
   >;
@@ -77,6 +81,12 @@ export function ModelPriceFields({ model }: { model?: ModelRoute }) {
   );
   return (
     <>
+      {rate(
+        "pricingMultiplier",
+        tr("消耗倍率"),
+        model?.pricing?.multiplier ?? 1,
+        true,
+      )}
       {rate(
         "webSearchPrice",
         tr("网页搜索 · USD / 次"),

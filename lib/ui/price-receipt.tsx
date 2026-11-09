@@ -19,6 +19,11 @@ export function PriceReceiptView({
       <details>
         <summary>{title ?? tr("计费明细")}</summary>
         <p>{tr("按预扣金额结算，未将估算用量记为实际用量。")}</p>
+        {receipt.pricing?.purpose !== "personal-fee" && (
+          <p>
+            {tr("消耗倍率")} · {receipt.pricing?.multiplier ?? 1}×
+          </p>
+        )}
         <strong>${(receipt.amount / 1e6).toFixed(6)}</strong>
       </details>
     );
@@ -36,6 +41,11 @@ export function PriceReceiptView({
   return (
     <details>
       <summary>{title ?? tr("计费明细")}</summary>
+      {receipt.pricing.purpose !== "personal-fee" && (
+        <p>
+          {tr("消耗倍率")} · {receipt.pricing.multiplier ?? 1}×
+        </p>
+      )}
       <div className="table-wrap">
         <table>
           <thead>
