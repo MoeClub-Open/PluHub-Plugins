@@ -5,7 +5,7 @@ export async function readPluginConfig<T = Record<string, any>>(
   host: UIHost,
   pluginId: string,
   signal?: AbortSignal,
-): Promise<{ config: T; etag: string }> {
+): Promise<{ config: T; revision: string }> {
   return host.pluginConfig<T>(pluginId, signal);
 }
 
@@ -15,13 +15,13 @@ export async function updatePluginConfig<T = Record<string, any>>(
   mutate: (current: T) => T,
   signal?: AbortSignal,
 ): Promise<T> {
-  const { config: current, etag } = await readPluginConfig<T>(
+  const { config: current, revision } = await readPluginConfig<T>(
     host,
     pluginId,
     signal,
   );
   const next = mutate(structuredClone(current ?? ({} as T)));
-  const saved = await host.savePluginConfig<T>(pluginId, next, etag, signal);
+  const saved = await host.savePluginConfig<T>(pluginId, next, revision, signal);
   return saved.config;
 }
 

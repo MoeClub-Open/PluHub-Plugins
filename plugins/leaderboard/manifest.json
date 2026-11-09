@@ -5,8 +5,8 @@
   "name": "整站排行榜",
   "description": "展示模型用量与用户用量排行。",
   "codeReload": "parallel",
-  "version": "0.1.0-alpha.16",
-  "host": ">=0.1.0-alpha.1 <0.2.0-0",
+  "version": "0.1.0-alpha.17",
+  "host": ">=0.1.0-alpha.18 <0.2.0-0",
   "runtime": {
     "kind": "native",
     "entry": "dist/index.js"
