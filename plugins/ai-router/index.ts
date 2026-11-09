@@ -469,10 +469,14 @@ export default definePlugin({
               : key === body.request.model ||
                 model.publicModel === body.request.model,
           )?.[1];
+        const mappedModel =
+          body.mappedModel !== undefined
+            ? requiredString(body.mappedModel, "mappedModel", 256)
+            : (mapping?.model ?? body.request.model);
         const result = runWorkflow(id, flow, body.request, ctx.signal, {
           ingressProtocol,
           requestedModel: body.request.model,
-          mappedModel: mapping?.model ?? body.request.model,
+          mappedModel,
         });
         if (result.provider) {
           const node = result.providerNode;
@@ -482,7 +486,7 @@ export default definePlugin({
               : upstream;
           const model =
             node?.type === "provider"
-              ? resolveProviderModel(node, mapping?.model ?? body.request.model)
+              ? resolveProviderModel(node, mappedModel)
               : mapping?.model;
           checkProtocolConversion(
             ingressProtocol,
@@ -527,6 +531,12 @@ export default definePlugin({
                 protocol: requiredString(conn.protocol, "protocol") as any,
                 baseUrl:
                   typeof conn.baseUrl === "string" ? conn.baseUrl : undefined,
+                keyRef:
+                  typeof conn.keyRef === "string"
+                    ? conn.keyRef
+                    : Array.isArray(conn.keyRef)
+                      ? conn.keyRef.map(String)
+                      : undefined,
                 subscriptionAccountIds: Array.isArray(
                   conn.subscriptionAccountIds,
                 )

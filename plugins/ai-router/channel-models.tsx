@@ -1,6 +1,10 @@
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import type { ModelRoute, Upstream } from "@pluhub/contracts/ai";
+import type {
+  ModelRoute,
+  Upstream,
+  ProviderConnection,
+} from "@pluhub/contracts/ai";
 import { channelProviderNodes } from "../../lib/ai/channel-config.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { Select } from "../../lib/ui/select.js";
@@ -79,7 +83,13 @@ export function ChannelModels({
           "/api/plugins/official.ai-router/channel-models",
           {
             method: "POST",
-            body: JSON.stringify({ id: channelId, nodeId }),
+            body: JSON.stringify(
+              directoryRequest(
+                channelId,
+                nodeId,
+                nodes.find((item) => item.id === nodeId)?.connection,
+              ),
+            ),
           },
         ),
       );
@@ -104,7 +114,12 @@ export function ChannelModels({
   }
   return (
     <Dialog
-      title={tr("提供模型") + " · " + (upstreams[channelId]?.name || channelId)}
+      title={
+        tr(nodeId ? "模型映射" : "对外模型") +
+        " · " +
+        (upstreams[channelId]?.name || channelId) +
+        (nodeId ? " / " + nodeId : "")
+      }
       close={() => {
         if (!busy) close();
       }}
@@ -319,4 +334,22 @@ export function ChannelModels({
       )}
     </Dialog>
   );
+}
+
+/** Discover the draft connection; references remain protected by the host's secret permissions. */
+export function directoryRequest(
+  id: string,
+  nodeId: string,
+  connection?: ProviderConnection,
+) {
+  if (!connection) return { id, nodeId };
+  const key = Array.isArray(connection.keyRef)
+    ? connection.keyRef[0]
+    : connection.keyRef;
+  return {
+    id,
+    nodeId,
+    connection,
+    ...(key && !/^(env:|secret:|local:)/.test(key) ? { secret: key } : {}),
+  };
 }

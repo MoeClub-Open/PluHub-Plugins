@@ -4,17 +4,11 @@ import { Select } from "../../lib/ui/select.js";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
 import { ChannelTable } from "./channel-table.js";
-import { ChannelModels, type ChannelModel } from "./channel-models.js";
+import { GraphModels } from "./graph-models.js";
 import { ModelEditor } from "./model-editor.js";
 import { ChannelCreateDialog } from "./channel-create-dialog.js";
-import {
-  availableModelId,
-  discoveredModelRoute,
-  assignProviderModel,
-} from "./model-config.js";
 import { ChannelGraphEditor } from "../../lib/ui/channel-graph-editor.js";
 import { channelEditorTarget } from "../../lib/ui/channel-location.js";
-import { channelProviderNodes } from "../../lib/ai/channel-config.js";
 import { setChannelState } from "../../lib/ai/channel-list.js";
 import { mountPage, useLoad, Notice } from "../../lib/ui/mount.js";
 import { PageHeading, Icon, Empty } from "../../lib/ui/components.js";
@@ -49,8 +43,6 @@ function Page({ host }: { host: UIHost }) {
   const [testing, setTesting] = React.useState("");
   const [tests, setTests] = React.useState<Record<string, string>>({});
   const [advanced, setAdvanced] = React.useState("");
-  const [modelChannel, setModelChannel] = React.useState("");
-  const [modelNodeId, setModelNodeId] = React.useState("");
   const [modelQuery, setModelQuery] = React.useState("");
   const [modelUpstream, setModelUpstream] = React.useState("");
   const [modelDialog, setModelDialog] = React.useState<{
@@ -104,46 +96,6 @@ function Page({ host }: { host: UIHost }) {
   const mutate = (fn: (r: Router) => void) => {
     void save(fn).catch(() => {});
   };
-  async function addChannelModels(
-    id: string,
-    picked: ChannelModel[],
-    nodeId: string,
-  ) {
-    await save((r) => {
-      if (!r.upstreams[id]) throw new Error(tr("渠道已被删除，请刷新。"));
-      for (const model of picked) {
-        const existing = Object.values(r.models).find(
-          (route) => route.upstream === id && route.model === model.id,
-        );
-        assignProviderModel(
-          r,
-          id,
-          nodeId,
-          existing?.model ?? model.id,
-          model.id,
-        );
-        if (existing) continue;
-        const alias = availableModelId(Object.keys(r.models), id, model.id);
-        r.models[alias] = discoveredModelRoute(id, model);
-      }
-    });
-  }
-  function createModel(
-    channelId: string,
-    model?: ChannelModel,
-    nodeId?: string,
-  ) {
-    setModelDialog({
-      mode: "offer",
-      nodeId,
-      suggestedId: model
-        ? availableModelId(Object.keys(models), channelId, model.id)
-        : "",
-      model: model
-        ? discoveredModelRoute(channelId, model)
-        : { upstream: channelId, model: "", enabled: true },
-    });
-  }
   function editModel(
     id: string,
     nodeId?: string,
@@ -155,7 +107,7 @@ function Page({ host }: { host: UIHost }) {
   async function test(id: string) {
     const mapping = Object.entries(models).find(([, m]) => m.upstream === id);
     if (!mapping) {
-      setMessage(tr("请先为该渠道添加一个模型映射，再发送测试请求。"));
+      setMessage(tr("请先在流程图中配置提供模型，再发送测试请求。"));
       return;
     }
     setTesting(id);
@@ -180,109 +132,18 @@ function Page({ host }: { host: UIHost }) {
     }
   }
   const existing = dialog ? upstreams[dialog.id] : undefined;
-  const modelDialogs = (
-    <>
-      {modelChannel && (
-        <ChannelModels
-          host={host}
-          channelId={modelChannel}
-          upstreams={upstreams}
-          models={models}
-          initialNodeId={modelNodeId}
-          add={addChannelModels}
-          edit={editModel}
-          create={createModel}
-          toggle={(id, enabled) =>
-            save((r) => {
-              r.models[id]!.enabled = enabled;
-            })
-          }
-          remove={(id) =>
-            save((r) => {
-              const removed = r.models[id]!;
-              delete r.models[id];
-              if (
-                !Object.values(r.models).some(
-                  (route) =>
-                    route.upstream === removed.upstream &&
-                    route.model === removed.model,
-                )
-              )
-                for (const node of r.upstreams[removed.upstream]?.flow?.nodes ??
-                  [])
-                  if (node.type === "provider" && node.modelMap)
-                    delete node.modelMap[removed.model];
-            })
-          }
-          close={() => {
-            if (!busy) setModelChannel("");
-          }}
-        />
-      )}
-      {modelDialog && (
-        <ModelEditor
-          host={host}
-          key={
-            modelDialog.id ||
-            modelDialog.model.upstream + ":" + modelDialog.model.model
-          }
-          {...modelDialog}
-          upstreams={upstreams}
-          provider={
-            modelDialog.nodeId
-              ? {
-                  id: modelDialog.nodeId,
-                  catalogOnly: !!channelProviderNodes(
-                    upstreams[modelDialog.model.upstream]!,
-                  ).find((item) => item.id === modelDialog.nodeId)?.connection
-                    .subscriptionAccountIds,
-                }
-              : undefined
-          }
-          providerModel={
-            modelDialog.nodeId
-              ? (() => {
-                  const node = upstreams[
-                    modelDialog.model.upstream
-                  ]?.flow?.nodes.find((item) => item.id === modelDialog.nodeId);
-                  return node?.type === "provider"
-                    ? node.modelMap
-                      ? (node.modelMap[modelDialog.model.model] ?? "")
-                      : (node.model ?? "")
-                    : "";
-                })()
-              : undefined
-          }
-          save={(id, model, providerModel) =>
-            save((r) => {
-              const alias =
-                id ||
-                availableModelId(
-                  Object.keys(r.models),
-                  model.upstream,
-                  model.model,
-                );
-              if (!modelDialog.id && Object.hasOwn(r.models, alias))
-                throw new Error(tr("该 ID 已存在，请使用不同的 ID。"));
-              if (modelDialog.id && !r.models[modelDialog.id])
-                throw new Error(tr("模型已被删除，请刷新。"));
-              if (!r.upstreams[model.upstream])
-                throw new Error(tr("渠道已被删除，请刷新。"));
-              if (modelDialog.nodeId && providerModel !== undefined)
-                assignProviderModel(
-                  r,
-                  model.upstream,
-                  modelDialog.nodeId,
-                  model.model,
-                  providerModel,
-                );
-              r.models[alias] = model;
-            })
-          }
-          close={() => setModelDialog(undefined)}
-        />
-      )}
-    </>
+  const modelDialogs = modelDialog && (
+    <ModelEditor
+      host={host}
+      {...modelDialog}
+      upstreams={upstreams}
+      save={(id, model) =>
+        save((r) => {
+          r.models[id] = model;
+        })
+      }
+      close={() => setModelDialog(undefined)}
+    />
   );
   if (graph)
     return (
@@ -299,10 +160,15 @@ function Page({ host }: { host: UIHost }) {
             loaded.reload();
           }}
           saved={() => loaded.reload()}
-          manageModels={(nodeId) => {
-            setModelNodeId(nodeId ?? "");
-            setModelChannel(graph.channelId);
-          }}
+          renderModels={(props) => (
+            <GraphModels
+              host={host}
+              channelId={graph.channelId}
+              channel={upstreams[graph.channelId]!}
+              reservedIds={Object.keys(models)}
+              {...props}
+            />
+          )}
         />
       </>
     );
@@ -364,10 +230,6 @@ function Page({ host }: { host: UIHost }) {
             tests={tests}
             edit={(id) => setDialog({ id })}
             graph={openGraph}
-            manageModels={(id) => {
-              setModelNodeId("");
-              setModelChannel(id);
-            }}
             toggle={(id, enabled) =>
               mutate((r) => setChannelState(r.upstreams, [id], enabled))
             }
@@ -381,7 +243,7 @@ function Page({ host }: { host: UIHost }) {
                 if (
                   Object.values(r.models).some((model) => model.upstream === id)
                 )
-                  throw new Error(tr("请先移除引用此渠道的模型映射。"));
+                  throw new Error(tr("请先在流程图中移除该渠道的对外模型。"));
                 delete r.upstreams[id];
               })
             }

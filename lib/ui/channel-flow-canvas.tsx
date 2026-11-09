@@ -133,6 +133,7 @@ type CanvasProps = {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  editModels?: (id: string) => void;
 };
 type FlowNode = Node<
   { node: WorkflowNode; summary: string; invalid?: boolean },
@@ -145,6 +146,7 @@ const NodeContext = React.createContext<{
   settings: (id: string) => React.ReactNode;
   remove: (id: string) => void;
   duplicate: (id: string) => void;
+  editModels?: (id: string) => void;
   bindings: NonNullable<ChannelWorkflow["bindings"]>;
   personalInterfaces?: UpstreamInterface[];
   disabled?: boolean;
@@ -164,7 +166,15 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
     context.personalInterfaces,
     context.personal,
   );
-  const dataOutputs = workflowDataOutputs(node);
+  const allDataOutputs = workflowDataOutputs(node);
+  const dataOutputs = allDataOutputs.filter(
+    (port) =>
+      node.type !== "start" ||
+      expanded ||
+      context.bindings.some(
+        (edge) => edge.source === id && edge.output === port.path,
+      ),
+  );
   const executionOutputs = outputs(node).filter(
     (port) => port.field !== "fallback" || context.personal,
   );
@@ -337,6 +347,15 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
         {!expanded && data.summary && (
           <div className="flow-node-summary">{data.summary}</div>
         )}
+        {!expanded && node.type === "provider" && context.editModels && (
+          <button
+            className="ghost flow-port-toggle nodrag"
+            type="button"
+            onClick={() => context.editModels?.(id)}
+          >
+            {tr("配置模型映射")}
+          </button>
+        )}
         {hiddenInputs.length > 0 && (
           <div className="flow-data-ports">
             {hiddenInputs.map((port) => (
@@ -362,7 +381,7 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
             ))}
           </div>
         )}
-        {expandable && expanded && (
+        {node.type !== "start" && expanded && (
           <fieldset
             disabled={context.disabled}
             className="flow-node-settings nodrag nowheel"
@@ -370,6 +389,16 @@ function ChannelNode({ id, data, selected }: NodeProps<FlowNode>) {
           >
             {context.settings(id)}
           </fieldset>
+        )}
+        {node.type === "start" && allDataOutputs.length > 0 && (
+          <button
+            type="button"
+            className="ghost flow-port-toggle nodrag"
+            onClick={() => context.toggle(id)}
+          >
+            {tr(expanded ? "收起数据输出" : "数据输出")} ·{" "}
+            {allDataOutputs.length}
+          </button>
         )}
         {dataOutputs.length > 0 && (
           <div className="flow-data-ports">
@@ -424,7 +453,14 @@ function summary(node: WorkflowNode, channel?: Upstream) {
           ? node.value.slice(0, 60)
           : (JSON.stringify(node.value) ?? "");
     case "provider":
-      return node.upstream?.protocol ?? channel?.protocol ?? tr("尚未配置上游");
+      return [
+        node.upstream?.protocol ?? channel?.protocol ?? tr("尚未配置上游"),
+        node.modelMap
+          ? Object.keys(node.modelMap).length + " " + tr("个模型")
+          : node.model,
+      ]
+        .filter(Boolean)
+        .join(" · ");
     case "protocol":
       return (
         node.allow.length +
@@ -522,7 +558,14 @@ function Canvas(props: CanvasProps) {
   const primary = React.useRef(props.selected);
   const pendingSelection = React.useRef<string[] | undefined>(undefined);
   const reconnecting = React.useRef<Edge | undefined>(undefined);
-  const positions = workflowNodePositions(flow);
+  const positions = React.useMemo(
+    () => workflowNodePositions(flow),
+    [
+      flow.layout,
+      JSON.stringify(flow.nodes.map((node) => [node.id, outputs(node)])),
+      JSON.stringify(flow.bindings),
+    ],
+  );
   const makeNodes = (): FlowNode[] =>
     flow.nodes.map((node) => ({
       id: node.id,
@@ -550,16 +593,7 @@ function Canvas(props: CanvasProps) {
     pendingSelection,
     container,
   });
-  const [expanded, setExpanded] = React.useState<Set<string>>(
-    () =>
-      new Set(
-        flow.nodes
-          .filter((n) =>
-            ["provider", "compare", "logic", "branch"].includes(n.type),
-          )
-          .map((n) => n.id),
-      ),
-  );
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const knownNodes = React.useRef(new Set(flow.nodes.map((node) => node.id)));
   React.useEffect(() => {
     const added = flow.nodes.filter(
@@ -830,6 +864,7 @@ function Canvas(props: CanvasProps) {
         disabled: props.disabled,
         settings: props.renderSettings,
         duplicate: (id) => clipboard.duplicate([id]),
+        editModels: props.editModels,
         remove: (id) => {
           if (props.disabled) return;
           update(
@@ -890,6 +925,19 @@ function Canvas(props: CanvasProps) {
         >
           <LayoutGrid size={14} />
           {tr("自动排列")}
+        </button>
+        <button
+          className="secondary"
+          disabled={props.disabled}
+          onClick={() =>
+            setExpanded(
+              expanded.size
+                ? new Set()
+                : new Set(flow.nodes.map((node) => node.id)),
+            )
+          }
+        >
+          {tr(expanded.size ? "收起全部参数" : "展开全部参数")}
         </button>
         {clipboard.warning && (
           <span className="muted" role="status">

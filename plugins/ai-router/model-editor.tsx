@@ -1,6 +1,10 @@
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
-import type { ModelRoute, Upstream } from "@pluhub/contracts/ai";
+import type {
+  ModelRoute,
+  Upstream,
+  ProviderConnection,
+} from "@pluhub/contracts/ai";
 import { Dialog } from "../../lib/ui/components.js";
 import { Checkbox } from "../../lib/ui/checkbox.js";
 import { Select } from "../../lib/ui/select.js";
@@ -11,6 +15,7 @@ import {
 } from "../../lib/ui/model-pricing.js";
 import { Notice, useLoad } from "../../lib/ui/mount.js";
 import type { ChannelModel } from "./channel-models.js";
+import { directoryRequest } from "./channel-models.js";
 import { t as tr } from "../../lib/ui/i18n.js";
 
 export function ModelEditor({
@@ -32,7 +37,11 @@ export function ModelEditor({
   upstreams: Record<string, Upstream>;
   mode: "offer" | "price";
   providerModel?: string;
-  provider?: { id: string; catalogOnly: boolean };
+  provider?: {
+    id: string;
+    catalogOnly: boolean;
+    connection?: ProviderConnection;
+  };
   save: (
     id: string,
     model: ModelRoute,
@@ -44,17 +53,35 @@ export function ModelEditor({
   const [message, setMessage] = React.useState("");
   const [enabled, setEnabled] = React.useState(model.enabled !== false);
   const [target, setTarget] = React.useState(providerModel ?? "");
-  const directory = useLoad<{ models: ChannelModel[]; errors: { message: string }[] }>(
-    () => provider?.catalogOnly && mode === "offer"
-      ? host.request("/api/plugins/official.ai-router/channel-models", {
-          method: "POST", body: JSON.stringify({ id: model.upstream, nodeId: provider.id }),
-        })
-      : Promise.resolve({ models: [], errors: [] }),
+  const directory = useLoad<{
+    models: ChannelModel[];
+    errors: { message: string }[];
+  }>(
+    () =>
+      provider?.catalogOnly && mode === "offer"
+        ? host.request("/api/plugins/official.ai-router/channel-models", {
+            method: "POST",
+            body: JSON.stringify(
+              directoryRequest(
+                model.upstream,
+                provider.id,
+                provider.connection,
+              ),
+            ),
+          })
+        : Promise.resolve({ models: [], errors: [] }),
     [model.upstream, provider?.id, mode],
   );
-  const directoryError = directory.error || directory.data?.errors.map((error) => error.message).join(" · ");
-  const targetListed = directory.data?.models.some((item) => item.id === target);
-  const targetAvailable = !provider?.catalogOnly || targetListed || (!!directoryError && !!id && !!target && target === providerModel);
+  const directoryError =
+    directory.error ||
+    directory.data?.errors.map((error) => error.message).join(" · ");
+  const targetListed = directory.data?.models.some(
+    (item) => item.id === target,
+  );
+  const targetAvailable =
+    !provider?.catalogOnly ||
+    targetListed ||
+    (!!directoryError && !!id && !!target && target === providerModel);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -71,7 +98,8 @@ export function ModelEditor({
       next.model = model.model || text("publicModel");
       next.publicModel = text("publicModel");
       next.enabled = enabled;
-      if (text("visibility")) next.visibility = text("visibility") as ModelRoute["visibility"];
+      if (text("visibility"))
+        next.visibility = text("visibility") as ModelRoute["visibility"];
       else delete next.visibility;
       next.operations = form.getAll("operations") as ModelRoute["operations"];
       for (const field of ["name", "provider", "description"] as const) {
@@ -95,7 +123,9 @@ export function ModelEditor({
         id || suggestedId,
         next,
         mode === "offer" && providerModel !== undefined
-          ? provider?.catalogOnly ? target : text("providerModel")
+          ? provider?.catalogOnly
+            ? target
+            : text("providerModel")
           : undefined,
       );
       close();
@@ -152,21 +182,48 @@ export function ModelEditor({
                 <label className="full">
                   {tr("上游模型 ID")}
                   {provider?.catalogOnly ? (
-                    <Select name="providerModel" required value={target}
+                    <Select
+                      name="providerModel"
+                      required
+                      value={target}
                       disabled={!directory.data || !!directoryError}
-                      onChange={(event) => setTarget(event.target.value)}>
-                      {!targetListed && <option value={target} disabled>{target || tr("请选择模型")}</option>}
-                      {directory.data?.models.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                      onChange={(event) => setTarget(event.target.value)}
+                    >
+                      {!targetListed && (
+                        <option value={target} disabled>
+                          {target || tr("请选择模型")}
+                        </option>
+                      )}
+                      {directory.data?.models.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.id}
+                        </option>
+                      ))}
                     </Select>
-                  ) : <input
-                    name="providerModel"
-                    required
-                    defaultValue={providerModel}
-                  />}
-                  {provider?.catalogOnly && directory.data && !directoryError && !targetAvailable && (
-                    <small>{tr("当前目标不在可用模型目录中，请重新选择。")}</small>
+                  ) : (
+                    <input
+                      name="providerModel"
+                      required
+                      defaultValue={providerModel}
+                    />
                   )}
-                  {directoryError && <button type="button" className="secondary" onClick={directory.reload}>{tr("重新获取模型")}</button>}
+                  {provider?.catalogOnly &&
+                    directory.data &&
+                    !directoryError &&
+                    !targetAvailable && (
+                      <small>
+                        {tr("当前目标不在可用模型目录中，请重新选择。")}
+                      </small>
+                    )}
+                  {directoryError && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={directory.reload}
+                    >
+                      {tr("重新获取模型")}
+                    </button>
+                  )}
                 </label>
               )}
               <label className="full">
@@ -238,8 +295,17 @@ export function ModelEditor({
           >
             {tr("取消")}
           </button>
-          <button disabled={busy || (mode === "offer" && providerModel !== undefined && !targetAvailable)}>
-            {busy ? tr("保存中…") : tr("保存并应用")}
+          <button
+            disabled={
+              busy ||
+              (mode === "offer" &&
+                providerModel !== undefined &&
+                !targetAvailable)
+            }
+          >
+            {busy
+              ? tr("保存中…")
+              : tr(mode === "offer" ? "应用到流程" : "保存并应用")}
           </button>
         </div>
       </form>

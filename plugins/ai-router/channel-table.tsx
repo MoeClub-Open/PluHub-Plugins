@@ -3,7 +3,12 @@ import { t as tr, textValue } from "../../lib/ui/i18n.js";
 import { Select } from "../../lib/ui/select.js";
 import React from "react";
 import type { Upstream, ModelRoute } from "@pluhub/contracts/ai";
-import { Empty, Icon, Dialog, ListPagination } from "../../lib/ui/components.js";
+import {
+  Empty,
+  Icon,
+  Dialog,
+  ListPagination,
+} from "../../lib/ui/components.js";
 import { channelConnections } from "../../lib/ai/channel-config.js";
 import { isDecisionProtocol } from "../../lib/ai/decision-route-kind.js";
 import { filterChannels } from "../../lib/ai/channel-list.js";
@@ -12,7 +17,9 @@ function decisionOnly(channel: Upstream) {
   const flow = channel.flow;
   if (!flow) return isDecisionProtocol(channel.protocol);
   const ends = flow.nodes.filter((node) =>
-    ["provider", "platform", "routing", "upstream", "response"].includes(node.type),
+    ["provider", "platform", "routing", "upstream", "response"].includes(
+      node.type,
+    ),
   );
   return (
     ends.length > 0 &&
@@ -22,7 +29,8 @@ function decisionOnly(channel: Upstream) {
         isDecisionProtocol(node.upstream?.protocol ?? channel.protocol) &&
         !node.fallback &&
         !flow.bindings?.some(
-          (binding) => binding.target === node.id && binding.input === "upstream.protocol",
+          (binding) =>
+            binding.target === node.id && binding.input === "upstream.protocol",
         ),
     )
   );
@@ -36,7 +44,6 @@ export function ChannelTable({
   tests,
   edit,
   graph,
-  manageModels,
   modelsFor,
   toggle,
   test,
@@ -50,7 +57,6 @@ export function ChannelTable({
   tests: Record<string, string>;
   edit: (id: string) => void;
   graph: (id: string) => void;
-  manageModels: (id: string) => void;
   modelsFor: (id: string) => void;
   toggle: (id: string, enabled: boolean) => void;
   test: (id: string) => void;
@@ -286,15 +292,6 @@ export function ChannelTable({
                   </td>
                   <td>
                     <div className="actions">
-                      {!decisionOnly(channel) && (
-                        <button
-                          className="ghost"
-                          disabled={busy}
-                          onClick={() => manageModels(id)}
-                        >
-                          {tr("提供模型")}
-                        </button>
-                      )}
                       <button
                         className="ghost"
                         disabled={busy}

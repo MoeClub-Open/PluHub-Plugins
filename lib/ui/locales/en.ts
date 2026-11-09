@@ -1,5 +1,17 @@
 // Built-in English UI messages. Custom site and model content stays unchanged.
 export const en: Record<string, string> = {
+  对外模型: "Published models",
+  应用到流程: "Apply to graph",
+  创建并编辑流程: "Create and edit graph",
+  配置模型映射: "Configure model mapping",
+  数据输出: "Data outputs",
+  收起数据输出: "Collapse data outputs",
+  收起全部参数: "Collapse all parameters",
+  展开全部参数: "Expand all parameters",
+  "请先在流程图中配置提供模型，再发送测试请求。":
+    "Configure the provided models in the graph before sending a test request.",
+  "请先在流程图中移除该渠道的对外模型。":
+    "Remove this channel's published models in the graph first.",
   消耗倍率: "Consumption multiplier",
   "基础价格 · USD": "Base price · USD",
   完整请求: "Complete request",
@@ -763,7 +775,6 @@ export const en: Record<string, string> = {
     "Add a model mapping to this channel before testing.",
   "测试通过 · ": "Passed · ",
   测试失败: "Test failed",
-  "该 ID 已存在，请使用不同的 ID。": "This ID already exists. Use another ID.",
   刷新: "Refresh",
   添加模型: "Add model",
   添加渠道: "Add channel",
@@ -783,7 +794,6 @@ export const en: Record<string, string> = {
   添加: "Add",
   "渠道 ID": "Channel ID",
   显示名称: "Display name",
-  "便于识别的名称（可选）": "Optional display name",
   选择渠道: "Select channel",
   供应商: "Provider",
   上下文长度: "Context length",
@@ -2425,20 +2435,14 @@ export const en: Record<string, string> = {
     "This model is outside your scope. Select another model or channel.",
   "请先选择至少一个可用的订阅账号。":
     "Select at least one available subscription account first.",
-  "请先填写上游地址与上游密钥。": "Enter the upstream URL and API key first.",
   "请选择订阅账号，或点击「仅创建并编辑流程」进入画布配置。":
     "Select a subscription account, or click Create and edit workflow to configure on the canvas.",
   "请填写上游地址和密钥，或点击「仅创建并编辑流程」进入画布配置。":
     "Enter the upstream URL and API key, or click Create and edit workflow to configure on the canvas.",
   "暂无该类型的平台订阅账号，请先在订阅账号页面添加。":
     "No platform subscription accounts of this type yet. Add one on the Subscriptions page first.",
-  "每行一个上游 API Key": "One upstream API key per line",
   "手动添加模型 ID（可选，逗号或换行分隔）":
     "Add model IDs manually (optional, separated by commas or newlines)",
-  创建后立即启用渠道: "Enable channel immediately after creation",
-  保存并打开流程: "Save and open workflow",
-  仅创建并编辑流程: "Create and edit workflow",
-  创建渠道: "Create channel",
   概览与安全: "Overview & security",
   订单记录: "Order history",
   账单明细: "Ledger",

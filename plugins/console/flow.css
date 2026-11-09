@@ -103,6 +103,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.flow-port-toggle {
+  font-size: 11px;
+  margin: 4px 8px;
+  min-height: 26px;
+}
 .flow-node-settings {
   padding: 0 12px 10px;
   overflow: visible;

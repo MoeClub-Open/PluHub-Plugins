@@ -37,6 +37,7 @@ export interface ChannelNodeContext {
   subscriptionAccounts: { data?: any[]; error?: string };
   modelTargets: string[];
   providedModels: { id: string; model: string; name: string }[];
+  manageModels?: () => void;
   personalChannels?: { id: string; name?: string }[];
   onPanel: (panel: ChannelPanel) => void;
 }

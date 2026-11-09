@@ -3,6 +3,7 @@ import type {
   WorkflowNode,
   WorkflowValueType,
 } from "@pluhub/contracts/workflow";
+import { graphlib, layout } from "@dagrejs/dagre";
 
 /** The first data connection determines a comparison's operand type. */
 export function comparisonInputNode(
@@ -126,25 +127,41 @@ function mapWorkflowConnections(
 
 export function workflowNodePositions(
   flow: ChannelWorkflow,
-  sizes?: Map<string, { height?: number }>,
+  sizes?: Map<string, { height?: number; width?: number }>,
 ) {
-  const columns = new Map<string, number>();
-  const visit = (id: string, depth: number, seen: Set<string>) => {
-    if (seen.has(id) || depth > 128 || (columns.get(id) ?? -1) >= depth) return;
-    columns.set(id, depth);
-    const node = flow.nodes.find((item) => item.id === id);
-    if (node)
-      for (const edge of workflowOutputs(node))
-        if (edge.target) visit(edge.target, depth + 1, new Set([...seen, id]));
-  };
-  visit(flow.entry, 0, new Set());
-  const rows = new Map<number, number>();
+  if (flow.nodes.every((node) => flow.layout?.[node.id]))
+    return new Map(flow.nodes.map((node) => [node.id, flow.layout![node.id]!]));
+  const graph = new graphlib.Graph().setGraph({
+    rankdir: "LR",
+    nodesep: 48,
+    ranksep: 96,
+    marginx: 32,
+    marginy: 32,
+  });
+  graph.setDefaultEdgeLabel(() => ({}));
+  for (const node of flow.nodes)
+    graph.setNode(node.id, {
+      width: sizes?.get(node.id)?.width ?? 310,
+      height: sizes?.get(node.id)?.height ?? 160,
+    });
+  for (const node of flow.nodes)
+    for (const edge of workflowOutputs(node))
+      if (graph.hasNode(edge.target))
+        graph.setEdge(node.id, edge.target, { weight: 3 });
+  for (const edge of flow.bindings ?? [])
+    if (graph.hasNode(edge.source) && graph.hasNode(edge.target))
+      graph.setEdge(edge.source, edge.target);
+  layout(graph);
   return new Map(
     flow.nodes.map((node) => {
-      const column = columns.get(node.id) ?? 0,
-        y = rows.get(column) ?? 40;
-      rows.set(column, y + (sizes?.get(node.id)?.height ?? 210) + 50);
-      return [node.id, flow.layout?.[node.id] ?? { x: 40 + column * 370, y }];
+      const placed = graph.node(node.id);
+      return [
+        node.id,
+        flow.layout?.[node.id] ?? {
+          x: placed.x - placed.width / 2,
+          y: placed.y - placed.height / 2,
+        },
+      ];
     }),
   );
 }

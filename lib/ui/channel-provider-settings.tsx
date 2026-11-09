@@ -43,8 +43,13 @@ export function ProviderNodeSettings({
     setPersonalInterfaces,
     subscriptionAccounts,
   } = context;
-  const providedModels = context.providedModels.filter(route =>
-    personal || (node.modelMap ? Object.hasOwn(node.modelMap, route.model) : node.model !== undefined));
+  const providedModels = context.providedModels.filter(
+    (route) =>
+      personal ||
+      (node.modelMap
+        ? Object.hasOwn(node.modelMap, route.model)
+        : node.model !== undefined),
+  );
   function changeProtocol(protocol: string) {
     if (node?.type !== "provider") return;
     const upstream: any = { protocol };
@@ -286,33 +291,78 @@ export function ProviderNodeSettings({
                 : connection({ interfaces }, remap)
             }
           />
-          <FlowParameter field={context.boundInputs.has("model") ? "model" : "modelMap"}>
+          <FlowParameter
+            field={context.boundInputs.has("model") ? "model" : "modelMap"}
+          >
             <span>{tr("提供模型")}</span>
-            {context.boundInputs.has("model") || context.boundInputs.has("modelMap") ? (
+            {!personal && context.manageModels && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={context.manageModels}
+              >
+                {tr("配置模型映射")}
+              </button>
+            )}
+            {context.boundInputs.has("model") ||
+            context.boundInputs.has("modelMap") ? (
               <p>{tr("由参数连线提供")}</p>
             ) : providedModels.length ? (
               <dl className="provider-model-summary">
                 {providedModels.map((route) => {
-                  const target = node.modelMap ? node.modelMap[route.model] : (node.model ?? route.model);
-                  return <div key={route.id}>
-                    <dt>{route.name}</dt>
-                    <dd>{personal ? (
-                      <Select aria-label={tr("上游模型 ID")} value={target ?? ""}
-                        onChange={(event) => change({
-                          model: undefined,
-                          modelMap: {
-                            ...(node.modelMap ?? Object.fromEntries(context.providedModels.map((item) => [item.model, node.model ?? item.model]))),
-                            [route.model]: event.target.value,
-                          },
-                        })}>
-                        <option value="" disabled>{tr("未映射")}</option>
-                        {[...new Set(context.providedModels.map((item) => item.model))].map((model) => <option key={model} value={model}>{model}</option>)}
-                      </Select>
-                    ) : <code>{target ?? tr("未映射")}</code>}</dd>
-                  </div>;
+                  const target = node.modelMap
+                    ? node.modelMap[route.model]
+                    : (node.model ?? route.model);
+                  return (
+                    <div key={route.id}>
+                      <dt>{route.name}</dt>
+                      <dd>
+                        {personal ? (
+                          <Select
+                            aria-label={tr("上游模型 ID")}
+                            value={target ?? ""}
+                            onChange={(event) =>
+                              change({
+                                model: undefined,
+                                modelMap: {
+                                  ...(node.modelMap ??
+                                    Object.fromEntries(
+                                      context.providedModels.map((item) => [
+                                        item.model,
+                                        node.model ?? item.model,
+                                      ]),
+                                    )),
+                                  [route.model]: event.target.value,
+                                },
+                              })
+                            }
+                          >
+                            <option value="" disabled>
+                              {tr("未映射")}
+                            </option>
+                            {[
+                              ...new Set(
+                                context.providedModels.map(
+                                  (item) => item.model,
+                                ),
+                              ),
+                            ].map((model) => (
+                              <option key={model} value={model}>
+                                {model}
+                              </option>
+                            ))}
+                          </Select>
+                        ) : (
+                          <code>{target ?? tr("未映射")}</code>
+                        )}
+                      </dd>
+                    </div>
+                  );
                 })}
               </dl>
-            ) : <p className="muted">{tr("暂无模型")}</p>}
+            ) : (
+              <p className="muted">{tr("暂无模型")}</p>
+            )}
           </FlowParameter>
           <FlowParameter field="recordResponseModel">
             <label className="checkbox-row">

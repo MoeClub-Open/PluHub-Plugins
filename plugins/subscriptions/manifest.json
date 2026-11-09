@@ -5,7 +5,7 @@
   "name": "订阅账号接入",
   "description": "管理 Codex、Claude、Antigravity 与 Grok 授权、订阅账号池与上游调用。",
   "codeReload": "restart",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "host": ">=0.1.0-alpha.18 <0.2.0-0",
   "runtime": {
     "kind": "native",

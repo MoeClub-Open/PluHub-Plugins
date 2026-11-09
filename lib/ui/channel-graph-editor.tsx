@@ -16,7 +16,11 @@ import { Dialog } from "./components.js";
 import React from "react";
 import type { UIHost } from "@pluhub/ui-sdk";
 import type { ChannelWorkflow, WorkflowNode } from "@pluhub/contracts/workflow";
-import type { Protocol, UpstreamInterface } from "@pluhub/contracts/ai";
+import type {
+  Protocol,
+  UpstreamInterface,
+  ModelRoute,
+} from "@pluhub/contracts/ai";
 import { useLoad, Notice } from "./mount.js";
 import type { ChannelPanel } from "./channel-location.js";
 import {
@@ -35,7 +39,15 @@ type GraphDraft = {
   priority: number;
   personalInterfaces?: UpstreamInterface[];
   flow: ChannelWorkflow;
+  models?: Record<string, ModelRoute>;
 };
+export interface GraphModelsProps {
+  flow: ChannelWorkflow;
+  models: Record<string, ModelRoute>;
+  nodeId?: string;
+  update: (flow: ChannelWorkflow, models: Record<string, ModelRoute>) => void;
+  close: () => void;
+}
 export function ChannelGraphEditor({
   host,
   channelId,
@@ -43,7 +55,7 @@ export function ChannelGraphEditor({
   saved,
   personal = false,
   initialPanel,
-  manageModels,
+  renderModels,
   configurationRevision,
 }: {
   host: UIHost;
@@ -52,7 +64,7 @@ export function ChannelGraphEditor({
   saved: () => void;
   personal?: boolean;
   initialPanel?: ChannelPanel;
-  manageModels?: (nodeId?: string) => void;
+  renderModels?: (props: GraphModelsProps) => React.ReactNode;
   configurationRevision?: string;
 }) {
   const loaded = useLoad<any>(
@@ -125,6 +137,7 @@ export function ChannelGraphEditor({
   );
   const [busy, setBusy] = React.useState(false);
   const [templateOpen, setTemplateOpen] = React.useState(false);
+  const [modelsNode, setModelsNode] = React.useState<string>();
   const editor = React.useRef<HTMLElement>(null);
   const subscriptionAccounts = useLoad<any[]>(
     () => (personal ? Promise.resolve([]) : listSubscriptionAccounts(host)),
@@ -184,6 +197,17 @@ export function ChannelGraphEditor({
       priority: channel.priority ?? 0,
       personalInterfaces: channel.interfaces,
       flow: structuredClone(channel.flow ?? defaultChannelFlow()),
+      ...(!personal
+        ? {
+            models: structuredClone(
+              Object.fromEntries(
+                Object.entries(
+                  (router.models ?? {}) as Record<string, ModelRoute>,
+                ).filter(([, m]) => m.upstream === channelId),
+              ),
+            ),
+          }
+        : {}),
     };
     if (JSON.stringify(currentDraft.current) === JSON.stringify(next)) {
       setBaseline(JSON.stringify(next));
@@ -195,7 +219,7 @@ export function ChannelGraphEditor({
     setBaseline(JSON.stringify(next));
     history.current = { past: [], future: [] };
     select(next.flow.entry);
-  }, [JSON.stringify(channel)]);
+  }, [JSON.stringify(channel), JSON.stringify(router?.models)]);
   const node = flow?.nodes.find((n) => n.id === selected);
   const dirty = !!draft && JSON.stringify(draft) !== baseline;
   function change(patch: Partial<GraphDraft>) {
@@ -246,7 +270,9 @@ export function ChannelGraphEditor({
     setMessage("");
     setInvalidNodes([]);
   }, [draft, task, previewModel, ingressProtocol, toolTask, streamTask]);
-  const previewModels = Object.entries(router?.models ?? {}).filter(
+  const previewModels = Object.entries(
+    draft?.models ?? router?.models ?? {},
+  ).filter(
     ([, model]: [string, any]) => personal || model.upstream === channelId,
   );
   React.useEffect(() => {
@@ -389,6 +415,12 @@ export function ChannelGraphEditor({
       current.name = channelName;
       current.enabled = enabled;
       current.priority = priority;
+      for (const [id, model] of Object.entries(next.models ?? {}) as [
+        string,
+        ModelRoute,
+      ][])
+        if (model.upstream === channelId) delete next.models[id];
+      Object.assign(next.models, draft.models);
       await host.request("/api/plugins/official.ai-router/configuration", {
         method: "PUT",
         body: JSON.stringify({ config: next, revision: loaded.data.revision }),
@@ -420,11 +452,16 @@ export function ChannelGraphEditor({
             body: JSON.stringify({
               ...(personal ? { id: channelId } : { upstream: channelId }),
               ...(!personal ? { mappingId: previewModel } : {}),
+              ...(!personal && draft?.models?.[previewModel]
+                ? { mappedModel: draft.models[previewModel]!.model }
+                : {}),
               ingressProtocol,
               interfaces: personalInterfaces ?? null,
               flow,
               request: {
-                model: router.models[previewModel]?.publicModel ?? previewModel,
+                model:
+                  (draft?.models ?? router.models)[previewModel]?.publicModel ??
+                  previewModel,
                 messages: [{ role: "user", text: task }],
                 tools: toolTask
                   ? [{ name: "preview_tool", parameters: { type: "object" } }]
@@ -491,17 +528,13 @@ export function ChannelGraphEditor({
           >
             {tr("返回渠道")}
           </button>
-          {manageModels && (
+          {renderModels && (
             <button
               className="secondary"
               disabled={busy || !flow}
-              onClick={() =>
-                guard.leave(() =>
-                  manageModels(node?.type === "provider" ? node.id : undefined),
-                )
-              }
+              onClick={() => setModelsNode("")}
             >
-              {tr("提供模型")}
+              {tr("对外模型")}
             </button>
           )}
           <span className="muted" role="status">
@@ -517,6 +550,16 @@ export function ChannelGraphEditor({
         </div>
       </div>
       {guard.confirmation}
+      {renderModels &&
+        modelsNode !== undefined &&
+        flow &&
+        renderModels({
+          flow,
+          models: draft?.models ?? {},
+          nodeId: modelsNode || undefined,
+          update: (flow, models) => change({ flow, models }),
+          close: () => setModelsNode(undefined),
+        })}
       <Notice message={message || loaded.error || ""} />
       {!personal && panel && (
         <Dialog
@@ -650,6 +693,7 @@ export function ChannelGraphEditor({
               redo={redo}
               canUndo={history.current.past.length > 0}
               canRedo={history.current.future.length > 0}
+              editModels={renderModels ? (id) => setModelsNode(id) : undefined}
               renderSettings={(id) => {
                 const current = flow.nodes.find((n) => n.id === id);
                 return (
@@ -689,7 +733,12 @@ export function ChannelGraphEditor({
                         ),
                         subscriptionAccounts,
                         modelTargets,
-                        providedModels: Object.entries(router?.models ?? {})
+                        manageModels: renderModels
+                          ? () => setModelsNode(id)
+                          : undefined,
+                        providedModels: Object.entries(
+                          draft?.models ?? router?.models ?? {},
+                        )
                           .filter(
                             ([, model]: [string, any]) =>
                               personal || model.upstream === channelId,
