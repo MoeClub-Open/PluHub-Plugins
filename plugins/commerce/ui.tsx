@@ -89,6 +89,10 @@ function Page({ host }: { host: UIHost }) {
   const methodLabel = method
     ? tr(paymentLabels[method.name] ?? method.name)
     : "";
+  const conversion = method?.conversion;
+  const conversionText = conversion
+    ? `1 ${conversion.from.toUpperCase()} = ${conversion.rate} ${conversion.to.toUpperCase()}`
+    : "";
   React.useEffect(() => {
     if (!method)
       setMethodKey(methods.length ? checkoutMethodKey(methods[0]!) : "");
@@ -232,6 +236,9 @@ function Page({ host }: { host: UIHost }) {
                       </option>
                     ))}
                   </Select>
+                  {conversionText && (
+                    <small className="field-note">{conversionText}</small>
+                  )}
                 </label>
               </div>
               <div className="plan-grid">
@@ -482,7 +489,15 @@ function Page({ host }: { host: UIHost }) {
             <dt>{tr("商品")}</dt>
             <dd>{selected.name}</dd>
             <dt>{tr("支付方式")}</dt>
-            <dd>{methodLabel}</dd>
+            <dd>
+              {methodLabel}
+              {conversionText &&
+                catalog.data.products.some(
+                  (p: any) =>
+                    p.id === selected.id && p.currency === conversion?.from,
+                ) &&
+                ` · ${conversionText}`}
+            </dd>
             <dt>{tr("付款金额")}</dt>
             <dd>{price(selected)}</dd>
             <dt>{tr("到账额度")}</dt>
